@@ -1,0 +1,10 @@
+0.1.0 - 2018/12/09
+==================
+
+- Add single thread EPOLL server, refined protocol
+
+
+0.0.1 - 2018/12/08
+==================
+
+- First commit, implemented basic trie data structure.
