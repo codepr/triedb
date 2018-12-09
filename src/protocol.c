@@ -264,6 +264,23 @@ Ack *ack_packet(uint8_t code) {
 }
 
 
+Nack *nack_packet(uint8_t code) {
+
+    Nack *pkt = malloc(sizeof(Ack));
+    if (!pkt) oom("building subscribe request");
+
+    pkt->header = malloc(sizeof(Header));
+    if (!pkt->header) oom("building header of subscribe request");
+
+    pkt->header->opcode = NACK;
+    pkt->header->size = HEADERLEN + sizeof(uint8_t);
+    pkt->code = code;
+
+    return pkt;
+
+}
+
+
 Put *put_packet(uint8_t *key, uint8_t *value) {
 
     assert(key);

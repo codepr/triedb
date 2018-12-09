@@ -49,7 +49,7 @@ static bool trie_is_free_node(TrieNode *node) {
 
 
 // Returns new trie node (initialized to NULL)
-TrieNode *trie_new_node(void *data) {
+TrieNode *trie_new_node(void) {
 
 	TrieNode *new_node = new_node = malloc(sizeof(*new_node));
 
@@ -57,7 +57,7 @@ TrieNode *trie_new_node(void *data) {
 		int i;
 
 		new_node->leaf = false;
-        new_node->data = data;
+        new_node->in_use = true;
 
 		for (i = 0; i < ALPHABET_SIZE; i++)
 			new_node->children[i] = NULL;
@@ -69,15 +69,19 @@ TrieNode *trie_new_node(void *data) {
 // Returns new Trie, with a NULL root and 0 size
 Trie *trie_new(void) {
     Trie *trie = malloc(sizeof(*trie));
-    trie->root = trie_new_node(NULL);
+    trie->root = trie_new_node();
     trie->size = 0;
     return trie;
 }
 
-// If not present, inserts key into trie
-// If the key is prefix of trie node, just marks leaf node
-static void trie_node_insert(TrieNode *root, const char *key, void *data) {
+/* If not present, inserts key into trie, if the key is prefix of trie node,
+   just marks leaf node.
 
+   Being a Trie, it should guarantees O(m) performance for insertion on the
+   worst case, where `m` is the length of the key. */
+static int trie_node_insert(TrieNode *root, const char *key, void *data) {
+
+    int retval = 0;
 	int level;
 	int length = strlen(key);
 	int index;
@@ -87,13 +91,22 @@ static void trie_node_insert(TrieNode *root, const char *key, void *data) {
 	for (level = 0; level < length; level++) {
 		index = INDEX(key[level]);
 		if (!cursor->children[index])
-			cursor->children[index] = trie_new_node(data);
+			cursor->children[index] = trie_new_node();
 
 		cursor = cursor->children[index];
 	}
 
+    if (cursor->in_use == true) {
+        retval = 1;
+    } else {
+        cursor->in_use = true;
+    }
+
 	// mark last node as leaf
 	cursor->leaf = true;
+    cursor->data = data;
+
+    return retval;
 }
 
 
@@ -104,6 +117,7 @@ static bool trie_node_recursive_delete(TrieNode *node, const char *key, int leve
             if (node->leaf) {
                 // Unmark leaf node
                 node->leaf = false;
+                node->in_use = false;
 
                 // If empty, node to be deleted
                 return trie_is_free_node(node);
@@ -126,7 +140,8 @@ static bool trie_node_recursive_delete(TrieNode *node, const char *key, int leve
 }
 
 
-// Returns true if key presents in trie, else false
+/* Returns true if key presents in trie, else false. Also for lookup the big-O
+   runtime is guaranteed O(m) with `m` as length of the key. */
 static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 	int level;
 	int length = strlen(key);
@@ -156,8 +171,8 @@ static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 void trie_insert(Trie *trie, const char *key, void *data) {
     assert(trie);
     assert(key);
-    trie_node_insert(trie->root, key, data);
-    trie->size++;
+    if (trie_node_insert(trie->root, key, data) == 1)
+        trie->size++;
 }
 
 

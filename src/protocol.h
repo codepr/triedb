@@ -123,8 +123,9 @@ void pack_ack(Buffer *, Ack *);
 
 
 /* Builder and destroy functions for every specific command defined */
-Ack *ack_packet(uint8_t);
 Put *put_packet(uint8_t *, uint8_t *);
+Ack *ack_packet(uint8_t);
+Nack *nack_packet(uint8_t);
 
 
 void free_put(Put **);

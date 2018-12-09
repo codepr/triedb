@@ -25,9 +25,14 @@ def send_put(sock, key, value):
     sock.send(put)
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
-    print(ntohl(total_len))
-    payload = struct.unpack('=B', sock.recv(ntohl(total_len) - 5))
-    print({'code': code, 'total_len': ntohl(total_len), 'payload': payload})
+    total_len = ntohl(total_len)
+    payload = struct.unpack('=B', sock.recv(total_len - 5))
+
+    return {
+        'code': code,
+        'total_len': total_len,
+        'payload': payload
+    }
 
 
 def send_get(sock, key):
@@ -42,10 +47,19 @@ def send_get(sock, key):
     sock.send(get)
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
-    print(ntohl(total_len))
-    klen, vlen = struct.unpack('=HI', sock.recv(6))
-    payload = struct.unpack(f'={ntohs(klen)}s{ntohl(vlen)}s', sock.recv(ntohs(klen) + ntohl(vlen)))
-    print({'code': code, 'total_len': ntohl(total_len), 'payload': payload})
+    total_len = ntohl(total_len)
+    if code in (ACK, NACK):
+        payload = struct.unpack('=B', sock.recv(total_len - 5))
+    else:
+        klen, vlen = struct.unpack('=HI', sock.recv(6))
+        klen, vlen = ntohs(klen), ntohl(vlen)
+        payload = struct.unpack(f'={klen}s{vlen}s', sock.recv(klen + vlen))
+
+    return {
+        'code': code,
+        'total_len': total_len,
+        'payload': payload
+    }
 
 
 def send_del(sock, key):
@@ -60,9 +74,14 @@ def send_del(sock, key):
     sock.send(delete)
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
-    print(ntohl(total_len))
-    payload = struct.unpack('=B', sock.recv(ntohl(total_len) - 5))
-    print({'code': code, 'total_len': ntohl(total_len), 'payload': payload})
+    total_len = ntohl(total_len)
+    payload = struct.unpack('=B', sock.recv(total_len - 5))
+
+    return {
+        'code': code,
+        'total_len': total_len,
+        'payload': payload
+    }
 
 if __name__ == '__main__':
     sock = socket()

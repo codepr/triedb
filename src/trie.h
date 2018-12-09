@@ -48,6 +48,7 @@ struct TrieNode {
     void *data;
 	/* leaf is true if the node represents end of a word */
 	bool leaf;
+    bool in_use;
 };
 
 
@@ -59,7 +60,7 @@ struct Trie {
 
 
 // Returns new trie node (initialized to NULLs)
-struct TrieNode *trie_new_node(void *);
+struct TrieNode *trie_new_node();
 
 struct Trie *trie_new(void);
 

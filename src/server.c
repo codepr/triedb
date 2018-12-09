@@ -166,7 +166,7 @@ static int put_handler(TriteDB *db, Client *c) {
     Ack *ack = ack_packet(0x00);
     Buffer *b = buffer_init(ack->header->size);
     pack_ack(b, ack);
-    DEBUG("PUT %s -> %s", p->key, p->value);
+    DEBUG("PUT %s -> %s Trie size %d", p->key, p->value, db->data->size);
     set_reply(c, b);
     free(p->header);
     free(p->key);
@@ -179,14 +179,23 @@ static int put_handler(TriteDB *db, Client *c) {
 static int get_handler(TriteDB *db, Client *c) {
     Get *g = (Get *) c->ptr;
     void *val = NULL;
-    trie_search(db->data, (const char *) g->key, &val);
-    Put *put = put_packet(g->key, val);
-    Buffer *b = buffer_init(put->header->size);
-    pack_put(b, put);
-    DEBUG("GET %s -> %s", put->key, val);
-    set_reply(c, b);
+    bool found = trie_search(db->data, (const char *) g->key, &val);
+    if (found == false || val == NULL) {
+        Nack *nack = ack_packet(0x01);
+        Buffer *b = buffer_init(nack->header->size);
+        pack_ack(b, nack);
+        set_reply(c, b);
+        DEBUG("GET %s -> not found Trie size %d", g->key, db->data->size);
+        free_ack(&nack);
+    } else {
+        Put *put = put_packet(g->key, val);
+        Buffer *b = buffer_init(put->header->size);
+        pack_put(b, put);
+        DEBUG("GET %s -> %s Trie size %d", put->key, val, db->data->size);
+        set_reply(c, b);
+        free_put(&put);
+    }
     free_get(&g);
-    free_put(&put);
     return OK;
 }
 
@@ -199,7 +208,7 @@ static int del_handler(TriteDB *db, Client *c) {
     Ack *ack = ack_packet(0x00);
     Buffer *b = buffer_init(ack->header->size);
     pack_ack(b, ack);
-    DEBUG("DEL %s", d->key);
+    DEBUG("DEL %s Trie size %d", d->key, db->data->size);
     set_reply(c, b);
     free_del(&d);
     if (found == true)
