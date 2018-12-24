@@ -36,7 +36,7 @@
 
 #define ALPHABET_SIZE (94)
 
-#define NOTTL 1
+#define NOTTL 0
 
 
 typedef struct Trie Trie;
@@ -89,7 +89,7 @@ struct Trie *trie_new(void);
  */
 void trie_insert(Trie *, const char *, void *);
 
-void trie_delete(Trie *, const char *);
+bool trie_delete(Trie *, const char *);
 
 /* Returns true if key presents in trie, else false, the last pointer to
    pointer is used to store the value associated with the searched key, if

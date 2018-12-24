@@ -91,14 +91,18 @@ def send_exp(sock, key, ttl):
     }
 
 
-def send_del(sock, key):
-    keylen = len(key)
+def send_del(sock, keys):
+    totlen = sum(len(k) for k in keys)
+    fmtinit = '=BIH'
+    fmt = ''.join(f'H{len(key)}s' for key in keys)
+    fmt = fmtinit + fmt
+    keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     delete = struct.pack(
-        f'=BIH{keylen}s',
+        fmt,
         DEL,
-        htonl(7 + keylen),
-        htons(keylen),
-        key.encode()
+        htonl(7 + totlen + 2 * len(keys)),
+        htons(len(keys)),
+        *keys_to_net
     )
     sock.send(delete)
     header = sock.recv(5)
@@ -127,4 +131,4 @@ if __name__ == '__main__':
             k, t = tail.split()
             print(send_exp(sock, k, int(t)))
         else:
-            send_del(sock, tail)
+            print(send_del(sock, tail.split()))

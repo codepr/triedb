@@ -32,16 +32,17 @@
 #include <stdint.h>
 
 /* Error codes */
-#define OK          0x00
-#define EOOM        0x01
+#define OK     0x00
+#define NOK    0x01
+#define EOOM   0x01
 
 /* Operation codes */
-#define PUT         0x10
-#define GET         0x20
-#define DEL         0x30
-#define ACK         0x40
-#define NACK        0x50
-#define EXP         0x60
+#define PUT    0x10
+#define GET    0x20
+#define DEL    0x30
+#define ACK    0x40
+#define NACK   0x50
+#define EXP    0x60
 
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
@@ -71,6 +72,19 @@ typedef struct {
 } Get;
 
 
+struct Key {
+    uint16_t keysize;
+    uint8_t *key;
+};
+
+
+typedef struct {
+    Header *header;
+    uint16_t len;
+    struct Key **keys;
+} Del;
+
+
 typedef struct {
     Header *header;
     uint8_t code;
@@ -84,8 +98,6 @@ typedef struct {
     uint16_t ttl;
 } Exp;
 
-
-typedef Get Del;
 
 /* Currently ACK == NACK, so to simplify we assume that they're the same */
 typedef Ack Nack;
@@ -120,10 +132,11 @@ void write_string(Buffer *, uint8_t *);
 
 
 /* Pack/Unpack functions for every specific command defined */
-int8_t unpack_put(Buffer *, Put *);
-int8_t unpack_get(Buffer *, Get *);
-int8_t unpack_del(Buffer *, Del *);
-int8_t unpack_exp(Buffer *, Exp *);
+int unpack_put(Buffer *, Put *);
+int unpack_get(Buffer *, Get *);
+int unpack_del(Buffer *, Del *);
+int unpack_exp(Buffer *, Exp *);
+void *unpack(const uint8_t , Buffer *);
 
 
 void pack_put(Buffer *, Put *);

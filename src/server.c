@@ -165,7 +165,7 @@ static void free_client(Client **c) {
 static int put_handler(TriteDB *db, Client *c) {
     Put *p = (Put *) c->ptr;
     trie_insert(db->data, (const char *) p->key, p->value);
-    Ack *ack = ack_packet(0x00);
+    Ack *ack = ack_packet(OK);
     Buffer *b = buffer_init(ack->header->size);
     pack_ack(b, ack);
     DEBUG("PUT %s -> %s Trie size %d", p->key, p->value, db->data->size);
@@ -183,7 +183,7 @@ static int get_handler(TriteDB *db, Client *c) {
     void *val = NULL;
     bool found = trie_search(db->data, (const char *) g->key, &val);
     if (found == false || val == NULL) {
-        Nack *nack = ack_packet(0x01);
+        Nack *nack = ack_packet(NOK);
         Buffer *b = buffer_init(nack->header->size);
         pack_ack(b, nack);
         set_reply(c, b);
@@ -208,7 +208,7 @@ static int exp_handler(TriteDB *db, Client *c) {
     void *val = NULL;
     bool found = trie_search(db->data, (const char *) e->key, &val);
     if (found == false || val == NULL) {
-        Nack *nack = ack_packet(0x01);
+        Nack *nack = ack_packet(NOK);
         Buffer *b = buffer_init(nack->header->size);
         pack_ack(b, nack);
         set_reply(c, b);
@@ -224,7 +224,7 @@ static int exp_handler(TriteDB *db, Client *c) {
         db->expiring_keys = list_push(db->expiring_keys, ek);
         if (db->expiring_keys->len > 1)
             db->expiring_keys->head = merge_sort(db->expiring_keys->head);
-        Ack *ack = ack_packet(0x00);
+        Ack *ack = ack_packet(OK);
         Buffer *b = buffer_init(ack->header->size);
         pack_ack(b, ack);
         DEBUG("EXPIRE %s -> %s in %d Trie size %d", e->key, nd->data, e->ttl, db->data->size);
@@ -237,18 +237,19 @@ static int exp_handler(TriteDB *db, Client *c) {
 
 
 static int del_handler(TriteDB *db, Client *c) {
-    Del *d = (Del *) c->ptr;
-    void *val = NULL;
-    bool found = trie_search(db->data, (const char *) d->key, &val);
-    Ack *ack = NULL;
-    if (found == false && val) {
-        ack = nack_packet(0x01);
-        DEBUG("DEL %s failed Trie size %d", d->key, db->data->size);
-    } else {
-        trie_delete(db->data, (const char *) d->key);
-        ack = ack_packet(0x00);
-        DEBUG("DEL %s Trie size %d", d->key, db->data->size);
+    int code = OK;
+    Del *d = c->ptr;
+    bool found = false;
+    for (int i = 0; i < d->len; i++) {
+        found = trie_delete(db->data, (const char *) d->keys[i]->key);
+        if (found == false) {
+            code = NOK;
+            DEBUG("DEL %s failed Trie size %d", d->keys[i]->key, db->data->size);
+        } else {
+            DEBUG("DEL %s Trie size %d", d->keys[i]->key, db->data->size);
+        }
     }
+    Ack *ack = ack_packet(code);
     Buffer *b = buffer_init(ack->header->size);
     pack_ack(b, ack);
     set_reply(c, b);
@@ -270,31 +271,6 @@ static struct command commands_map[] = {
 static int commands_map_len(void) {
     return sizeof(commands_map) / sizeof(struct command);
 }
-
-
-static void *unpack_packet(const uint8_t opcode, Buffer *b) {
-
-    if (opcode == PUT) {
-        Put *put = malloc(sizeof(*put));
-        unpack_put(b, put);
-        return put;
-    } else if (opcode == GET) {
-        Get *get = malloc(sizeof(*get));
-        unpack_get(b, get);
-        return get;
-    } else if (opcode == DEL) {
-        Del *del = malloc(sizeof(*del));
-        unpack_del(b, del);
-        return del;
-    } else if (opcode == EXP) {
-        Exp *exp = malloc(sizeof(*exp));
-        unpack_exp(b, exp);
-        return exp;
-    }
-
-    return NULL;
-}
-
 
 /* Handle incoming requests, after being accepted or after a reply */
 static int request_handler(TriteDB *db, Client *client) {
@@ -329,7 +305,7 @@ static int request_handler(TriteDB *db, Client *client) {
         return 0;
     }
 
-    void *pkt = unpack_packet(opcode, b);
+    void *pkt = unpack(opcode, b);
 
     if (!pkt) read_all = 1;
 
@@ -499,6 +475,9 @@ static void expire_keys(TriteDB *db) {
         for (ListNode *n = db->expiring_keys->head; n != NULL
                 && db->expiring_keys->len > 0; n = n->next) {
             ek = n->data;
+            // Skip case of no ttl set (e.g. TTL=0)
+            if (ek->nd->ttl == NOTTL)
+                continue;
             delta = (ek->nd->ctime + ek->nd->ttl) - now;
             if (delta <= 0) {
                 trie_delete(db->data, ek->key);

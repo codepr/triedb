@@ -43,7 +43,8 @@ static void unpack_header(Buffer *, Header *);
 Buffer *buffer_init(const size_t len) {
     Buffer *b = malloc(sizeof(Buffer));
     b->data = malloc(len);
-    if (!b || !b->data) oom("allocating memory for new buffer");
+    if (!b || !b->data)
+        oom("allocating memory for new buffer");
     b->size = len;
     b->pos = 0;
     return b;
@@ -52,8 +53,7 @@ Buffer *buffer_init(const size_t len) {
 
 /* Destroy a previously allocated Buffer structure */
 void buffer_destroy(Buffer *b) {
-    assert(b);
-    assert(b->data);
+    assert(b && b->data);
     b->size = b->pos = 0;
     free(b->data);
     free(b);
@@ -62,6 +62,8 @@ void buffer_destroy(Buffer *b) {
 
 // Reading data
 uint8_t read_uint8(Buffer *b) {
+    if ((b->pos + sizeof(uint8_t)) > b->size)
+        return 0;
     uint8_t val = *(b->data + b->pos);
     b->pos += sizeof(uint8_t);
     return val;
@@ -69,6 +71,8 @@ uint8_t read_uint8(Buffer *b) {
 
 
 uint16_t read_uint16(Buffer *b) {
+    if ((b->pos + sizeof(uint16_t)) > b->size)
+        return 0;
     uint16_t val = ntohs(*((uint16_t *) (b->data + b->pos)));
     b->pos += sizeof(uint16_t);
     return val;
@@ -76,6 +80,8 @@ uint16_t read_uint16(Buffer *b) {
 
 
 uint32_t read_uint32(Buffer *b) {
+    if ((b->pos + sizeof(uint32_t)) > b->size)
+        return 0;
     uint32_t val = ntohl(*((uint32_t *) (b->data + b->pos)));
     b->pos += sizeof(uint32_t);
     return val;
@@ -83,6 +89,8 @@ uint32_t read_uint32(Buffer *b) {
 
 
 uint8_t *read_string(Buffer *b, size_t len) {
+    if ((b->pos + len) > b->size)
+        return NULL;
     uint8_t *str = malloc(len + 1);
     memcpy(str, b->data + b->pos, len);
     str[len] = '\0';
@@ -93,18 +101,24 @@ uint8_t *read_string(Buffer *b, size_t len) {
 
 // Write data
 void write_uint8(Buffer *b, uint8_t val) {
+    if ((b->pos + sizeof(uint8_t)) > b->size)
+        return;
     *(b->data + b->pos) = val;
     b->pos += sizeof(uint8_t);
 }
 
 
 void write_uint16(Buffer *b, uint16_t val) {
+    if ((b->pos + sizeof(uint16_t)) > b->size)
+        return;
     *((uint16_t *) (b->data + b->pos)) = htons(val);
     b->pos += sizeof(uint16_t);
 }
 
 
 void write_uint32(Buffer *b, uint32_t val) {
+    if ((b->pos + sizeof(uint32_t)) > b->size)
+        return;
     *((uint32_t *) (b->data + b->pos)) = htonl(val);
     b->pos += sizeof(uint32_t);
 }
@@ -112,6 +126,8 @@ void write_uint32(Buffer *b, uint32_t val) {
 
 void write_string(Buffer *b, uint8_t *str) {
     size_t len = strlen((char *) str);
+    if ((b->pos + len) > b->size)
+        return;
     memcpy(b->data + b->pos, str, len);
     b->pos += len;
 }
@@ -119,8 +135,7 @@ void write_string(Buffer *b, uint8_t *str) {
 
 static void pack_header(Header *h, Buffer *b) {
 
-    assert(b);
-    assert(h);
+    assert(b && h);
 
     write_uint8(b, h->opcode);
     write_uint32(b, b->size);
@@ -129,18 +144,16 @@ static void pack_header(Header *h, Buffer *b) {
 
 static void unpack_header(Buffer *b, Header *h) {
 
-    assert(b);
-    assert(h);
+    assert(b && h);
 
     h->opcode = read_uint8(b);
     h->size = read_uint32(b);
 }
 
 
-int8_t unpack_put(Buffer *b, Put *p) {
+int unpack_put(Buffer *b, Put *p) {
 
-    assert(b);
-    assert(p);
+    assert(b && p);
 
     /* Start unpacking bytes into the Request structure */
 
@@ -159,10 +172,9 @@ int8_t unpack_put(Buffer *b, Put *p) {
 }
 
 
-int8_t unpack_get(Buffer *b, Get *g) {
+int unpack_get(Buffer *b, Get *g) {
 
-    assert(b);
-    assert(g);
+    assert(b && g);
 
     /* Start unpacking bytes into the Request structure */
 
@@ -179,10 +191,9 @@ int8_t unpack_get(Buffer *b, Get *g) {
 }
 
 
-int8_t unpack_del(Buffer *b, Del *d) {
+int unpack_del(Buffer *b, Del *d) {
 
-    assert(b);
-    assert(d);
+    assert(b && d);
 
     /* Start unpacking bytes into the Request structure */
 
@@ -192,17 +203,25 @@ int8_t unpack_del(Buffer *b, Del *d) {
 
     unpack_header(b, d->header);
 
-    d->keysize = read_uint16(b);
-    d->key = read_string(b, d->keysize);
+    // Number of keys, or length of the Key array
+    d->len = read_uint16(b);
+
+    d->keys = calloc(d->len, sizeof(struct Key));
+
+    for (int i = 0; i < d->len; i++) {
+        struct Key *key = malloc(sizeof(*key));
+        key->keysize = read_uint16(b);
+        key->key = read_string(b, key->keysize);
+        d->keys[i] = key;
+    }
 
     return OK;
 }
 
 
-int8_t unpack_exp(Buffer *b, Exp *e) {
+int unpack_exp(Buffer *b, Exp *e) {
 
-    assert(b);
-    assert(e);
+    assert(b && e);
 
     /* Start unpacking bytes into the Request structure */
 
@@ -219,11 +238,35 @@ int8_t unpack_exp(Buffer *b, Exp *e) {
     return OK;
 }
 
+/* Main unpacking function, to translates bytes received from clients to a
+   packet structure, based on the opcode */
+void *unpack(const uint8_t opcode, Buffer *b) {
+
+    if (opcode == PUT) {
+        Put *put = malloc(sizeof(*put));
+        unpack_put(b, put);
+        return put;
+    } else if (opcode == GET) {
+        Get *get = malloc(sizeof(*get));
+        unpack_get(b, get);
+        return get;
+    } else if (opcode == DEL) {
+        Del *del = malloc(sizeof(*del));
+        unpack_del(b, del);
+        return del;
+    } else if (opcode == EXP) {
+        Exp *exp = malloc(sizeof(*exp));
+        unpack_exp(b, exp);
+        return exp;
+    }
+
+    return NULL;
+}
+
 
 void pack_put(Buffer *b, Put *pkt) {
 
-    assert(b);
-    assert(pkt);
+    assert(b && pkt);
 
     pack_header(pkt->header, b);
 
@@ -236,8 +279,7 @@ void pack_put(Buffer *b, Put *pkt) {
 
 void pack_get(Buffer *b, Get *pkt) {
 
-    assert(b);
-    assert(pkt);
+    assert(b && pkt);
 
     pack_header(pkt->header, b);
 
@@ -248,20 +290,22 @@ void pack_get(Buffer *b, Get *pkt) {
 
 void pack_del(Buffer *b, Del *pkt) {
 
-    assert(b);
-    assert(pkt);
+    assert(b && pkt);
 
     pack_header(pkt->header, b);
 
-    write_uint16(b, pkt->keysize);
-    write_string(b, pkt->key);
+    write_uint16(b, pkt->len);
+
+    for (int i = 0; i < pkt->len; i++) {
+        write_uint16(b, pkt->keys[i]->keysize);
+        write_string(b, pkt->keys[i]->key);
+    }
 }
 
 
 void pack_exp(Buffer *b, Exp *pkt) {
 
-    assert(b);
-    assert(pkt);
+    assert(b && pkt);
 
     pack_header(pkt->header, b);
 
@@ -273,8 +317,7 @@ void pack_exp(Buffer *b, Exp *pkt) {
 
 void pack_ack(Buffer *b, Ack *pkt) {
 
-    assert(b);
-    assert(pkt);
+    assert(b && pkt);
 
     pack_header(pkt->header, b);
 
@@ -301,10 +344,12 @@ Ack *ack_packet(uint8_t code) {
 Nack *nack_packet(uint8_t code) {
 
     Nack *pkt = malloc(sizeof(Ack));
-    if (!pkt) oom("building subscribe request");
+    if (!pkt)
+        oom("building subscribe request");
 
     pkt->header = malloc(sizeof(Header));
-    if (!pkt->header) oom("building header of subscribe request");
+    if (!pkt->header)
+        oom("building header of subscribe request");
 
     pkt->header->opcode = NACK;
     pkt->header->size = HEADERLEN + sizeof(uint8_t);
@@ -317,14 +362,15 @@ Nack *nack_packet(uint8_t code) {
 
 Put *put_packet(uint8_t *key, uint8_t *value) {
 
-    assert(key);
-    assert(value);
+    assert(key && value);
 
     Put *pkt = malloc(sizeof(*pkt));
-    if (!pkt) oom("building unsubscribe request");
+    if (!pkt)
+        oom("building unsubscribe request");
 
     pkt->header = malloc(sizeof(Header));
-    if (!pkt->header) oom("building unsubscribe header");
+    if (!pkt->header)
+        oom("building unsubscribe header");
 
     pkt->header->opcode = PUT;
     pkt->header->size = HEADERLEN + strlen((char *) key) +
@@ -398,10 +444,13 @@ void free_del(Del **d) {
         free((*d)->header);
         (*d)->header = NULL;
     }
-    if ((*d)->key) {
-        free((*d)->key);
-        (*d)->key = NULL;
+    for (int i = 0; i < (*d)->len; i++) {
+        if ((*d)->keys[i]) {
+            free((*d)->keys[i]->key);
+            free((*d)->keys[i]);
+        }
     }
+    free((*d)->keys);
     free(*d);
     *d = NULL;
 }

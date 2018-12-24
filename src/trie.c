@@ -59,7 +59,7 @@ TrieNode *trie_new_node(void *data) {
 
         struct NodeData *ndata = malloc(sizeof(*ndata));
 
-        ndata->ttl = -NOTTL;
+        ndata->ttl = NOTTL;
         ndata->ctime = (uint64_t) time(NULL);
         ndata->data = data;
 
@@ -118,6 +118,7 @@ static int trie_node_insert(TrieNode *root, const char *key, void *data) {
 /* Private function, iterate recursively through the trie structure starting
    from a given node, deleting the target value */
 static bool trie_node_recursive_delete(TrieNode *node, const char *key) {
+
     if (node) {
         // Base case
         if (*key == '\0') {
@@ -143,9 +144,10 @@ static bool trie_node_recursive_delete(TrieNode *node, const char *key) {
 
                 // recursively climb up, and delete eligible nodes
                 return (!node->leaf && trie_is_free_node(node));
-            } else {
-                trie_node_free(node->children[index]);
             }
+            /* else { */
+            /*     trie_node_free(node->children[index]); */
+            /* } */
         }
     }
 
@@ -187,21 +189,24 @@ void trie_insert(Trie *trie, const char *key, void *data) {
 }
 
 
-void trie_delete(Trie *trie, const char *key) {
-    assert(trie);
-    assert(key);
+bool trie_delete(Trie *trie, const char *key) {
+
+    assert(trie && key);
+
     bool found = false;
+
     if (strlen(key) > 0) {
         found = trie_node_recursive_delete(trie->root, key);
         if (found == true)
             trie->size--;
     }
+
+    return found;
 }
 
 
 bool trie_search(Trie *trie, const char *key, void **ret) {
-    assert(trie);
-    assert(key);
+    assert(trie && key);
     return trie_node_search(trie->root, key, ret);
 }
 
