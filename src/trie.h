@@ -28,11 +28,15 @@
 #ifndef TRIE_H
 #define TRIE_H
 
+#include <time.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdbool.h>
 
 
 #define ALPHABET_SIZE (94)
+
+#define NOTTL 1
 
 
 typedef struct Trie Trie;
@@ -40,13 +44,19 @@ typedef struct Trie Trie;
 typedef struct TrieNode TrieNode;
 
 
+struct NodeData {
+    time_t ctime;
+    uint64_t ttl;
+    void *data;
+};
+
 /* Trie node, it contains a fixed size array (every node can have at max the
    alphabet length size of children), a flag defining if the node represent
    the end of a word and then if it contains a value defined by data. */
 struct TrieNode {
 	struct TrieNode *children[ALPHABET_SIZE];
-    void *data;
-	/* leaf is true if the node represents end of a word */
+    struct NodeData *ndata;
+ 	/* leaf is true if the node represents end of a word */
 	bool leaf;
     bool in_use;
 };
@@ -58,13 +68,25 @@ struct Trie {
     size_t size;
 };
 
-
 // Returns new trie node (initialized to NULLs)
-struct TrieNode *trie_new_node();
+struct TrieNode *trie_new_node(void *);
 
 struct Trie *trie_new(void);
 
-/* The leaf represents the node with the associated data */
+/* The leaf represents the node with the associated data
+ *           .
+ *          / \
+ *         h   s: s-value
+ *        / \
+ *       e   k: hk-value
+ *      /
+ *     l: hel-value
+ *
+ * Here we got 3 <key:value> pairs:
+ * - s: s-value
+ * - hk: hk-value
+ * - hel: hel-value
+ */
 void trie_insert(Trie *, const char *, void *);
 
 void trie_delete(Trie *, const char *);

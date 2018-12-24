@@ -82,6 +82,12 @@ struct command {
 };
 
 
+struct ExpiringKey {
+    struct NodeData *nd;
+    const char *key;
+};
+
+
 struct tritedb {
     /* Main epoll loop fd */
     int epollfd;
@@ -91,6 +97,8 @@ struct tritedb {
     List *clients;
     /* Peers connected */
     List *peers;
+    /* Expiring keys */
+    List *expiring_keys;
 };
 
 
@@ -99,6 +107,9 @@ struct config {
     uint8_t run;
     /* Logging level, to be set by reading configuration */
     uint8_t loglevel;
+    /* Epoll wait timeout, define even the number of times per second that the
+       system will check for expired keys */
+    int epoll_timeout;
 };
 
 

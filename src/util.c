@@ -30,11 +30,15 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <malloc.h>
 #include "util.h"
 #include "server.h"
 
 
-void tritedb_log(const uint8_t level, const char *fmt, ...) {
+static size_t memory = 0;
+
+
+void t_log(const uint8_t level, const char *fmt, ...) {
     va_list ap;
     char msg[MAX_LOG_SIZE + 4];
 
@@ -73,4 +77,23 @@ void oom(const char *msg) {
     fprintf(stderr, "malloc(3) failed: %s %s\n", strerror(errno), msg);
     fflush(stderr);
     exit(EXIT_FAILURE);
+}
+
+
+void *t_malloc(size_t size) {
+    void *ptr = malloc(size);
+    if (ptr)
+        memory += size;
+    return ptr;
+}
+
+
+void *t_realloc(void *ptr, size_t size) {
+    return NULL;
+}
+
+
+void t_free(void *ptr) {
+    memory -= malloc_usable_size(ptr);
+    free(ptr);
 }

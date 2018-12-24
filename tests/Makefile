@@ -1,10 +1,11 @@
 CC=gcc
 CFLAGS=-std=c99 -Wall -lrt -pedantic -D_DEFAULT_SOURCE
 RELEASE=../bin
-SRC=../src/trie.c \
-	../src/list.c \
-	../src/ringbuf.c \
-	structures_test.c \
+SRC=../src/trie.c 		\
+	../src/list.c 		\
+	../src/ringbuf.c 	\
+	../src/hashtable.c 	\
+	structures_test.c 	\
 	trie_test.c
 
 

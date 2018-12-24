@@ -301,7 +301,6 @@ static char *test_trie_delete(void) {
     return 0;
 }
 
-
 /*
  * All datastructure tests
  */

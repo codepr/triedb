@@ -71,5 +71,7 @@ List *list_push_back(List *, void *);
    args, which generally means a node and his subsequent */
 ListNode *list_remove(ListNode *, ListNode *, compare_func);
 
+/* Merge sort customized on TTL of new values data with complexity of O(nlogn) */
+ListNode *merge_sort(ListNode *head);
 
 #endif

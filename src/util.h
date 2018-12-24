@@ -40,13 +40,19 @@ enum { INFO, ERROR, DEBUG };
 
 void oom(const char *);
 
-/* logging */
+/* Logging */
+void t_log(const uint8_t level, const char *, ...);
 
-void tritedb_log(const uint8_t level, const char *, ...);
+/* Memory management */
+void *t_malloc(size_t);
+void *t_realloc(void *, size_t);
+void t_free(void *);
 
-#define LOG(...) tritedb_log( __VA_ARGS__ )
+
+#define LOG(...) t_log( __VA_ARGS__ )
 #define DEBUG(...) LOG(DEBUG, __VA_ARGS__)
 #define ERROR(...) LOG(ERROR, __VA_ARGS__)
 #define INFO(...) LOG(INFO, __VA_ARGS__)
+
 
 #endif

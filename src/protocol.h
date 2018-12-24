@@ -41,6 +41,7 @@
 #define DEL         0x30
 #define ACK         0x40
 #define NACK        0x50
+#define EXP         0x60
 
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
@@ -74,6 +75,14 @@ typedef struct {
     Header *header;
     uint8_t code;
 } Ack;
+
+
+typedef struct {
+    Header *header;
+    uint16_t keysize;
+    uint8_t *key;
+    uint16_t ttl;
+} Exp;
 
 
 typedef Get Del;
@@ -114,24 +123,28 @@ void write_string(Buffer *, uint8_t *);
 int8_t unpack_put(Buffer *, Put *);
 int8_t unpack_get(Buffer *, Get *);
 int8_t unpack_del(Buffer *, Del *);
+int8_t unpack_exp(Buffer *, Exp *);
 
 
 void pack_put(Buffer *, Put *);
 void pack_get(Buffer *, Get *);
 void pack_del(Buffer *, Del *);
 void pack_ack(Buffer *, Ack *);
+void pack_exp(Buffer *, Exp *);
 
 
 /* Builder and destroy functions for every specific command defined */
 Put *put_packet(uint8_t *, uint8_t *);
 Ack *ack_packet(uint8_t);
 Nack *nack_packet(uint8_t);
+Exp *exp_packet(uint8_t *, uint16_t);
 
 
 void free_put(Put **);
 void free_get(Get **);
 void free_del(Del **);
 void free_ack(Ack **);
+void free_exp(Exp **);
 
 
 #endif

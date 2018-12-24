@@ -199,6 +199,27 @@ int8_t unpack_del(Buffer *b, Del *d) {
 }
 
 
+int8_t unpack_exp(Buffer *b, Exp *e) {
+
+    assert(b);
+    assert(e);
+
+    /* Start unpacking bytes into the Request structure */
+
+    e->header = malloc(sizeof(Header));
+    if (!e->header)
+        return -EOOM;
+
+    unpack_header(b, e->header);
+
+    e->keysize = read_uint16(b);
+    e->key = read_string(b, e->keysize);
+    e->ttl = read_uint16(b);
+
+    return OK;
+}
+
+
 void pack_put(Buffer *b, Put *pkt) {
 
     assert(b);
@@ -234,6 +255,19 @@ void pack_del(Buffer *b, Del *pkt) {
 
     write_uint16(b, pkt->keysize);
     write_string(b, pkt->key);
+}
+
+
+void pack_exp(Buffer *b, Exp *pkt) {
+
+    assert(b);
+    assert(pkt);
+
+    pack_header(pkt->header, b);
+
+    write_uint16(b, pkt->keysize);
+    write_string(b, pkt->key);
+    write_uint16(b, pkt->ttl);
 }
 
 
@@ -338,6 +372,22 @@ void free_get(Get **g) {
     }
     free(*g);
     *g = NULL;
+}
+
+
+void free_exp(Exp **e) {
+    if (!*e)
+        return;
+    if ((*e)->header) {
+        free((*e)->header);
+        (*e)->header = NULL;
+    }
+    if ((*e)->key) {
+        free((*e)->key);
+        (*e)->key = NULL;
+    }
+    free(*e);
+    *e = NULL;
 }
 
 

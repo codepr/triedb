@@ -39,6 +39,9 @@
 #define INDEX(c) ((int)c - (int)' ')
 
 
+static void trie_node_free(TrieNode *);
+
+
 static bool trie_is_free_node(TrieNode *node) {
     for (int i = 0; i < ALPHABET_SIZE; i++) {
         if (node->children[i])
@@ -47,19 +50,24 @@ static bool trie_is_free_node(TrieNode *node) {
     return true;
 }
 
-
 // Returns new trie node (initialized to NULL)
-TrieNode *trie_new_node(void) {
+TrieNode *trie_new_node(void *data) {
 
-	TrieNode *new_node = new_node = malloc(sizeof(*new_node));
+	TrieNode *new_node = malloc(sizeof(*new_node));
 
 	if (new_node) {
-		int i;
+
+        struct NodeData *ndata = malloc(sizeof(*ndata));
+
+        ndata->ttl = -NOTTL;
+        ndata->ctime = (uint64_t) time(NULL);
+        ndata->data = data;
 
 		new_node->leaf = false;
         new_node->in_use = true;
+        new_node->ndata = ndata;
 
-		for (i = 0; i < ALPHABET_SIZE; i++)
+		for (int i = 0; i < ALPHABET_SIZE; i++)
 			new_node->children[i] = NULL;
 	}
 
@@ -69,7 +77,7 @@ TrieNode *trie_new_node(void) {
 // Returns new Trie, with a NULL root and 0 size
 Trie *trie_new(void) {
     Trie *trie = malloc(sizeof(*trie));
-    trie->root = trie_new_node();
+    trie->root = trie_new_node(NULL);
     trie->size = 0;
     return trie;
 }
@@ -82,16 +90,14 @@ Trie *trie_new(void) {
 static int trie_node_insert(TrieNode *root, const char *key, void *data) {
 
     int retval = 0;
-	int level;
-	int length = strlen(key);
 	int index;
 
 	TrieNode *cursor = root;
 
-	for (level = 0; level < length; level++) {
-		index = INDEX(key[level]);
+    for (char x = *key; x != '\0'; x = *(++key)) {
+        index = INDEX(x);
 		if (!cursor->children[index])
-			cursor->children[index] = trie_new_node();
+			cursor->children[index] = trie_new_node(NULL);
 
 		cursor = cursor->children[index];
 	}
@@ -104,34 +110,41 @@ static int trie_node_insert(TrieNode *root, const char *key, void *data) {
 
 	// mark last node as leaf
 	cursor->leaf = true;
-    cursor->data = data;
+    cursor->ndata->data = data;
 
     return retval;
 }
 
-
-static bool trie_node_recursive_delete(TrieNode *node, const char *key, int level, int len) {
+/* Private function, iterate recursively through the trie structure starting
+   from a given node, deleting the target value */
+static bool trie_node_recursive_delete(TrieNode *node, const char *key) {
     if (node) {
         // Base case
-        if (level == len) {
+        if (*key == '\0') {
             if (node->leaf) {
                 // Unmark leaf node
                 node->leaf = false;
                 node->in_use = false;
 
+                if (node->ndata->data)
+                    free(node->ndata->data);
+
                 // If empty, node to be deleted
                 return trie_is_free_node(node);
             }
         } else {
-            int index = INDEX(key[level]);
 
-            if (trie_node_recursive_delete(node->children[index], key, level + 1, len)) {
+            int index = INDEX(*key);
+
+            if (trie_node_recursive_delete(node->children[index], key + 1)) {
                 // last node marked, delete it
-                free(node->children[index]);
+                trie_node_free(node->children[index]);
                 node->children[index] = NULL;
 
                 // recursively climb up, and delete eligible nodes
                 return (!node->leaf && trie_is_free_node(node));
+            } else {
+                trie_node_free(node->children[index]);
             }
         }
     }
@@ -139,18 +152,16 @@ static bool trie_node_recursive_delete(TrieNode *node, const char *key, int leve
     return false;
 }
 
-
 /* Returns true if key presents in trie, else false. Also for lookup the big-O
    runtime is guaranteed O(m) with `m` as length of the key. */
 static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
-	int level;
-	int length = strlen(key);
+
 	int index;
 
 	TrieNode *cursor = root;
 
-	for (level = 0; level < length; level++) {
-		index = INDEX(key[level]);
+	for (char c = *key; c != '\0'; c = *(++key)) {
+		index = INDEX(c);
 
 		if (!cursor->children[index]) {
             *ret = NULL;
@@ -161,7 +172,7 @@ static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 	}
 
     if (cursor && cursor->leaf) {
-        *ret = cursor->data;
+        *ret = cursor->ndata;
         return true;
     }
 	return false;
@@ -179,10 +190,11 @@ void trie_insert(Trie *trie, const char *key, void *data) {
 void trie_delete(Trie *trie, const char *key) {
     assert(trie);
     assert(key);
-    int len = strlen(key);
-    if (len > 0) {
-        trie_node_recursive_delete(trie->root, key, 0, len);
-        trie->size--;
+    bool found = false;
+    if (strlen(key) > 0) {
+        found = trie_node_recursive_delete(trie->root, key);
+        if (found == true)
+            trie->size--;
     }
 }
 
@@ -195,11 +207,15 @@ bool trie_search(Trie *trie, const char *key, void **ret) {
 
 
 static void trie_node_free(TrieNode *node) {
+
     if (node) {
 
-        if (node->leaf && node->data) {
+        if (node->leaf && node->ndata && node->ndata->data) {
             node->leaf = false;
-            free(node->data);
+            free(node->ndata->data);
+            free(node->ndata);
+        } else if (node->ndata) {
+            free(node->ndata);
         }
 
         for (int i = 0; i < ALPHABET_SIZE; i++)
