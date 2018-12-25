@@ -1,3 +1,11 @@
+0.1.5 - 2018/12/24
+==================
+
+- Add custom memory management to track memory usage
+- Add array of keys to DEL command to delete set of keys at once
+- Fixed a moltitude of bugs, so now there's only a moltitude of bugs remaining
+
+
 0.1.0 - 2018/12/09
 ==================
 
