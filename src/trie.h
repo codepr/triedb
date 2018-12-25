@@ -96,7 +96,10 @@ bool trie_delete(Trie *, const char *);
    present */
 bool trie_search(Trie *, const char *, void **);
 
+void trie_node_free(TrieNode *);
+
 void trie_free(Trie *);
 
+void display(TrieNode *, char [], int);
 
 #endif

@@ -97,6 +97,9 @@ def send_del(sock, keys):
     fmt = ''.join(f'H{len(key)}s' for key in keys)
     fmt = fmtinit + fmt
     keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
+    print(keys_to_net)
+    print(fmt)
+    print(len(keys))
     delete = struct.pack(
         fmt,
         DEL,

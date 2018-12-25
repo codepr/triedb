@@ -251,7 +251,7 @@ static char *test_trie_new(void) {
 static char *test_trie_new_node(void) {
     struct TrieNode *node = trie_new_node(NULL);
     ASSERT("[! trie_new_node]: TrieNode not created", node != NULL);
-    free(node);
+    trie_node_free(node);
     return 0;
 }
 
@@ -266,7 +266,7 @@ static char *test_trie_insert(void) {
     void *payload = NULL;
     bool found = trie_search(root, key, &payload);
     ASSERT("[! trie_insert]: Trie insertion failed", (found == true && payload != NULL));
-    free(root);
+    trie_free(root);
     return 0;
 }
 
@@ -281,7 +281,7 @@ static char *test_trie_search(void) {
     void *payload = NULL;
     bool found = trie_search(root, key, &payload);
     ASSERT("[! trie_search]: Trie search failed", (found == true && payload != NULL));
-    free(root);
+    trie_free(root);
     return 0;
 }
 
@@ -291,13 +291,23 @@ static char *test_trie_search(void) {
  */
 static char *test_trie_delete(void) {
     struct Trie *root = trie_new();
-    const char *key = "hello";
-    trie_insert(root, key, "world");
-    trie_delete(root, key);
+    const char *key1 = "hello";
+    const char *key2 = "hel";
+    const char *key3 = "del";
+    trie_insert(root, key1, "world");
+    trie_insert(root, key2, "world");
+    trie_insert(root, key3, "world");
+    trie_delete(root, key1);
+    trie_delete(root, key2);
+    trie_delete(root, key3);
     void *payload = NULL;
-    bool found = trie_search(root, key, &payload);
+    bool found = trie_search(root, key1, &payload);
     ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
-    free(root);
+    found = trie_search(root, key2, &payload);
+    ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
+    found = trie_search(root, key3, &payload);
+    ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
+    trie_free(root);
     return 0;
 }
 
