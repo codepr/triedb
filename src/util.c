@@ -26,6 +26,7 @@
  */
 
 #include <time.h>
+#include <ctype.h>
 #include <errno.h>
 #include <assert.h>
 #include <string.h>
@@ -62,11 +63,20 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     fflush(fp);
 }
 
+/* auxiliary function to check wether a string is an integer */
+bool is_integer(const char *s) {
+    const char *k = s;
+    for (char c = *k; c != '\0'; c = *(++k))
+        if (!isdigit(c))
+            return false;
+    return true;
+}
 
-int parse_int(char *str) {
+
+int parse_int(const char *str) {
     int n = 0;
-    char *s = str;
-    while (*s != '\0') {
+    const char *s = str;
+    while (*s != '\0' && isdigit(*s)) {
         n = (n * 10) + (*s - '0');
         s++;
     }

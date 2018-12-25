@@ -9,6 +9,8 @@ DEL = 0x30
 ACK = 0x40
 NACK = 0x50
 EXP = 0x60
+INC = 0x70
+DEC = 0x80
 
 
 def send_put(sock, key, value, exp=None):
@@ -109,9 +111,6 @@ def send_del(sock, keys):
     fmt = ''.join(f'H{len(key)}s' for key in keys)
     fmt = fmtinit + fmt
     keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
-    print(keys_to_net)
-    print(fmt)
-    print(len(keys))
     delete = struct.pack(
         fmt,
         DEL,
@@ -131,6 +130,34 @@ def send_del(sock, keys):
         'payload': payload
     }
 
+
+def send_inc(sock, keys, inc=True):
+    opcode = INC if inc else DEC
+    totlen = sum(len(k) for k in keys)
+    fmtinit = '=BIH'
+    fmt = ''.join(f'H{len(key)}s' for key in keys)
+    fmt = fmtinit + fmt
+    keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
+    delete = struct.pack(
+        fmt,
+        opcode,
+        htonl(7 + totlen + 2 * len(keys)),
+        htons(len(keys)),
+        *keys_to_net
+    )
+    sock.send(delete)
+    header = sock.recv(5)
+    code, total_len = struct.unpack('=BI', header)
+    total_len = ntohl(total_len)
+    payload = struct.unpack('=B', sock.recv(total_len - 5))
+
+    return {
+        'code': code,
+        'total_len': total_len,
+        'payload': payload
+    }
+
+
 if __name__ == '__main__':
     sock = socket()
     sock.connect(('127.0.0.1', 9090))
@@ -148,5 +175,9 @@ if __name__ == '__main__':
         elif head.lower() == 'exp' or head.lower() == 'expire':
             k, t = tail.split()
             print(send_exp(sock, k, int(t)))
+        elif head.lower() == 'inc':
+            print(send_inc(sock, tail.split()))
+        elif head.lower() == 'dec':
+            print(send_inc(sock, tail.split(), False))
         else:
             print(send_del(sock, tail.split()))

@@ -30,6 +30,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 
 #define MAX_LOG_SIZE 99
@@ -39,6 +40,8 @@ enum { INFO, ERROR, DEBUG };
 
 
 void oom(const char *);
+bool is_integer(const char *);
+int parse_int(const char *);
 
 /* Logging */
 void t_log(const uint8_t level, const char *, ...);

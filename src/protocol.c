@@ -254,7 +254,8 @@ void *unpack(const uint8_t opcode, Buffer *b) {
         Get *get = t_malloc(sizeof(*get));
         unpack_get(b, get);
         return get;
-    } else if (opcode == DEL) {
+    } else if (opcode == DEL || opcode == INC || opcode == DEC) {
+        // DEL is *currently* formed exactly like INC and DEC commands
         Del *del = t_malloc(sizeof(*del));
         unpack_del(b, del);
         return del;

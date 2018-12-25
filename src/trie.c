@@ -25,8 +25,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// C implementation of search and insert operations
-// on Trie
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -92,10 +90,11 @@ static int trie_node_insert(TrieNode *root,
     int rc = 0;
     bool mod = false;
     int index;
+    const char *k = key;
 
     TrieNode *cursor = root;
 
-    for (char x = *key; x != '\0'; x = *(++key)) {
+    for (char x = *k; x != '\0'; x = *(++k)) {
         index = INDEX(x);
         if (!cursor->children[index]) {
             cursor->children[index] = trie_new_node(NULL, ttl);
@@ -181,10 +180,11 @@ void display(TrieNode* root, char str[], int level) {
 static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 
     int index;
+    const char *k = key;
 
     TrieNode *cursor = root;
 
-    for (char c = *key; c != '\0'; c = *(++key)) {
+    for (char c = *k; c != '\0'; c = *(++k)) {
         index = INDEX(c);
 
         if (!cursor->children[index]) {

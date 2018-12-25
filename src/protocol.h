@@ -43,6 +43,8 @@
 #define ACK    0x40
 #define NACK   0x50
 #define EXP    0x60
+#define INC    0x70
+#define DEC    0x80
 
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
@@ -102,6 +104,11 @@ typedef struct {
 
 /* Currently ACK == NACK, so to simplify we assume that they're the same */
 typedef Ack Nack;
+
+/* And the same applies to INC and DEC commands with DEL */
+typedef Del Inc;
+
+typedef Del Dec;
 
 
 /* Buffer structure, provides a convenient way of handling byte string data.

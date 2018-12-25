@@ -68,6 +68,8 @@ static int put_handler(TriteDB *, Client *);
 static int get_handler(TriteDB *, Client *);
 static int del_handler(TriteDB *, Client *);
 static int exp_handler(TriteDB *, Client *);
+static int inc_handler(TriteDB *, Client *);
+static int dec_handler(TriteDB *, Client *);
 
 // Fixed size of the header of each packet, consists of essentially the first
 // 5 bytes containing respectively the type of packet (PUT, GET, DEL etc ...)
@@ -79,7 +81,9 @@ static struct command commands_map[] = {
     {PUT, put_handler},
     {GET, get_handler},
     {DEL, del_handler},
-    {EXP, exp_handler}
+    {EXP, exp_handler},
+    {INC, inc_handler},
+    {DEC, dec_handler}
 };
 
 
@@ -339,6 +343,89 @@ static int del_handler(TriteDB *db, Client *c) {
 
     return OK;
 }
+
+
+static int inc_handler(TriteDB *db, Client *c) {
+
+    int code = OK, n = 0;
+    Inc *inc = c->ptr;
+    bool found = false;
+    void *val = NULL;
+
+    for (int i = 0; i < inc->len; i++) {
+
+        // For each key in the keys array, check for presence and increment it
+        // by one
+        found = trie_search(db->data, (const char *) inc->keys[i]->key, &val);
+        if (found == false || !val) {
+            code = NOK;
+            DEBUG("INC %s failed (s=%d m=%d)",
+                    inc->keys[i]->key, db->data->size, memory_used());
+        } else {
+            struct NodeData *nd = val;
+            if (!is_integer(nd->data)) {
+                code = NOK;
+                DEBUG("INC %s failed, not an integer value (s=%d m=%d)",
+                        inc->keys[i]->key, db->data->size, memory_used());
+            } else {
+                n = parse_int(nd->data);
+                ++n;
+                // FIXME Should check for realloc if the new value is "larger"
+                // then previous
+                sprintf(nd->data, "%d", n);
+                DEBUG("INC %s (s=%d m=%d)",
+                        inc->keys[i]->key, db->data->size, memory_used());
+            }
+        }
+    }
+
+    set_ack_reply(c, code);
+    free_del(&inc);
+
+    return OK;
+}
+
+
+static int dec_handler(TriteDB *db, Client *c) {
+
+    int code = OK, n = 0;
+    Dec *dec = c->ptr;
+    bool found = false;
+    void *val = NULL;
+
+    for (int i = 0; i < dec->len; i++) {
+
+        // For each key in the keys array, check for presence and increment it
+        // by one
+        found = trie_search(db->data, (const char *) dec->keys[i]->key, &val);
+        if (found == false || !val) {
+            code = NOK;
+            DEBUG("INC %s failed (s=%d m=%d)",
+                    dec->keys[i]->key, db->data->size, memory_used());
+        } else {
+            struct NodeData *nd = val;
+            if (!is_integer(nd->data)) {
+                code = NOK;
+                DEBUG("INC %s failed, not an integer value (s=%d m=%d)",
+                        dec->keys[i]->key, db->data->size, memory_used());
+            } else {
+                n = parse_int(nd->data);
+                --n;
+                // FIXME Should check for realloc if the new value is "smaller"
+                // then previous
+                sprintf(nd->data, "%d", n);
+                DEBUG("INC %s (s=%d m=%d)",
+                        dec->keys[i]->key, db->data->size, memory_used());
+            }
+        }
+    }
+
+    set_ack_reply(c, code);
+    free_del(&dec);
+
+    return OK;
+}
+
 
 /* Handle incoming requests, after being accepted or after a reply */
 static int request_handler(TriteDB *db, Client *client) {
