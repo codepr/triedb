@@ -56,8 +56,8 @@ TrieNode *trie_new_node(void *data) {
 
         struct NodeData *ndata = malloc(sizeof(*ndata));
 
-        ndata->ttl = NOTTL;
-        ndata->ctime = (uint64_t) time(NULL);
+        ndata->ttl = -NOTTL;
+        ndata->ctime = ndata->latime = (uint64_t) time(NULL);
         ndata->data = data;
 
         new_node->leaf = false;

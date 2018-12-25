@@ -43,6 +43,15 @@
 #include "protocol.h"
 
 
+#define set_ack_reply(c, o) do {                    \
+    Nack *ack = ack_packet((o));                \
+    Buffer *b = buffer_init(ack->header->size); \
+    pack_ack((b), ack);                         \
+    set_reply((c), (b));                        \
+    free_ack(&ack);                             \
+} while (0)
+
+
 // Reference to the config structure, could be refactored lately to a more
 // structured configuration
 struct config config;
@@ -58,11 +67,25 @@ static int request_handler(TriteDB *, Client *);
 static int put_handler(TriteDB *, Client *);
 static int get_handler(TriteDB *, Client *);
 static int del_handler(TriteDB *, Client *);
+static int exp_handler(TriteDB *, Client *);
 
 // Fixed size of the header of each packet, consists of essentially the first
 // 5 bytes containing respectively the type of packet (PUT, GET, DEL etc ...)
 // and the total length in bytes of the packet
 static const int HEADLEN = sizeof(uint8_t) + sizeof(uint32_t);
+
+/* Static command map */
+static struct command commands_map[] = {
+    {PUT, put_handler},
+    {GET, get_handler},
+    {DEL, del_handler},
+    {EXP, exp_handler}
+};
+
+
+static int commands_map_len(void) {
+    return sizeof(commands_map) / sizeof(struct command);
+}
 
 /* Parse header, require at least the first 5 bytes in order to read packet
    type and total length that we need to recv to complete the packet */
@@ -165,38 +188,49 @@ static void free_client(Client **c) {
 static int put_handler(TriteDB *db, Client *c) {
     Put *p = (Put *) c->ptr;
     trie_insert(db->data, (const char *) p->key, p->value);
-    Ack *ack = ack_packet(OK);
-    Buffer *b = buffer_init(ack->header->size);
-    pack_ack(b, ack);
+    set_ack_reply(c, OK);
     DEBUG("PUT %s -> %s Trie size %d", p->key, p->value, db->data->size);
-    set_reply(c, b);
     free(p->header);
     free(p->key);
     free(p);
-    free_ack(&ack);
     return OK;
 }
 
 
 static int get_handler(TriteDB *db, Client *c) {
+
     Get *g = (Get *) c->ptr;
     void *val = NULL;
+
+    // Test for the presence of the key in the trie structure
     bool found = trie_search(db->data, (const char *) g->key, &val);
+
     if (found == false || val == NULL) {
-        Nack *nack = ack_packet(NOK);
-        Buffer *b = buffer_init(nack->header->size);
-        pack_ack(b, nack);
-        set_reply(c, b);
+        set_ack_reply(c, NOK);
         DEBUG("GET %s -> not found Trie size %d", g->key, db->data->size);
-        free_ack(&nack);
     } else {
         struct NodeData *nd = (struct NodeData *) val;
-        Put *put = put_packet(g->key, nd->data);
-        Buffer *b = buffer_init(put->header->size);
-        pack_put(b, put);
-        DEBUG("GET %s -> %s Trie size %d", put->key, nd->data, db->data->size);
-        set_reply(c, b);
-        free_put(&put);
+
+        // If the key results expired, remove it instead of returning it
+        if (nd->ttl <= -NOTTL) {
+            trie_delete(db->data, (const char *) g->key);
+            set_ack_reply(c, NOK);
+            DEBUG("GET %s -> expired Trie size %d", g->key, db->data->size);
+        } else {
+
+            // Update the last access time
+            nd->latime = time(NULL);
+
+            // and return it
+            Put *put = put_packet(g->key, nd->data);
+            Buffer *b = buffer_init(put->header->size);
+            pack_put(b, put);
+
+            DEBUG("GET %s -> %s Trie size %d", put->key, nd->data, db->data->size);
+
+            set_reply(c, b);
+            free_put(&put);
+        }
     }
     free_get(&g);
     return OK;
@@ -204,32 +238,38 @@ static int get_handler(TriteDB *db, Client *c) {
 
 
 static int exp_handler(TriteDB *db, Client *c) {
+
     Exp *e = (Exp *) c->ptr;
     void *val = NULL;
+
+    // Check for key presence in the trie structure
     bool found = trie_search(db->data, (const char *) e->key, &val);
+
     if (found == false || val == NULL) {
-        Nack *nack = ack_packet(NOK);
-        Buffer *b = buffer_init(nack->header->size);
-        pack_ack(b, nack);
-        set_reply(c, b);
+        set_ack_reply(c, NOK);
         DEBUG("EXP %s -> not found Trie size %d", e->key, db->data->size);
-        free_ack(&nack);
     } else {
         struct NodeData *nd = (struct NodeData *) val;
         nd->ttl = e->ttl;
-        nd->ctime = (uint64_t) time(NULL);
+
+        // It's a new TTL, so we update creation_time to now in order to
+        // calculate the effective expiration of the key
+        nd->ctime = nd->latime = (uint64_t) time(NULL);
         struct ExpiringKey *ek = malloc(sizeof(*ek));
         ek->nd = nd;
         ek->key = strdup((const char *) e->key);
+
+        // Push into the expiring keys list and merge sort it shortly after,
+        // this way we have a mostly updated list of expiring keys at each
+        // insert, making it simpler and more efficient to cycle through them
+        // and remove it later.
         db->expiring_keys = list_push(db->expiring_keys, ek);
         if (db->expiring_keys->len > 1)
             db->expiring_keys->head = merge_sort(db->expiring_keys->head);
-        Ack *ack = ack_packet(OK);
-        Buffer *b = buffer_init(ack->header->size);
-        pack_ack(b, ack);
-        DEBUG("EXPIRE %s -> %s in %d Trie size %d", e->key, nd->data, e->ttl, db->data->size);
-        set_reply(c, b);
-        free_ack(&ack);
+
+        set_ack_reply(c, OK);
+        DEBUG("EXPIRE %s -> %s in %d Trie size %d",
+                e->key, nd->data, e->ttl, db->data->size);
     }
     free_exp(&e);
     return OK;
@@ -237,10 +277,15 @@ static int exp_handler(TriteDB *db, Client *c) {
 
 
 static int del_handler(TriteDB *db, Client *c) {
+
     int code = OK;
     Del *d = c->ptr;
     bool found = false;
+
     for (int i = 0; i < d->len; i++) {
+
+        // For each key in the keys array, check for presence and try to remove
+        // it
         found = trie_delete(db->data, (const char *) d->keys[i]->key);
         if (found == false) {
             code = NOK;
@@ -249,27 +294,11 @@ static int del_handler(TriteDB *db, Client *c) {
             DEBUG("DEL %s Trie size %d", d->keys[i]->key, db->data->size);
         }
     }
-    Ack *ack = ack_packet(code);
-    Buffer *b = buffer_init(ack->header->size);
-    pack_ack(b, ack);
-    set_reply(c, b);
-    free_ack(&ack);
+
+    set_ack_reply(c, code);
     free_del(&d);
+
     return OK;
-}
-
-
-/* Static command map */
-static struct command commands_map[] = {
-    {PUT, put_handler},
-    {GET, get_handler},
-    {DEL, del_handler},
-    {EXP, exp_handler}
-};
-
-
-static int commands_map_len(void) {
-    return sizeof(commands_map) / sizeof(struct command);
 }
 
 /* Handle incoming requests, after being accepted or after a reply */
@@ -466,29 +495,41 @@ static void free_expiring_keys(List *ekeys) {
     free(ekeys);
 }
 
-
+/* Cycle through sorted list of expiring keys and remove those who are elegible */
 static void expire_keys(TriteDB *db) {
+
     uint64_t now = (uint64_t) time(NULL);
     uint64_t delta = 0LL;
     struct ExpiringKey *ek = NULL;
+
     if (db->expiring_keys->len > 0) {
+
         for (ListNode *n = db->expiring_keys->head; n != NULL
                 && db->expiring_keys->len > 0; n = n->next) {
+
             ek = n->data;
-            // Skip case of no ttl set (e.g. TTL=0)
-            if (ek->nd->ttl == NOTTL)
+
+            // Skip case of no ttl set (e.g. TTL=-1)
+            if (ek->nd->ttl == -NOTTL)
                 continue;
+
             delta = (ek->nd->ctime + ek->nd->ttl) - now;
+
+            // Expired keys must be removed
             if (delta <= 0) {
                 trie_delete(db->data, ek->key);
                 ListNode delnode = { ek, NULL };
+
+                // Updating expiring keys list
                 if (n == db->expiring_keys->head)
                     db->expiring_keys->head = n =
                         list_remove(db->expiring_keys->head, &delnode, compare_node);
                 else
                     db->expiring_keys->head =
                         list_remove(db->expiring_keys->head, &delnode, compare_node);
+
                 DEBUG("%s expired", ek->key);
+
                 free((char *) ek->key);
                 free(ek);
                 ek = NULL;
@@ -498,6 +539,9 @@ static void expire_keys(TriteDB *db) {
                 break;
             }
         }
+
+        // Re-sort remaining keys, if any
+        db->expiring_keys->head = merge_sort(db->expiring_keys->head);
     }
 }
 

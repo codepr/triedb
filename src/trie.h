@@ -36,7 +36,7 @@
 
 #define ALPHABET_SIZE (94)
 
-#define NOTTL 0
+#define NOTTL 1
 
 
 typedef struct Trie Trie;
@@ -45,9 +45,10 @@ typedef struct TrieNode TrieNode;
 
 
 struct NodeData {
-    time_t ctime;
-    uint64_t ttl;
-    void *data;
+    time_t ctime;  // creation time
+    time_t latime; // last access time
+    int64_t ttl;   // time to live
+    void *data;    // payload
 };
 
 /* Trie node, it contains a fixed size array (every node can have at max the
