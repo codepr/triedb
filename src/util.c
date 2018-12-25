@@ -109,6 +109,27 @@ void *t_calloc(size_t len, size_t size) {
 }
 
 
+void *t_realloc(void *ptr, size_t size) {
+
+    assert(size > 0);
+
+    int curr_size = malloc_usable_size(ptr);
+
+    if (!ptr)
+        return t_malloc(size);
+
+    if (size == curr_size)
+        return ptr;
+
+    void *newptr = realloc(ptr, size);
+
+    memory += (-curr_size) + size;
+
+    return newptr;
+
+}
+
+
 void t_free(void *ptr) {
     if (!ptr)
         return;

@@ -369,7 +369,7 @@ Nack *nack_packet(uint8_t code) {
 }
 
 
-Put *put_packet(uint8_t *key, uint8_t *value) {
+Put *put_packet(uint8_t *key, uint8_t *value, uint16_t ttl) {
 
     assert(key && value);
 
@@ -383,11 +383,12 @@ Put *put_packet(uint8_t *key, uint8_t *value) {
 
     pkt->header->opcode = PUT;
     pkt->header->size = HEADERLEN + strlen((char *) key) +
-        strlen((char *) value) + sizeof(uint16_t) + sizeof(uint32_t);
+        strlen((char *) value) + (2 * sizeof(uint16_t)) + sizeof(uint32_t);
     pkt->keysize = strlen((char *) key);
     pkt->valsize = strlen((char *) value);
     pkt->key = (uint8_t *) strdup((const char *) key);
     pkt->value = (uint8_t *) strdup((const char *) value);
+    pkt->ttl = ttl;
 
     return pkt;
 }

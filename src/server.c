@@ -261,7 +261,7 @@ static int get_handler(TriteDB *db, Client *c) {
             nd->latime = time(NULL);
 
             // and return it
-            Put *put = put_packet(g->key, nd->data);
+            Put *put = put_packet(g->key, nd->data, delta);
             Buffer *b = buffer_init(put->header->size);
             pack_put(b, put);
 
@@ -344,7 +344,10 @@ static int del_handler(TriteDB *db, Client *c) {
     return OK;
 }
 
+/* Increment an integer value by 1. If the string value doesn't contain a
+   proper integer return a NOK.
 
+   XXX check for bounds */
 static int inc_handler(TriteDB *db, Client *c) {
 
     int code = OK, n = 0;
@@ -370,9 +373,12 @@ static int inc_handler(TriteDB *db, Client *c) {
             } else {
                 n = parse_int(nd->data);
                 ++n;
-                // FIXME Should check for realloc if the new value is "larger"
-                // then previous
-                sprintf(nd->data, "%d", n);
+                // Check for realloc if the new value is "larger" then previous
+                char tmp[12];  // max size in bytes
+                sprintf(tmp, "%d", n);  // XXX Unsafe
+                size_t len = strlen(tmp);
+                nd->data = t_realloc(nd->data, len + 1);
+                strncpy(nd->data, tmp, len + 1);
                 DEBUG("INC %s (s=%d m=%d)",
                         inc->keys[i]->key, db->data->size, memory_used());
             }
@@ -385,7 +391,10 @@ static int inc_handler(TriteDB *db, Client *c) {
     return OK;
 }
 
+/* Decrement an integer value by 1. If the string value doesn't contain a
+   proper integer return a NOK.
 
+   XXX check for bounds */
 static int dec_handler(TriteDB *db, Client *c) {
 
     int code = OK, n = 0;
@@ -400,21 +409,24 @@ static int dec_handler(TriteDB *db, Client *c) {
         found = trie_search(db->data, (const char *) dec->keys[i]->key, &val);
         if (found == false || !val) {
             code = NOK;
-            DEBUG("INC %s failed (s=%d m=%d)",
+            DEBUG("DEC %s failed (s=%d m=%d)",
                     dec->keys[i]->key, db->data->size, memory_used());
         } else {
             struct NodeData *nd = val;
             if (!is_integer(nd->data)) {
                 code = NOK;
-                DEBUG("INC %s failed, not an integer value (s=%d m=%d)",
+                DEBUG("DEC %s failed, not an integer value (s=%d m=%d)",
                         dec->keys[i]->key, db->data->size, memory_used());
             } else {
                 n = parse_int(nd->data);
                 --n;
-                // FIXME Should check for realloc if the new value is "smaller"
-                // then previous
-                sprintf(nd->data, "%d", n);
-                DEBUG("INC %s (s=%d m=%d)",
+                // Check for realloc if the new value is "smaller" then previous
+                char tmp[12];
+                sprintf(tmp, "%d", n);
+                size_t len = strlen(tmp);
+                nd->data = t_realloc(nd->data, len + 1);
+                strncpy(nd->data, tmp, len + 1);
+                DEBUG("DEC %s (s=%d m=%d)",
                         dec->keys[i]->key, db->data->size, memory_used());
             }
         }

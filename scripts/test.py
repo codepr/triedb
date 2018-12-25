@@ -68,12 +68,12 @@ def send_get(sock, key):
     else:
         klen, vlen = struct.unpack('=HI', sock.recv(6))
         klen, vlen = ntohs(klen), ntohl(vlen)
-        payload = struct.unpack(f'={klen}s{vlen}s', sock.recv(klen + vlen))
+        k, v, t = struct.unpack(f'={klen}s{vlen}sH', sock.recv(klen + vlen + 2))
 
     return {
         'code': code,
         'total_len': total_len,
-        'payload': payload
+        'payload': (k, v, ntohs(t))
     }
 
 

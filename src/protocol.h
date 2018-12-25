@@ -155,7 +155,7 @@ void pack_exp(Buffer *, Exp *);
 
 
 /* Builder and destroy functions for every specific command defined */
-Put *put_packet(uint8_t *, uint8_t *);
+Put *put_packet(uint8_t *, uint8_t *, uint16_t);
 Ack *ack_packet(uint8_t);
 Nack *nack_packet(uint8_t);
 Exp *exp_packet(uint8_t *, uint16_t);
