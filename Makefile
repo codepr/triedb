@@ -199,6 +199,7 @@ src/network.o: src/network.c.o
 
 # target to build an object file
 src/network.c.o:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/network.c.o
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/network.c.o
 .PHONY : src/network.c.o
 
@@ -208,6 +209,7 @@ src/network.i: src/network.c.i
 
 # target to preprocess a source file
 src/network.c.i:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/network.c.i
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/network.c.i
 .PHONY : src/network.c.i
 
@@ -217,6 +219,7 @@ src/network.s: src/network.c.s
 
 # target to generate assembly for a file
 src/network.c.s:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/network.c.s
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/network.c.s
 .PHONY : src/network.c.s
 
@@ -226,6 +229,7 @@ src/protocol.o: src/protocol.c.o
 
 # target to build an object file
 src/protocol.c.o:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/protocol.c.o
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/protocol.c.o
 .PHONY : src/protocol.c.o
 
@@ -235,6 +239,7 @@ src/protocol.i: src/protocol.c.i
 
 # target to preprocess a source file
 src/protocol.c.i:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/protocol.c.i
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/protocol.c.i
 .PHONY : src/protocol.c.i
 
@@ -244,6 +249,7 @@ src/protocol.s: src/protocol.c.s
 
 # target to generate assembly for a file
 src/protocol.c.s:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/protocol.c.s
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/protocol.c.s
 .PHONY : src/protocol.c.s
 
@@ -283,6 +289,7 @@ src/server.o: src/server.c.o
 
 # target to build an object file
 src/server.c.o:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/server.c.o
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/server.c.o
 .PHONY : src/server.c.o
 
@@ -292,6 +299,7 @@ src/server.i: src/server.c.i
 
 # target to preprocess a source file
 src/server.c.i:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/server.c.i
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/server.c.i
 .PHONY : src/server.c.i
 
@@ -301,6 +309,7 @@ src/server.s: src/server.c.s
 
 # target to generate assembly for a file
 src/server.c.s:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/server.c.s
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/server.c.s
 .PHONY : src/server.c.s
 
@@ -340,6 +349,7 @@ src/util.o: src/util.c.o
 
 # target to build an object file
 src/util.c.o:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/util.c.o
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/util.c.o
 .PHONY : src/util.c.o
 
@@ -349,6 +359,7 @@ src/util.i: src/util.c.i
 
 # target to preprocess a source file
 src/util.c.i:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/util.c.i
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/util.c.i
 .PHONY : src/util.c.i
 
@@ -358,6 +369,7 @@ src/util.s: src/util.c.s
 
 # target to generate assembly for a file
 src/util.c.s:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/util.c.s
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/util.c.s
 .PHONY : src/util.c.s
 

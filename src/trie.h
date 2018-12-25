@@ -47,7 +47,7 @@ typedef struct TrieNode TrieNode;
 struct NodeData {
     time_t ctime;  // creation time
     time_t latime; // last access time
-    int64_t ttl;   // time to live
+    int16_t ttl;   // time to live
     void *data;    // payload
 };
 
@@ -70,7 +70,7 @@ struct Trie {
 };
 
 // Returns new trie node (initialized to NULLs)
-struct TrieNode *trie_new_node(void *);
+struct TrieNode *trie_new_node(void *, int16_t);
 
 struct Trie *trie_new(void);
 
@@ -88,7 +88,7 @@ struct Trie *trie_new(void);
  * - hk: hk-value
  * - hel: hel-value
  */
-void trie_insert(Trie *, const char *, void *);
+void trie_insert(Trie *, const char *, void *, int16_t);
 
 bool trie_delete(Trie *, const char *);
 

@@ -11,18 +11,30 @@ NACK = 0x50
 EXP = 0x60
 
 
-def send_put(sock, key, value):
+def send_put(sock, key, value, exp=None):
     keylen = len(key)
     vallen = len(value)
-    put = struct.pack(
-        f'=BIHI{keylen}s{vallen}s',
-        PUT,
-        htonl(11 + keylen + vallen),
-        htons(keylen),
-        htonl(vallen),
-        key.encode(),
-        value.encode()
-    )
+    if not exp:
+        put = struct.pack(
+            f'=BIHI{keylen}s{vallen}s',
+            PUT,
+            htonl(11 + keylen + vallen),
+            htons(keylen),
+            htonl(vallen),
+            key.encode(),
+            value.encode()
+        )
+    else:
+        put = struct.pack(
+            f'=BIHI{keylen}s{vallen}sH',
+            PUT,
+            htonl(13 + keylen + vallen),
+            htons(keylen),
+            htonl(vallen),
+            key.encode(),
+            value.encode(),
+            htons(exp)
+        )
     sock.send(put)
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
@@ -128,6 +140,9 @@ if __name__ == '__main__':
         if head.lower() == 'put':
             k, v = tail.split()
             print(send_put(sock, k, v))
+        elif head.lower() == 'putexp':
+            k, v, e = tail.split()
+            print(send_put(sock, k, v, int(e)))
         elif head.lower() == 'get':
             print(send_get(sock, tail))
         elif head.lower() == 'exp' or head.lower() == 'expire':

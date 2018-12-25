@@ -31,6 +31,7 @@
 #include <string.h>
 #include "list.h"
 #include "trie.h"
+#include "util.h"
 
 
 /*
@@ -38,7 +39,7 @@
  */
 List *list_init(void) {
 
-    List *l = malloc(sizeof(List));
+    List *l = t_malloc(sizeof(List));
 
     if (!l) {
         perror("malloc(3) failed");
@@ -69,15 +70,15 @@ void list_free(List *l, int deep) {
         tmp = h->next;
 
         if (h) {
-            if (h->data && deep == 1) free(h->data);
-            free(h);
+            if (h->data && deep == 1) t_free(h->data);
+            t_free(h);
         }
 
         h = tmp;
     }
 
     // free List structure pointer
-    free(l);
+    t_free(l);
 }
 
 
@@ -97,7 +98,7 @@ List *list_attach(List *l, ListNode *head, unsigned long len) {
  */
 List *list_push(List *l, void *val) {
 
-    ListNode *new_node = malloc(sizeof(ListNode));
+    ListNode *new_node = t_malloc(sizeof(ListNode));
 
     if (!new_node) {
         perror("malloc(3) failed");
@@ -126,7 +127,7 @@ List *list_push(List *l, void *val) {
  */
 List *list_push_back(List *l, void *val) {
 
-    ListNode *new_node = malloc(sizeof(ListNode));
+    ListNode *new_node = t_malloc(sizeof(ListNode));
 
     if (!new_node) {
         perror("malloc(3) failed");
@@ -156,7 +157,7 @@ ListNode *list_remove(ListNode *head, ListNode *node, compare_func cmp) {
     if (cmp(head, node) == 0) {
 
         ListNode *tmp_next = head->next;
-        free(head);
+        t_free(head);
         head = NULL;
 
         return tmp_next;

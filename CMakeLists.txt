@@ -7,7 +7,7 @@ set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 
 file(GLOB SOURCES src/*.c)
-file(GLOB TEST src/trie.c src/ringbuf.c src/list.c src/hashtable.c tests/*.c)
+file(GLOB TEST src/list.c src/trie.c src/util.c src/server.c src/network.c src/protocol.c src/ringbuf.c tests/*.c)
 
 # Executable
 add_executable(tritedb_test ${TEST})

@@ -33,6 +33,8 @@
 #include <string.h>
 #include <stdbool.h>
 #include "trie.h"
+#include "util.h"
+
 
 /* Converts key current character into index starting from <space> till '~',
    96 characters in total, lowercase and uppercase letters included */
@@ -48,15 +50,15 @@ static bool trie_is_free_node(TrieNode *node) {
 }
 
 // Returns new trie node (initialized to NULL)
-TrieNode *trie_new_node(void *data) {
+TrieNode *trie_new_node(void *data, int16_t ttl) {
 
-    TrieNode *new_node = malloc(sizeof(*new_node));
+    TrieNode *new_node = t_malloc(sizeof(*new_node));
 
     if (new_node) {
 
-        struct NodeData *ndata = malloc(sizeof(*ndata));
+        struct NodeData *ndata = t_malloc(sizeof(*ndata));
 
-        ndata->ttl = -NOTTL;
+        ndata->ttl = ttl;
         ndata->ctime = ndata->latime = (uint64_t) time(NULL);
         ndata->data = data;
 
@@ -73,8 +75,8 @@ TrieNode *trie_new_node(void *data) {
 
 // Returns new Trie, with a NULL root and 0 size
 Trie *trie_new(void) {
-    Trie *trie = malloc(sizeof(*trie));
-    trie->root = trie_new_node(NULL);
+    Trie *trie = t_malloc(sizeof(*trie));
+    trie->root = trie_new_node(NULL, -NOTTL);
     trie->size = 0;
     return trie;
 }
@@ -84,37 +86,40 @@ Trie *trie_new(void) {
 
    Being a Trie, it should guarantees O(m) performance for insertion on the
    worst case, where `m` is the length of the key. */
-static int trie_node_insert(TrieNode *root, const char *key, void *data) {
+static int trie_node_insert(TrieNode *root,
+        const char *key, void *data, int16_t ttl) {
 
-    int retval = 0;
+    int rc = 0;
+    bool mod = false;
     int index;
 
     TrieNode *cursor = root;
 
     for (char x = *key; x != '\0'; x = *(++key)) {
         index = INDEX(x);
-        if (!cursor->children[index])
-            cursor->children[index] = trie_new_node(NULL);
+        if (!cursor->children[index]) {
+            cursor->children[index] = trie_new_node(NULL, ttl);
+            mod = true;
+        }
 
         cursor = cursor->children[index];
     }
 
-    if (cursor->in_use == true) {
-        retval = 1;
-    } else {
-        cursor->in_use = true;
-    }
+    if (mod)
+        rc = 1;
 
     // mark last node as leaf
     cursor->leaf = true;
     cursor->ndata->data = data;
+    cursor->ndata->ttl = ttl;
 
-    return retval;
+    return rc;
 }
 
 /* Private function, iterate recursively through the trie structure starting
    from a given node, deleting the target value */
-static bool trie_node_recursive_delete(TrieNode *node, const char *key, size_t *size, bool *found) {
+static bool trie_node_recursive_delete(TrieNode *node,
+        const char *key, size_t *size, bool *found) {
 
     if (node) {
         // Base case
@@ -198,10 +203,11 @@ static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 }
 
 
-void trie_insert(Trie *trie, const char *key, void *data) {
-    assert(trie);
-    assert(key);
-    if (trie_node_insert(trie->root, key, data) == 1)
+void trie_insert(Trie *trie, const char *key, void *data, int16_t ttl) {
+
+    assert(trie && key);
+
+    if (trie_node_insert(trie->root, key, data, ttl) == 1)
         trie->size++;
 }
 
@@ -232,16 +238,16 @@ void trie_node_free(TrieNode *node) {
         if (node->leaf)
             node->leaf = false;
         if (node->ndata && node->ndata->data) {
-            free(node->ndata->data);
-            free(node->ndata);
+            t_free(node->ndata->data);
+            t_free(node->ndata);
         } else if (node->ndata) {
-            free(node->ndata);
+            t_free(node->ndata);
         }
 
         for (int i = 0; i < ALPHABET_SIZE; i++)
             trie_node_free(node->children[i]);
 
-        free(node);
+        t_free(node);
     }
 }
 
@@ -250,5 +256,5 @@ void trie_free(Trie *trie) {
     if (!trie)
         return;
     trie_node_free(trie->root);
-    free(trie);
+    t_free(trie);
 }

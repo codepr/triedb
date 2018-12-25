@@ -45,8 +45,10 @@ void t_log(const uint8_t level, const char *, ...);
 
 /* Memory management */
 void *t_malloc(size_t);
-void *t_realloc(void *, size_t);
+void *t_calloc(size_t, size_t);
 void t_free(void *);
+
+int memory_used(void);
 
 
 #define LOG(...) t_log( __VA_ARGS__ )

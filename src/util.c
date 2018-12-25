@@ -27,6 +27,7 @@
 
 #include <time.h>
 #include <errno.h>
+#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -81,6 +82,7 @@ void oom(const char *msg) {
 
 
 void *t_malloc(size_t size) {
+    assert(size > 0);
     void *ptr = malloc(size);
     if (ptr)
         memory += size;
@@ -88,12 +90,23 @@ void *t_malloc(size_t size) {
 }
 
 
-void *t_realloc(void *ptr, size_t size) {
-    return NULL;
+void *t_calloc(size_t len, size_t size) {
+    assert(len > 0 && size > 0);
+    void *ptr = calloc(len, size);
+    if (ptr)
+        memory += len * size;
+    return ptr;
 }
 
 
 void t_free(void *ptr) {
+    if (!ptr)
+        return;
     memory -= malloc_usable_size(ptr);
     free(ptr);
+}
+
+
+int memory_used(void) {
+    return memory;
 }

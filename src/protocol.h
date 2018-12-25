@@ -62,6 +62,7 @@ typedef struct {
     uint32_t valsize;
     uint8_t *key;
     uint8_t *value;
+    uint16_t ttl;
 } Put;
 
 
