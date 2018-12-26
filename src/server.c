@@ -634,7 +634,8 @@ static void free_expiring_keys(List *ekeys) {
     t_free(ekeys);
 }
 
-/* Cycle through sorted list of expiring keys and remove those who are elegible */
+/* Cycle through sorted list of expiring keys and remove those which are
+   elegible */
 static void expire_keys(TriteDB *db) {
 
     int64_t now = (uint64_t) time(NULL);
@@ -661,14 +662,15 @@ static void expire_keys(TriteDB *db) {
             ListNode delnode = { ek, NULL };
 
             // Updating expiring keys list
-            if (n == db->expiring_keys->head)
-                db->expiring_keys->head = n =
-                    list_remove(db->expiring_keys->head, &delnode, compare_node);
-            else
-                db->expiring_keys->head =
-                    list_remove(db->expiring_keys->head, &delnode, compare_node);
+            if (n == db->expiring_keys->head) {
+                list_remove(db->expiring_keys, &delnode, compare_node);
+                n = db->expiring_keys->head;
+            } else {
+                list_remove(db->expiring_keys, &delnode, compare_node);
+            }
 
-            DEBUG("%s expired", ek->key);
+            DEBUG("EXPIRE %s (s=%d m=%d)",
+                    ek->key, db->data->size, memory_used());
 
             t_free((char *) ek->key);
             t_free(ek);

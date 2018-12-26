@@ -35,6 +35,8 @@
 #include "server.h"
 
 
+static ListNode *list_node_remove(ListNode *, ListNode *, compare_func, int *);
+
 /*
  * Create a list, initializing all fields
  */
@@ -151,7 +153,22 @@ List *list_push_back(List *l, void *val) {
 }
 
 
-ListNode *list_remove(ListNode *head, ListNode *node, compare_func cmp) {
+void list_remove(List *l, ListNode *node, compare_func cmp) {
+
+    if (!l || !node)
+        return;
+
+    int counter = 0;
+
+    l->head = list_node_remove(l->head, node, cmp, &counter);
+
+    l->len -= counter;
+
+}
+
+
+static ListNode *list_node_remove(ListNode *head,
+        ListNode *node, compare_func cmp, int *counter) {
 
     if (!head)
         return NULL;
@@ -162,10 +179,13 @@ ListNode *list_remove(ListNode *head, ListNode *node, compare_func cmp) {
         t_free(head);
         head = NULL;
 
+        // Update remove counter
+        (*counter)++;
+
         return tmp_next;
     }
 
-    head->next = list_remove(head->next, node, cmp);
+    head->next = list_node_remove(head->next, node, cmp, counter);
 
     return head;
 }

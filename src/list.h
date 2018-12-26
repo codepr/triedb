@@ -69,7 +69,7 @@ List *list_push_back(List *, void *);
 /* Remove a node from the list based on a compare function that must be
    previously defined and passed in as a function pointer, accept two void *
    args, which generally means a node and his subsequent */
-ListNode *list_remove(ListNode *, ListNode *, compare_func);
+void list_remove(List *, ListNode *, compare_func);
 
 /* Merge sort customized on TTL of new values data with complexity of O(nlogn) */
 ListNode *merge_sort(ListNode *head);
