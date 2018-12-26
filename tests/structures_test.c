@@ -316,6 +316,43 @@ static char *test_trie_delete(void) {
 }
 
 /*
+ * Tests the delete on the trie
+ */
+static char *test_trie_prefix_delete(void) {
+    struct Trie *root = trie_new();
+    const char *key1 = "hello";
+    const char *key2 = "helloworld";
+    const char *key3 = "hellot";
+    const char *key4 = "hel";
+    char *val1 = strdup("world");
+    char *val2 = strdup("world");
+    char *val3 = strdup("world");
+    char *val4 = strdup("world");
+    trie_insert(root, key1, val1, -NOTTL);
+    trie_insert(root, key2, val2, -NOTTL);
+    trie_insert(root, key3, val3, -NOTTL);
+    trie_insert(root, key4, val4, -NOTTL);
+    trie_prefix_delete(root, key1);
+    void *payload = NULL;
+    bool found = trie_search(root, key1, &payload);
+    ASSERT("[! trie_prefix_delete]: Trie prefix delete key1 failed",
+            (found == false || payload == NULL));
+    found = trie_search(root, key2, &payload);
+    ASSERT("[! trie_prefix_delete]: Trie prefix delete key2 failed",
+            (found == false || payload == NULL));
+    found = trie_search(root, key3, &payload);
+    ASSERT("[! trie_prefix_delete]: Trie prefix delete key3 failed",
+            (found == false || payload == NULL));
+    found = trie_search(root, key4, &payload);
+    ASSERT("[! trie_prefix_delete]: Trie prefix delete key4 success",
+            (found == true || payload != NULL));
+    trie_free(root);
+    return 0;
+}
+
+
+
+/*
  * All datastructure tests
  */
 char *structures_test() {
@@ -338,6 +375,7 @@ char *structures_test() {
     RUN_TEST(test_trie_insert);
     RUN_TEST(test_trie_search);
     RUN_TEST(test_trie_delete);
+    RUN_TEST(test_trie_prefix_delete);
 
     return 0;
 }

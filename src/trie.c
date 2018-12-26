@@ -61,7 +61,6 @@ TrieNode *trie_new_node(void *data, int16_t ttl) {
         ndata->data = data;
 
         new_node->leaf = false;
-        new_node->in_use = true;
         new_node->ndata = ndata;
 
         for (int i = 0; i < ALPHABET_SIZE; i++)
@@ -125,7 +124,7 @@ static bool trie_node_recursive_delete(TrieNode *node,
         if (*key == '\0') {
             if (node->leaf) {
                 // Unmark leaf node
-                node->leaf = node->in_use = false;
+                node->leaf = false;
                 // Update trie size
                 (*size)--;
                 // Update found flag
@@ -230,6 +229,46 @@ bool trie_search(Trie *trie, const char *key, void **ret) {
     return trie_node_search(trie->root, key, ret);
 }
 
+/* Remove and delete all keys matching a given prefix in the trie
+   e.g. hello*
+   - hello
+        hellot
+        helloworld
+        hello
+*/
+void trie_prefix_delete(Trie *trie, const char *prefix) {
+
+    int index = 0;
+    const char *k = prefix;
+
+    TrieNode *cursor = trie->root;
+
+    // Move to the end of the prefix first
+    for (char c = *k; c != '\0'; c = *(++k)) {
+
+        index = INDEX(c);
+
+        // No key with the full prefix in the trie
+        if (!cursor->children[index])
+            return;
+
+        cursor = cursor->children[index];
+    }
+
+    // Clear out all possible sub-paths
+    for (int i = 0; i < ALPHABET_SIZE; i++)
+        if (cursor->children[i]) {
+            trie_node_free(cursor->children[i]);
+            cursor->children[i] = NULL;
+            trie->size--;
+        }
+
+    // Set the current node (the one storing the last character of the prefix)
+    // as a leaf and delete the prefix key as well
+    cursor->leaf = true;
+    trie_delete(trie, prefix);
+}
+
 
 void trie_node_free(TrieNode *node) {
 
@@ -244,8 +283,10 @@ void trie_node_free(TrieNode *node) {
             t_free(node->ndata);
         }
 
-        for (int i = 0; i < ALPHABET_SIZE; i++)
+        for (int i = 0; i < ALPHABET_SIZE; i++) {
             trie_node_free(node->children[i]);
+            node->children[i] = NULL;
+        }
 
         t_free(node);
     }

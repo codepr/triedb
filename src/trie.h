@@ -59,7 +59,6 @@ struct TrieNode {
     struct NodeData *ndata;
  	/* leaf is true if the node represents end of a word */
 	bool leaf;
-    bool in_use;
 };
 
 
@@ -102,5 +101,8 @@ void trie_node_free(TrieNode *);
 void trie_free(Trie *);
 
 void display(TrieNode *, char [], int);
+
+/* Remove all keys matching a given prefix in a less than linear time complexity */
+void trie_prefix_delete(Trie *, const char *);
 
 #endif
