@@ -32,6 +32,7 @@
 #include "list.h"
 #include "trie.h"
 #include "util.h"
+#include "server.h"
 
 
 /*
@@ -137,8 +138,9 @@ List *list_push_back(List *l, void *val) {
     new_node->data = val;
     new_node->next = NULL;
 
-    if (l->len == 0) l->head = l->tail = new_node;
-    else {
+    if (l->len == 0) {
+        l->head = l->tail = new_node;
+    } else {
         l->tail->next = new_node;
         l->tail = new_node;
     }
@@ -203,8 +205,8 @@ static ListNode *merge_list(ListNode *list1, ListNode *list2) {
     while (list1 && list2) {
 
         /* cast to cluster_node */
-        struct NodeData *n1 = list1->data;
-        struct NodeData *n2 = list2->data;
+        struct NodeData *n1 = ((struct ExpiringKey *) list1->data)->nd;
+        struct NodeData *n2 = ((struct ExpiringKey *) list2->data)->nd;
 
         delta_l1 = (n1->ctime + n1->ttl) - now;
         delta_l2 = (n2->ctime + n2->ttl) - now;

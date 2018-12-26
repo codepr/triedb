@@ -215,8 +215,9 @@ static int put_handler(TriteDB *db, Client *c) {
         ek->nd = nd;
         ek->key = strdup((const char *) p->key);
         db->expiring_keys = list_push(db->expiring_keys, ek);
-        if (db->expiring_keys->len > 1)
-            db->expiring_keys->head = merge_sort(db->expiring_keys->head);
+
+        // Sort in O(nlogn) if there's more than one element in the list
+        db->expiring_keys->head = merge_sort(db->expiring_keys->head);
     }
 
     set_ack_reply(c, OK);
@@ -305,8 +306,7 @@ static int exp_handler(TriteDB *db, Client *c) {
         // insert, making it simpler and more efficient to cycle through them
         // and remove it later.
         db->expiring_keys = list_push(db->expiring_keys, ek);
-        if (db->expiring_keys->len > 1)
-            db->expiring_keys->head = merge_sort(db->expiring_keys->head);
+        db->expiring_keys->head = merge_sort(db->expiring_keys->head);
 
         set_ack_reply(c, OK);
         DEBUG("EXPIRE %s -> %s in %d (s=%d m=%d)",
@@ -637,8 +637,8 @@ static void free_expiring_keys(List *ekeys) {
 /* Cycle through sorted list of expiring keys and remove those who are elegible */
 static void expire_keys(TriteDB *db) {
 
-    uint64_t now = (uint64_t) time(NULL);
-    uint64_t delta = 0LL;
+    int64_t now = (uint64_t) time(NULL);
+    int64_t delta = 0LL;
     struct ExpiringKey *ek = NULL;
 
     if (db->expiring_keys->len > 0) {
@@ -648,12 +648,11 @@ static void expire_keys(TriteDB *db) {
 
             ek = n->data;
 
-            // Skip case of no ttl set (e.g. TTL=-1)
-            if (ek->nd->ttl == -NOTTL)
-                continue;
-
+            // Calculate deltaT between creation time + TTL and now
             delta = (ek->nd->ctime + ek->nd->ttl) - now;
 
+            // We can exit the loop at the fist unexpired key as they are
+            // already ordered by remaining expiration seconds
             if (delta > 0)
                 break;
 

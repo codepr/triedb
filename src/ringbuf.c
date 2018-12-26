@@ -28,6 +28,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include "ringbuf.h"
+#include "util.h"
 
 
 struct ringbuf {
@@ -43,7 +44,7 @@ Ringbuffer *ringbuf_init(uint8_t *buffer, size_t size) {
 
     assert(buffer && size);
 
-    Ringbuffer *rbuf = malloc(sizeof(Ringbuffer));
+    Ringbuffer *rbuf = t_malloc(sizeof(Ringbuffer));
     assert(rbuf);
 
     rbuf->buffer = buffer;
@@ -68,7 +69,7 @@ void ringbuf_reset(Ringbuffer *rbuf) {
 
 void ringbuf_free(Ringbuffer *rbuf) {
     assert(rbuf);
-    free(rbuf);
+    t_free(rbuf);
     rbuf = NULL;
 }
 
