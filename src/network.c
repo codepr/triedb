@@ -34,6 +34,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
+#include <sys/un.h>
 #include <sys/epoll.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -58,12 +59,39 @@ int set_nonblocking(const int fd) {
 }
 
 
-int create_and_bind(const char *host, const char *port) {
+static int create_and_bind_unix(const char *sockpath, const char *port) {
+
+    struct sockaddr_un addr;
+    int fd;
+
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("socket error");
+        return -1;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+
+    strncpy(addr.sun_path, sockpath, sizeof(addr.sun_path) - 1);
+    unlink(sockpath);
+
+    if (bind(fd, (struct sockaddr*) &addr, sizeof(addr)) == -1) {
+        perror("bind error");
+        return -1;
+    }
+
+    return fd;
+}
+
+
+static int create_and_bind_tcp(const char *host, const char *port) {
+
     const struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
         .ai_socktype = SOCK_STREAM,
         .ai_flags = AI_PASSIVE
     };
+
     struct addrinfo *result, *rp;
     int sfd;
 
@@ -99,14 +127,29 @@ int create_and_bind(const char *host, const char *port) {
 }
 
 
+int create_and_bind(const char *host, const char *port, int socket_family) {
+
+    int fd;
+
+    if (socket_family == UNIX) {
+        fd = create_and_bind_unix(host, port);
+    } else {
+        fd = create_and_bind_tcp(host, port);
+    }
+
+    return fd;
+}
+
+
 /*
  * Create a non-blocking socket and make it listen on the specfied address and
  * port
  */
-int make_listen(const char *host, const char *port) {
+int make_listen(const char *host, const char *port, int socket_family) {
+
     int sfd;
 
-    if ((sfd = create_and_bind(host, port)) == -1)
+    if ((sfd = create_and_bind(host, port, socket_family)) == -1)
         abort();
 
     if ((set_nonblocking(sfd)) == -1)
@@ -133,8 +176,9 @@ int accept_connection(const int serversock) {
 
     set_nonblocking(clientsock);
 
-    char ip_buff[INET_ADDRSTRLEN+1];
-    if (inet_ntop(AF_INET, &addr.sin_addr, ip_buff, sizeof(ip_buff)) == NULL) {
+    char ip_buff[INET_ADDRSTRLEN + 1];
+    if (inet_ntop(AF_INET, &addr.sin_addr,
+                ip_buff, sizeof(ip_buff)) == NULL) {
         close(clientsock);
         return -1;
     }
@@ -270,11 +314,11 @@ void htonll(uint8_t *block, uint_least64_t num) {
 /* Network-to-host (big endian to native endian) */
 uint_least64_t ntohll(const uint8_t *block) {
     return (uint_least64_t)block[0]<<56|
-           (uint_least64_t)block[1]<<48|
-           (uint_least64_t)block[2]<<40|
-           (uint_least64_t)block[3]<<32|
-           (uint_least64_t)block[4]<<24|
-           (uint_least64_t)block[5]<<16|
-           (uint_least64_t)block[6]<<8|
-           (uint_least64_t)block[7]<<0;
+        (uint_least64_t)block[1]<<48|
+        (uint_least64_t)block[2]<<40|
+        (uint_least64_t)block[3]<<32|
+        (uint_least64_t)block[4]<<24|
+        (uint_least64_t)block[5]<<16|
+        (uint_least64_t)block[6]<<8|
+        (uint_least64_t)block[7]<<0;
 }

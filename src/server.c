@@ -766,6 +766,7 @@ int start_server(const char *addr, char *port, int node_fd) {
     config.loglevel = DEBUG;
     config.run = eventfd(0, EFD_NONBLOCK);
     config.epoll_timeout = 250;
+    config.socket_family = INET;
 
     TriteDB tritedb;
 
@@ -784,7 +785,7 @@ int start_server(const char *addr, char *port, int node_fd) {
     }
 
     /* Initialize the sockets, first the server one */
-    const int fd = make_listen(addr, port);
+    const int fd = make_listen(addr, port, config.socket_family);
 
     /* Add eventfd to the loop, this time only in LT in order to wake up all threads */
     struct epoll_event ev;

@@ -110,6 +110,8 @@ struct config {
     /* Epoll wait timeout, define even the number of times per second that the
        system will check for expired keys */
     int epoll_timeout;
+    /* Socket family (Unix domain or TCP) */
+    int socket_family;
 };
 
 

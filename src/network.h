@@ -36,18 +36,22 @@
 
 #define ONEMB   1048576
 
+// Socket families
+#define UNIX    0
+#define INET    1
+
 
 /* Set non-blocking socket */
 int set_nonblocking(const int);
 
 /* Auxiliary function for creating epoll server */
-int create_and_bind(const char *, const char *);
+int create_and_bind(const char *, const char *, int);
 
 /*
  * Create a non-blocking socket and make it listen on the specfied address and
  * port
  */
-int make_listen(const char *, const char *);
+int make_listen(const char *, const char *, int);
 
 /* Accept a connection and add it to the right epollfd */
 int accept_connection(const int);
