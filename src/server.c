@@ -248,8 +248,8 @@ static int get_handler(TriteDB *db, Client *c) {
         struct NodeData *nd = (struct NodeData *) val;
 
         // If the key results expired, remove it instead of returning it
-        uint64_t now = time(NULL);
-        uint64_t delta = (nd->ctime + nd->ttl) - now;
+        int64_t now = time(NULL);
+        int64_t delta = (nd->ctime + nd->ttl) - now;
 
         if (nd->ttl != -NOTTL && delta <= 0) {
             trie_delete(db->data, (const char *) g->key);
@@ -322,19 +322,35 @@ static int del_handler(TriteDB *db, Client *c) {
     int code = OK;
     Del *d = c->ptr;
     bool found = false;
+    size_t last_index = 0;
 
     for (int i = 0; i < d->len; i++) {
 
         // For each key in the keys array, check for presence and try to remove
-        // it
-        found = trie_delete(db->data, (const char *) d->keys[i]->key);
-        if (found == false) {
-            code = NOK;
-            DEBUG("DEL %s failed (s=%d m=%d)",
-                    d->keys[i]->key, db->data->size, memory_used());
+        // it, if the last character is a wildcard (*) the key will be treated as
+        // a prefix and we'll remove all keys below it in the trie
+        last_index = strlen((const char *) d->keys[i]->key) - 1;
+
+        if (d->keys[i]->key[last_index] == '*') {
+
+            // We alloc just strlen(key) bytes on purpose cause we need to copy
+            // the string just before the wildcard
+            char *prefix = t_malloc(strlen((const char *) d->keys[i]->key));
+            strncpy(prefix, (const char *) d->keys[i]->key, last_index);
+            prefix[last_index] = '\0';
+            trie_prefix_delete(db->data, prefix);
+            DEBUG("DEL prefix %s (s=%d m=%d)", prefix, memory_used());
+            t_free(prefix);
         } else {
-            DEBUG("DEL %s (s=%d m=%d)",
-                    d->keys[i]->key, db->data->size, memory_used());
+            found = trie_delete(db->data, (const char *) d->keys[i]->key);
+            if (found == false) {
+                code = NOK;
+                DEBUG("DEL %s failed (s=%d m=%d)",
+                        d->keys[i]->key, db->data->size, memory_used());
+            } else {
+                DEBUG("DEL %s (s=%d m=%d)",
+                        d->keys[i]->key, db->data->size, memory_used());
+            }
         }
     }
 
@@ -638,7 +654,7 @@ static void free_expiring_keys(List *ekeys) {
    elegible */
 static void expire_keys(TriteDB *db) {
 
-    int64_t now = (uint64_t) time(NULL);
+    int64_t now = (int64_t) time(NULL);
     int64_t delta = 0LL;
     struct ExpiringKey *ek = NULL;
 
