@@ -171,6 +171,7 @@ int unpack_put(Buffer *b, Put *p) {
 
     // Optional fields
     p->ttl = read_uint16(b);
+    p->prefix_range = read_uint8(b);
 
     return OK;
 }
@@ -188,8 +189,12 @@ int unpack_get(Buffer *b, Get *g) {
 
     unpack_header(b, g->header);
 
+    // Mandatory fields
     g->keysize = read_uint16(b);
     g->key = read_string(b, g->keysize);
+
+    // Optional fields
+    g->prefix_range = read_uint8(b);
 
     return OK;
 }
@@ -216,6 +221,7 @@ int unpack_del(Buffer *b, Del *d) {
         struct Key *key = t_malloc(sizeof(*key));
         key->keysize = read_uint16(b);
         key->key = read_string(b, key->keysize);
+        key->prefix_range = read_uint8(b);
         d->keys[i] = key;
     }
 
@@ -235,9 +241,13 @@ int unpack_exp(Buffer *b, Exp *e) {
 
     unpack_header(b, e->header);
 
+    // Mandatory fields
     e->keysize = read_uint16(b);
     e->key = read_string(b, e->keysize);
     e->ttl = read_uint16(b);
+
+    // Optional fields
+    e->prefix_range = read_uint8(b);
 
     return OK;
 }
@@ -283,6 +293,7 @@ void pack_put(Buffer *b, Put *pkt) {
 
     // Optional fields
     write_uint16(b, pkt->ttl);
+    write_uint16(b, pkt->prefix_range);
 }
 
 
@@ -292,8 +303,12 @@ void pack_get(Buffer *b, Get *pkt) {
 
     pack_header(pkt->header, b);
 
+    // Mandatory fields
     write_uint16(b, pkt->keysize);
     write_string(b, pkt->key);
+
+    // Optional fields
+    write_uint16(b, pkt->prefix_range);
 }
 
 
@@ -308,6 +323,7 @@ void pack_del(Buffer *b, Del *pkt) {
     for (int i = 0; i < pkt->len; i++) {
         write_uint16(b, pkt->keys[i]->keysize);
         write_string(b, pkt->keys[i]->key);
+        write_uint16(b, pkt->keys[i]->prefix_range);
     }
 }
 
@@ -318,9 +334,13 @@ void pack_exp(Buffer *b, Exp *pkt) {
 
     pack_header(pkt->header, b);
 
+    // Mandatory fields
     write_uint16(b, pkt->keysize);
     write_string(b, pkt->key);
     write_uint16(b, pkt->ttl);
+
+    // Optional fields
+    write_uint16(b, pkt->prefix_range);
 }
 
 
@@ -369,7 +389,7 @@ Nack *nack_packet(uint8_t code) {
 }
 
 
-Put *put_packet(uint8_t *key, uint8_t *value, uint16_t ttl) {
+Put *put_packet(uint8_t *key, uint8_t *value, uint16_t ttl, uint8_t prange) {
 
     assert(key && value);
 
@@ -389,6 +409,7 @@ Put *put_packet(uint8_t *key, uint8_t *value, uint16_t ttl) {
     pkt->key = (uint8_t *) strdup((const char *) key);
     pkt->value = (uint8_t *) strdup((const char *) value);
     pkt->ttl = ttl;
+    pkt->prefix_range = prange;
 
     return pkt;
 }

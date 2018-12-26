@@ -65,6 +65,7 @@ typedef struct {
     uint8_t *key;
     uint8_t *value;
     uint16_t ttl;
+    uint8_t prefix_range;
 } Put;
 
 
@@ -72,12 +73,14 @@ typedef struct {
     Header *header;
     uint16_t keysize;
     uint8_t *key;
+    uint8_t prefix_range;
 } Get;
 
 
 struct Key {
     uint16_t keysize;
     uint8_t *key;
+    uint8_t prefix_range;
 };
 
 
@@ -99,6 +102,7 @@ typedef struct {
     uint16_t keysize;
     uint8_t *key;
     uint16_t ttl;
+    uint8_t prefix_range;
 } Exp;
 
 
@@ -155,7 +159,7 @@ void pack_exp(Buffer *, Exp *);
 
 
 /* Builder and destroy functions for every specific command defined */
-Put *put_packet(uint8_t *, uint8_t *, uint16_t);
+Put *put_packet(uint8_t *, uint8_t *, uint16_t, uint8_t);
 Ack *ack_packet(uint8_t);
 Nack *nack_packet(uint8_t);
 Exp *exp_packet(uint8_t *, uint16_t);

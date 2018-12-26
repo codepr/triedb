@@ -105,16 +105,22 @@ def send_exp(sock, key, ttl):
     }
 
 
-def send_del(sock, keys):
+def send_del(sock, keys, is_prefix=False):
     totlen = sum(len(k) for k in keys)
     fmtinit = '=BIH'
-    fmt = ''.join(f'H{len(key)}s' for key in keys)
+    if is_prefix:
+        fmt = ''.join(f'H{len(key)}sH' for key in keys)
+        totlen += 7 + 4 * len(keys)
+        keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
+    else:
+        fmt = ''.join(f'H{len(key)}s' for key in keys)
+        totlen += 7 + 2 * len(keys)
+        keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     fmt = fmtinit + fmt
-    keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     delete = struct.pack(
         fmt,
         DEL,
-        htonl(7 + totlen + 2 * len(keys)),
+        htonl(totlen),
         htons(len(keys)),
         *keys_to_net
     )
@@ -179,5 +185,7 @@ if __name__ == '__main__':
             print(send_inc(sock, tail.split()))
         elif head.lower() == 'dec':
             print(send_inc(sock, tail.split(), False))
+        elif head.lower() == 'pdel':
+            print(send_del(sock, tail.split(), True))
         else:
             print(send_del(sock, tail.split()))

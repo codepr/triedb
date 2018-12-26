@@ -41,6 +41,9 @@ static size_t memory = 0;
 
 
 void t_log(const uint8_t level, const char *fmt, ...) {
+
+    assert(fmt);
+
     va_list ap;
     char msg[MAX_LOG_SIZE + 4];
 
@@ -54,13 +57,25 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     memcpy(msg + MAX_LOG_SIZE, "...", 3);
     msg[MAX_LOG_SIZE + 3] = '\0';
 
-    // Just for standard output for now
-    FILE *fp = stdout;
-    if (!fp) return;
     // Distinguish message level prefix
     const char *mark = "I!#";
+
+    // Open two handler, one for standard output and a second for the
+    // persistent log file
+    FILE *fp = stdout;
+    FILE *fh = fopen(config.logpath, "a+");
+
+    if (!fh)
+        fprintf(fp, "%lu %c Unable to open file %s\n",
+                (unsigned long) time(NULL), mark[1], config.logpath);
+
+    if (!fp) return;
+
     fprintf(fp, "%lu %c %s\n", (unsigned long) time(NULL), mark[level], msg);
+    fprintf(fh, "%lu %c %s\n", (unsigned long) time(NULL), mark[level], msg);
+
     fflush(fp);
+    fflush(fh);
 }
 
 /* auxiliary function to check wether a string is an integer */

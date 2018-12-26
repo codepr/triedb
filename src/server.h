@@ -112,6 +112,8 @@ struct config {
     int epoll_timeout;
     /* Socket family (Unix domain or TCP) */
     int socket_family;
+    /* Log file path */
+    const char *logpath;
 };
 
 

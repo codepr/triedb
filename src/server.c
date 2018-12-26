@@ -262,7 +262,7 @@ static int get_handler(TriteDB *db, Client *c) {
             nd->latime = time(NULL);
 
             // and return it
-            Put *put = put_packet(g->key, nd->data, delta);
+            Put *put = put_packet(g->key, nd->data, delta, 0);
             Buffer *b = buffer_init(put->header->size);
             pack_put(b, put);
 
@@ -322,25 +322,18 @@ static int del_handler(TriteDB *db, Client *c) {
     int code = OK;
     Del *d = c->ptr;
     bool found = false;
-    size_t last_index = 0;
 
     for (int i = 0; i < d->len; i++) {
 
         // For each key in the keys array, check for presence and try to remove
-        // it, if the last character is a wildcard (*) the key will be treated as
-        // a prefix and we'll remove all keys below it in the trie
-        last_index = strlen((const char *) d->keys[i]->key) - 1;
+        // it, if the `prefix_range` flag is a set the key will be treated as
+        // a prefix wildcard (*) and we'll remove all keys below it in the trie
+        if (d->keys[i]->prefix_range == 1) {
 
-        if (d->keys[i]->key[last_index] == '*') {
-
-            // We alloc just strlen(key) bytes on purpose cause we need to copy
-            // the string just before the wildcard
-            char *prefix = t_malloc(strlen((const char *) d->keys[i]->key));
-            strncpy(prefix, (const char *) d->keys[i]->key, last_index);
-            prefix[last_index] = '\0';
-            trie_prefix_delete(db->data, prefix);
-            DEBUG("DEL prefix %s (s=%d m=%d)", prefix, memory_used());
-            t_free(prefix);
+            // We are dealing with a wildcard, so we apply the deletion to all
+            // keys below the wildcard
+            trie_prefix_delete(db->data, (const char *) d->keys[i]->key);
+            DEBUG("DEL prefix %s (s=%d m=%d)", d->keys[i]->key, memory_used());
         } else {
             found = trie_delete(db->data, (const char *) d->keys[i]->key);
             if (found == false) {
@@ -759,6 +752,13 @@ exit:
  * Main entry point for start listening on a socket and running an epoll event
  * loop his main responsibility is to pass incoming client connections
  * descriptor to workers thread.
+ * In this case there's no threads and uses just a single thread with
+ * multiplexing I/O, but it's trivial to transform the main run_server routine
+ * into a thread worker and launch some more (e.g. one per CPU core).
+ *
+ * Accepts two mandatory string arguments, addr and port, in case of UNIX
+ * domain socket, addr represents the path on the FS where the socket fd is
+ * located, port will be ignored.
  */
 int start_server(const char *addr, char *port, int node_fd) {
 
@@ -767,7 +767,9 @@ int start_server(const char *addr, char *port, int node_fd) {
     config.run = eventfd(0, EFD_NONBLOCK);
     config.epoll_timeout = 250;
     config.socket_family = INET;
+    config.logpath = "/tmp/tritedb.log";
 
+    /* Main datastore reference */
     TriteDB tritedb;
 
     /* Initialize SizigyDB server object */
