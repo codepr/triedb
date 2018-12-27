@@ -50,7 +50,7 @@ typedef struct {
     int max_events;
     struct epoll_event *events;
     void *default_args;
-    void (*default_task)(void *);
+    void (*default_task)(void *, void *);
     List *tasks;
 } EpollLoop;
 
@@ -82,8 +82,11 @@ int accept_connection(const int);
 EpollLoop *epoll_loop_init(int);
 void epoll_loop_free(EpollLoop *);
 void epoll_loop_wait(EpollLoop *);
-void create_task(EpollLoop *, int, void (*task)(void *), void *);
-void create_periodic_task(EpollLoop *, int, void (*task)(void *), void *);
+void epoll_create_task(EpollLoop *, int, void (*task)(void *), void *);
+void epoll_create_periodic_task(EpollLoop *, int, void (*task)(void *), void *);
+void epoll_add_fd(EpollLoop *, const int, void *);
+void epoll_mod_fd(EpollLoop *, const int, const int, void *);
+void epoll_del_fd(EpollLoop *, const int);
 void add_epoll(const int, const int, void *);
 void mod_epoll(const int, const int, const int, void *);
 void del_epoll(const int, const int);

@@ -294,7 +294,8 @@ void epoll_loop_free(EpollLoop *loop) {
 }
 
 
-void create_task(EpollLoop *loop, int fd, void (*task)(void *ptr), void *args) {
+void epoll_create_task(EpollLoop *loop,
+        int fd, void (*task)(void *ptr), void *args) {
 
     Task *t = t_malloc(sizeof(*t));
     t->fd = fd;
@@ -308,7 +309,8 @@ void create_task(EpollLoop *loop, int fd, void (*task)(void *ptr), void *args) {
 }
 
 
-void create_periodic_task(EpollLoop *loop, int ns, void (*task)(void *ptr), void *args) {
+void epoll_create_periodic_task(EpollLoop *loop,
+        int ns, void (*task)(void *ptr), void *args) {
 
     struct itimerspec timervalue;
 
@@ -348,34 +350,47 @@ void create_periodic_task(EpollLoop *loop, int ns, void (*task)(void *ptr), void
 }
 
 
-void epoll_loop_wait(EpollLoop *loop) {
+void epoll_loop_wait(EpollLoop *el) {
 
     int events = 0;
     ListNode *cursor = NULL;
     Task *t = NULL;
     bool executed = false;
 
-    while ((events = epoll_wait(loop->epollfd,
-                    loop->events, loop->max_events, -1)) > -1) {
+    while ((events = epoll_wait(el->epollfd,
+                    el->events, el->max_events, -1)) > -1) {
 
         for (int i = 0; i < events; i++) {
 
             executed = false;
 
-            if (loop->events[i].data.fd == config.run) {
+            if ((el->events[i].events & EPOLLERR) ||
+                    (el->events[i].events & EPOLLHUP) ||
+                    (!(el->events[i].events & EPOLLIN) &&
+                     !(el->events[i].events & EPOLLOUT))) {
+
+                /* An error has occured on this fd, or the socket is not
+                   ready for reading */
+                perror ("epoll_wait(2)");
+                close(el->events[i].data.fd);
+                continue;
+            }
+
+            if (el->events[i].data.fd == config.run) {
 
                 /* And quit event after that */
                 eventfd_t val;
                 eventfd_read(config.run, &val);
 
-                DEBUG("Stopping epoll loop.");
+                DEBUG("Stopping epoll el.");
 
                 break;
             }
 
+            // Check for a task ready to be executed
             while (cursor) {
                 t = cursor->data;
-                if (loop->events[i].data.fd == t->fd) {
+                if (el->events[i].data.fd == t->fd) {
                     t->task(t->args);
                     executed = true;
                 }
@@ -384,12 +399,27 @@ void epoll_loop_wait(EpollLoop *loop) {
 
             // If no tasks were found, run the default one
             if (executed == false)
-                loop->default_task(loop->default_args);
+                el->default_task(el->events[i].data.ptr, el->default_args);
         }
     }
 
     // FIXME free resources here
-    epoll_loop_free(loop);
+    epoll_loop_free(el);
+}
+
+
+void epoll_add_fd(EpollLoop *el, const int fd, void *ptr) {
+    add_epoll(el->epollfd, fd, ptr);
+}
+
+
+void epoll_mod_fd(EpollLoop *el, const int fd, const int evs, void *ptr) {
+    mod_epoll(el->epollfd, fd, evs, ptr);
+}
+
+
+void epoll_del_fd(EpollLoop *el, const int fd) {
+    del_epoll(el->epollfd, fd);
 }
 
 
