@@ -289,7 +289,7 @@ EpollLoop *epoll_loop_init(int max_events) {
 
 void epoll_loop_free(EpollLoop *loop) {
     t_free(loop->events);
-    list_free(loop->tasks);
+    list_free(loop->tasks, 0);
     t_free(loop);
 }
 
