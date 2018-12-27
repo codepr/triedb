@@ -36,9 +36,12 @@
 #include <arpa/inet.h>
 #include <sys/un.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/eventfd.h>
 #include "util.h"
+#include "server.h"
 #include "network.h"
 
 
@@ -264,6 +267,129 @@ int recvbytes(const int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
         total += n;
     }
     return total;
+}
+
+
+EpollLoop *epoll_loop_init(int max_events) {
+
+    EpollLoop *loop = t_malloc(sizeof(*loop));
+
+    loop->max_events = max_events;
+    loop->events = t_malloc(sizeof(struct epoll_event) * max_events);
+    loop->epollfd = epoll_create1(1024);
+    loop->tasks = list_init();
+
+    // Optional
+    loop->default_args = NULL;
+    loop->default_task = NULL;
+
+    return loop;
+}
+
+
+void epoll_loop_free(EpollLoop *loop) {
+    t_free(loop->events);
+    list_free(loop->tasks);
+    t_free(loop);
+}
+
+
+void create_task(EpollLoop *loop, int fd, void (*task)(void *ptr), void *args) {
+
+    Task *t = t_malloc(sizeof(*t));
+    t->fd = fd;
+    t->type = TASK;
+    t->args = args;
+    t->task = task;
+
+    loop->tasks = list_push(loop->tasks, t);
+
+    add_epoll(loop->epollfd, t->fd, NULL);
+}
+
+
+void create_periodic_task(EpollLoop *loop, int ns, void (*task)(void *ptr), void *args) {
+
+    struct itimerspec timervalue;
+
+    int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+
+    memset(&timervalue, 0x00, sizeof(timervalue));
+
+    // Set initial expire time and periodic interval
+    timervalue.it_value.tv_nsec = ns;
+    timervalue.it_interval.tv_nsec = ns;
+
+    add_epoll(loop->epollfd, timerfd, NULL);
+
+    if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0) {
+        perror("timerfd_settime");
+        return;
+    }
+
+    // Add the timer to the event loop
+    struct epoll_event ev;
+    ev.data.fd = timerfd;
+    ev.events = EPOLLIN;
+
+    if (epoll_ctl(loop->epollfd, EPOLL_CTL_ADD, timerfd, &ev) < 0) {
+        perror("epoll_ctl(2): EPOLLIN");
+        return;
+    }
+
+    Task *t = t_malloc(sizeof(*t));
+    t->fd = timerfd;
+    t->type = PERIODIC;
+    t->args = args;
+    t->task = task;
+
+    loop->tasks = list_push(loop->tasks, t);
+
+}
+
+
+void epoll_loop_wait(EpollLoop *loop) {
+
+    int events = 0;
+    ListNode *cursor = NULL;
+    Task *t = NULL;
+    bool executed = false;
+
+    while ((events = epoll_wait(loop->epollfd,
+                    loop->events, loop->max_events, -1)) > -1) {
+
+        for (int i = 0; i < events; i++) {
+
+            executed = false;
+
+            if (loop->events[i].data.fd == config.run) {
+
+                /* And quit event after that */
+                eventfd_t val;
+                eventfd_read(config.run, &val);
+
+                DEBUG("Stopping epoll loop.");
+
+                break;
+            }
+
+            while (cursor) {
+                t = cursor->data;
+                if (loop->events[i].data.fd == t->fd) {
+                    t->task(t->args);
+                    executed = true;
+                }
+                cursor = cursor->next;
+            }
+
+            // If no tasks were found, run the default one
+            if (executed == false)
+                loop->default_task(loop->default_args);
+        }
+    }
+
+    // FIXME free resources here
+    epoll_loop_free(loop);
 }
 
 

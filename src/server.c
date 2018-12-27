@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -651,6 +652,8 @@ static void expire_keys(TriteDB *db) {
     int64_t delta = 0LL;
     struct ExpiringKey *ek = NULL;
 
+    DEBUG("Expire call");
+
     if (db->expiring_keys->len > 0) {
 
         for (ListNode *n = db->expiring_keys->head; n != NULL
@@ -703,10 +706,29 @@ static void *run_server(TriteDB *db) {
     if (!evs)
         oom("allocating events");
 
-    int timeout = config.epoll_timeout;
+    /* int timeout = config.epoll_timeout; */
     int events = 0;
 
-    while ((events = epoll_wait(db->epollfd, evs, MAX_EVENTS, timeout)) > -1) {
+    struct itimerspec timervalue;
+
+    int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+
+    memset(&timervalue, 0x00, sizeof(timervalue));
+
+    timervalue.it_value.tv_sec = 0;
+    timervalue.it_value.tv_nsec = 50 * 1024 * 1024;
+    timervalue.it_interval.tv_sec = 0;
+    timervalue.it_interval.tv_nsec = 50 * 1024 * 1024;
+
+    add_epoll(db->epollfd, timerfd, NULL);
+
+    if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0) {
+        perror("timerfd_settime");
+    }
+
+    long int timers = 0;
+
+    while ((events = epoll_wait(db->epollfd, evs, MAX_EVENTS, -1)) > -1) {
 
         for (int i = 0; i < events; i++) {
 
@@ -729,14 +751,16 @@ static void *run_server(TriteDB *db) {
                 DEBUG("Stopping epoll loop.");
 
                 goto exit;
+
+            } else if (evs[i].data.fd == timerfd) {
+                (void) read(evs[i].data.fd, &timers, 8);
+                // Check for keys about to expire out
+                expire_keys(db);
             } else {
                 /* Finally handle the request according to its type */
                 ((Client *) evs[i].data.ptr)->ctx_handler(db, evs[i].data.ptr);
             }
         }
-
-        // Check for keys about to expire out
-        expire_keys(db);
     }
 
 exit:

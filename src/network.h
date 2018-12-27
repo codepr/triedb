@@ -29,6 +29,7 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
+#include "list.h"
 #include "ringbuf.h"
 
 
@@ -39,6 +40,27 @@
 // Socket families
 #define UNIX    0
 #define INET    1
+
+
+enum task_type { TASK, PERIODIC };
+
+
+typedef struct {
+    int epollfd;
+    int max_events;
+    struct epoll_event *events;
+    void *default_args;
+    void (*default_task)(void *);
+    List *tasks;
+} EpollLoop;
+
+
+typedef struct {
+    int fd;
+    enum task_type type;
+    void *args;
+    void (*task)(void *);
+} Task;
 
 
 /* Set non-blocking socket */
@@ -57,6 +79,11 @@ int make_listen(const char *, const char *, int);
 int accept_connection(const int);
 
 /* Epoll management functions */
+EpollLoop *epoll_loop_init(int);
+void epoll_loop_free(EpollLoop *);
+void epoll_loop_wait(EpollLoop *);
+void create_task(EpollLoop *, int, void (*task)(void *), void *);
+void create_periodic_task(EpollLoop *, int, void (*task)(void *), void *);
 void add_epoll(const int, const int, void *);
 void mod_epoll(const int, const int, const int, void *);
 void del_epoll(const int, const int);
