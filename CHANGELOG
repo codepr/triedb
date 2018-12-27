@@ -1,3 +1,10 @@
+0.2.0 - 2018/12/27
+==================
+
+- Refactored binary protocol design and implementation
+- Started abstraction over EPOLL to create a more flexible event loop
+
+
 0.1.5 - 2018/12/24
 ==================
 
