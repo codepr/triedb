@@ -64,7 +64,7 @@ typedef struct {
 
 
 /* Set non-blocking socket */
-int set_nonblocking(const int);
+int set_nonblocking(int);
 
 /* Auxiliary function for creating epoll server */
 int create_and_bind(const char *, const char *, int);
@@ -76,7 +76,7 @@ int create_and_bind(const char *, const char *, int);
 int make_listen(const char *, const char *, int);
 
 /* Accept a connection and add it to the right epollfd */
-int accept_connection(const int);
+int accept_connection(int);
 
 /* Epoll management functions */
 EpollLoop *epoll_loop_init(int);
@@ -84,17 +84,17 @@ void epoll_loop_free(EpollLoop *);
 void epoll_loop_wait(EpollLoop *);
 void epoll_create_task(EpollLoop *, int, void (*task)(void *), void *);
 void epoll_create_periodic_task(EpollLoop *, int, void (*task)(void *), void *);
-void epoll_add_fd(EpollLoop *, const int, void *);
-void epoll_mod_fd(EpollLoop *, const int, const int, void *);
-void epoll_del_fd(EpollLoop *, const int);
-void add_epoll(const int, const int, void *);
-void mod_epoll(const int, const int, const int, void *);
-void del_epoll(const int, const int);
+void epoll_add_fd(EpollLoop *, int, void *);
+void epoll_mod_fd(EpollLoop *, int, int, void *);
+void epoll_del_fd(EpollLoop *, int);
+void add_epoll(int, int, void *);
+void mod_epoll(int, int, int, void *);
+void del_epoll(int, int);
 
 /* I/O management functions */
-int sendall(const int, uint8_t *, ssize_t, ssize_t *);
-int recvall(const int, Ringbuffer *, ssize_t);
-int recvbytes(const int, Ringbuffer *, ssize_t, size_t);
+int sendall(int, uint8_t *, ssize_t, ssize_t *);
+int recvall(int, Ringbuffer *, ssize_t);
+int recvbytes(int, Ringbuffer *, ssize_t, size_t);
 
 void htonll(uint8_t *, uint_least64_t );
 uint_least64_t ntohll(const uint8_t *);

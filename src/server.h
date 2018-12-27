@@ -35,6 +35,7 @@
 
 #define EPOLL_WORKERS 4
 #define MAX_EVENTS	  64
+#define EXP_TIMEOUT   50 * 1024 * 1024
 
 
 typedef struct client Client;
@@ -77,7 +78,7 @@ struct reply {
 
 
 struct command {
-    const int ctype;
+    int ctype;
     int (*handler)(TriteDB *, Client *);
 };
 

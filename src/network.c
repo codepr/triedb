@@ -46,7 +46,7 @@
 
 
 /* Set non-blocking socket */
-int set_nonblocking(const int fd) {
+int set_nonblocking(int fd) {
     int flags, result;
     flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
@@ -167,7 +167,7 @@ int make_listen(const char *host, const char *port, int socket_family) {
 }
 
 
-int accept_connection(const int serversock) {
+int accept_connection(int serversock) {
 
     int clientsock;
     struct sockaddr_in addr;
@@ -193,7 +193,7 @@ int accept_connection(const int serversock) {
 
 
 
-int sendall(const int sfd, uint8_t *buf, ssize_t len, ssize_t *sent) {
+int sendall(int sfd, uint8_t *buf, ssize_t len, ssize_t *sent) {
     int total = 0;
     ssize_t bytesleft = len;
     int n = 0;
@@ -215,7 +215,7 @@ int sendall(const int sfd, uint8_t *buf, ssize_t len, ssize_t *sent) {
 }
 
 
-int recvall(const int sfd, Ringbuffer *ringbuf, ssize_t len) {
+int recvall(int sfd, Ringbuffer *ringbuf, ssize_t len) {
     int n = 0;
     int total = 0;
     int bufsize = 256;
@@ -244,7 +244,7 @@ int recvall(const int sfd, Ringbuffer *ringbuf, ssize_t len) {
 }
 
 
-int recvbytes(const int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
+int recvbytes(int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
     int n = 0;
     int total = 0;
     uint8_t buf[bufsize];
@@ -408,26 +408,30 @@ void epoll_loop_wait(EpollLoop *el) {
 }
 
 
-void epoll_add_fd(EpollLoop *el, const int fd, void *ptr) {
+void epoll_add_fd(EpollLoop *el, int fd, void *ptr) {
     add_epoll(el->epollfd, fd, ptr);
 }
 
 
-void epoll_mod_fd(EpollLoop *el, const int fd, const int evs, void *ptr) {
+void epoll_mod_fd(EpollLoop *el, int fd, int evs, void *ptr) {
     mod_epoll(el->epollfd, fd, evs, ptr);
 }
 
 
-void epoll_del_fd(EpollLoop *el, const int fd) {
+void epoll_del_fd(EpollLoop *el, int fd) {
     del_epoll(el->epollfd, fd);
 }
 
 
-void add_epoll(const int efd, const int fd, void *data) {
+void add_epoll(int efd, int fd, void *data) {
+
     struct epoll_event ev;
     ev.data.fd = fd;
+
+    // Being ev.data a union, in case of data != NULL, fd will be set to random
     if (data)
         ev.data.ptr = data;
+
     ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 
     if (epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev) < 0) {
@@ -436,11 +440,15 @@ void add_epoll(const int efd, const int fd, void *data) {
 }
 
 
-void mod_epoll(const int efd, const int fd, const int evs, void *data) {
+void mod_epoll(int efd, int fd, int evs, void *data) {
+
     struct epoll_event ev;
     ev.data.fd = fd;
+
+    // Being ev.data a union, in case of data != NULL, fd will be set to random
     if (data)
         ev.data.ptr = data;
+
     ev.events = evs | EPOLLET | EPOLLONESHOT;
 
     if (epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev) < 0) {
@@ -449,7 +457,7 @@ void mod_epoll(const int efd, const int fd, const int evs, void *data) {
 }
 
 
-void del_epoll(const int efd, const int fd) {
+void del_epoll(int efd, int fd) {
     if (epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL) < 0)
         perror("epoll_ctl(2): set epollout");
 }

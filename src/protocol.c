@@ -40,7 +40,7 @@ static void unpack_header(Buffer *, Header *);
 
 
 /* Init Buffer data structure, to ease byte arrays handling */
-Buffer *buffer_init(const size_t len) {
+Buffer *buffer_init(size_t len) {
     Buffer *b = t_malloc(sizeof(Buffer));
     b->data = t_malloc(len);
     if (!b || !b->data)
@@ -150,350 +150,282 @@ static void unpack_header(Buffer *b, Header *h) {
     h->size = read_uint32(b);
 }
 
-
-int unpack_put(Buffer *b, Put *p) {
-
-    assert(b && p);
-
-    /* Start unpacking bytes into the Request structure */
-
-    p->header = t_malloc(sizeof(Header));
-    if (!p->header)
-        return -EOOM;
-
-    unpack_header(b, p->header);
-
-    // Mandatory fields
-    p->keysize = read_uint16(b);
-    p->valsize = read_uint32(b);
-    p->key = read_string(b, p->keysize);
-    p->value = read_string(b, p->valsize);
-
-    // Optional fields
-    p->ttl = read_uint16(b);
-    p->prefix_range = read_uint8(b);
-
-    return OK;
-}
-
-
-int unpack_get(Buffer *b, Get *g) {
-
-    assert(b && g);
-
-    /* Start unpacking bytes into the Request structure */
-
-    g->header = t_malloc(sizeof(Header));
-    if (!g->header)
-        return -EOOM;
-
-    unpack_header(b, g->header);
-
-    // Mandatory fields
-    g->keysize = read_uint16(b);
-    g->key = read_string(b, g->keysize);
-
-    // Optional fields
-    g->prefix_range = read_uint8(b);
-
-    return OK;
-}
-
-
-int unpack_del(Buffer *b, Del *d) {
-
-    assert(b && d);
-
-    /* Start unpacking bytes into the Request structure */
-
-    d->header = t_malloc(sizeof(Header));
-    if (!d->header)
-        return -EOOM;
-
-    unpack_header(b, d->header);
-
-    // Number of keys, or length of the Key array
-    d->len = read_uint16(b);
-
-    d->keys = t_calloc(d->len, sizeof(struct Key));
-
-    for (int i = 0; i < d->len; i++) {
-        struct Key *key = t_malloc(sizeof(*key));
-        key->keysize = read_uint16(b);
-        key->key = read_string(b, key->keysize);
-        key->prefix_range = read_uint8(b);
-        d->keys[i] = key;
-    }
-
-    return OK;
-}
-
-
-int unpack_exp(Buffer *b, Exp *e) {
-
-    assert(b && e);
-
-    /* Start unpacking bytes into the Request structure */
-
-    e->header = t_malloc(sizeof(Header));
-    if (!e->header)
-        return -EOOM;
-
-    unpack_header(b, e->header);
-
-    // Mandatory fields
-    e->keysize = read_uint16(b);
-    e->key = read_string(b, e->keysize);
-    e->ttl = read_uint16(b);
-
-    // Optional fields
-    e->prefix_range = read_uint8(b);
-
-    return OK;
-}
+// Refactoring
+int opcode_req_map[7][2] = {
+    {PUT, KEY_VAL_COMMAND},
+    {GET, KEY_COMMAND},
+    {DEL, LIST_COMMAND},
+    {EXP, KEY_COMMAND},
+    {INC, KEY_COMMAND},
+    {DEC, KEY_COMMAND}
+};
 
 /* Main unpacking function, to translates bytes received from clients to a
    packet structure, based on the opcode */
-void *unpack(const uint8_t opcode, Buffer *b) {
+Request *unpack_request(uint8_t opcode, Buffer *b) {
 
-    if (opcode == PUT) {
-        Put *put = t_malloc(sizeof(*put));
-        unpack_put(b, put);
-        return put;
-    } else if (opcode == GET) {
-        Get *get = t_malloc(sizeof(*get));
-        unpack_get(b, get);
-        return get;
-    } else if (opcode == DEL || opcode == INC || opcode == DEC) {
-        // DEL is *currently* formed exactly like INC and DEC commands
-        Del *del = t_malloc(sizeof(*del));
-        unpack_del(b, del);
-        return del;
-    } else if (opcode == EXP) {
-        Exp *exp = t_malloc(sizeof(*exp));
-        unpack_exp(b, exp);
-        return exp;
-    }
+    assert(b);
 
-    return NULL;
+    Request *r = t_malloc(sizeof(*r));
+    if (!r)
+        return NULL;
+
+    Header *header = t_malloc(sizeof(*header));
+    if (!header)
+        return NULL;
+
+    unpack_header(b, header);
+
+    // TODO write a more efficient solution for this hack
+    int code = 0;
+
+    for (int i = 0; i < 7; i++)
+        if (opcode_req_map[i][0] == opcode)
+            code = opcode_req_map[i][1];
+
+    switch (code) {
+        case KEY_COMMAND:
+            r->kcommand = t_malloc(sizeof(KeyCommand));
+            r->kcommand->header = header;
+
+            // Mandatory fields
+            r->kcommand->keysize = read_uint16(b);
+            r->kcommand->key = read_string(b, r->kcommand->keysize);
+
+            // Optional fields
+            r->kcommand->is_prefix = read_uint8(b);
+            r->kcommand->ttl = read_uint16(b);
+
+            break;
+
+        case KEY_VAL_COMMAND:
+            r->kvcommand = t_malloc(sizeof(KeyValCommand));
+            r->kvcommand->header = header;
+
+            // Mandatory fields
+            r->kvcommand->keysize = read_uint16(b);
+            r->kvcommand->valsize = read_uint32(b);
+            r->kvcommand->key = read_string(b, r->kvcommand->keysize);
+            r->kvcommand->val = read_string(b, r->kvcommand->valsize);
+
+            // Optional fields
+            r->kvcommand->is_prefix = read_uint8(b);
+            r->kvcommand->ttl = read_uint16(b);
+
+            break;
+
+        case LIST_COMMAND:
+            r->klcommand = t_malloc(sizeof(KeyListCommand));
+            r->klcommand->header = header;
+
+            // Number of keys, or length of the Key array
+            r->klcommand->len = read_uint16(b);
+
+            r->klcommand->keys = t_calloc(r->klcommand->len, sizeof(struct Key));
+
+            for (int i = 0; i < r->klcommand->len; i++) {
+                struct Key *key = t_malloc(sizeof(*key));
+                key->keysize = read_uint16(b);
+                key->key = read_string(b, key->keysize);
+                key->is_prefix = read_uint8(b);
+                r->klcommand->keys[i] = key;
+            }
+
+            break;
+
+        default:
+            t_free(header);
+            t_free(r);
+            r = NULL;
+            break;
+    };
+
+    return r;
 }
 
 
-void pack_put(Buffer *b, Put *pkt) {
+void free_request(Request *request, uint8_t reqtype) {
 
-    assert(b && pkt);
-
-    pack_header(pkt->header, b);
-
-    // Mandatory fields
-    write_uint16(b, pkt->keysize);
-    write_uint32(b, pkt->valsize);
-    write_string(b, pkt->key);
-    write_string(b, pkt->value);
-
-    // Optional fields
-    write_uint16(b, pkt->ttl);
-    write_uint16(b, pkt->prefix_range);
-}
-
-
-void pack_get(Buffer *b, Get *pkt) {
-
-    assert(b && pkt);
-
-    pack_header(pkt->header, b);
-
-    // Mandatory fields
-    write_uint16(b, pkt->keysize);
-    write_string(b, pkt->key);
-
-    // Optional fields
-    write_uint16(b, pkt->prefix_range);
-}
-
-
-void pack_del(Buffer *b, Del *pkt) {
-
-    assert(b && pkt);
-
-    pack_header(pkt->header, b);
-
-    write_uint16(b, pkt->len);
-
-    for (int i = 0; i < pkt->len; i++) {
-        write_uint16(b, pkt->keys[i]->keysize);
-        write_string(b, pkt->keys[i]->key);
-        write_uint16(b, pkt->keys[i]->prefix_range);
-    }
-}
-
-
-void pack_exp(Buffer *b, Exp *pkt) {
-
-    assert(b && pkt);
-
-    pack_header(pkt->header, b);
-
-    // Mandatory fields
-    write_uint16(b, pkt->keysize);
-    write_string(b, pkt->key);
-    write_uint16(b, pkt->ttl);
-
-    // Optional fields
-    write_uint16(b, pkt->prefix_range);
-}
-
-
-void pack_ack(Buffer *b, Ack *pkt) {
-
-    assert(b && pkt);
-
-    pack_header(pkt->header, b);
-
-    write_uint8(b, pkt->code);
-}
-
-
-Ack *ack_packet(uint8_t code) {
-
-    Ack *pkt = t_malloc(sizeof(Ack));
-    if (!pkt) oom("building subscribe request");
-
-    pkt->header = t_malloc(sizeof(Header));
-    if (!pkt->header) oom("building header of subscribe request");
-
-    pkt->header->opcode = ACK;
-    pkt->header->size = HEADERLEN + sizeof(uint8_t);
-    pkt->code = code;
-
-    return pkt;
-}
-
-
-Nack *nack_packet(uint8_t code) {
-
-    Nack *pkt = t_malloc(sizeof(Ack));
-    if (!pkt)
-        oom("building subscribe request");
-
-    pkt->header = t_malloc(sizeof(Header));
-    if (!pkt->header)
-        oom("building header of subscribe request");
-
-    pkt->header->opcode = NACK;
-    pkt->header->size = HEADERLEN + sizeof(uint8_t);
-    pkt->code = code;
-
-    return pkt;
-
-}
-
-
-Put *put_packet(uint8_t *key, uint8_t *value, uint16_t ttl, uint8_t prange) {
-
-    assert(key && value);
-
-    Put *pkt = t_malloc(sizeof(*pkt));
-    if (!pkt)
-        oom("building unsubscribe request");
-
-    pkt->header = t_malloc(sizeof(Header));
-    if (!pkt->header)
-        oom("building unsubscribe header");
-
-    pkt->header->opcode = PUT;
-    pkt->header->size = HEADERLEN + strlen((char *) key) +
-        strlen((char *) value) + (2 * sizeof(uint16_t)) + sizeof(uint32_t);
-    pkt->keysize = strlen((char *) key);
-    pkt->valsize = strlen((char *) value);
-    pkt->key = (uint8_t *) strdup((const char *) key);
-    pkt->value = (uint8_t *) strdup((const char *) value);
-    pkt->ttl = ttl;
-    pkt->prefix_range = prange;
-
-    return pkt;
-}
-
-
-
-void free_put(Put **p) {
-    if (!*p)
+    if (!request)
         return;
-    if ((*p)->header) {
-        t_free((*p)->header);
-        (*p)->header = NULL;
+
+    switch (reqtype) {
+        case KEY_COMMAND:
+            t_free(request->kcommand->header);
+            t_free(request->kcommand->key);
+            t_free(request->kcommand);
+            break;
+        case KEY_VAL_COMMAND:
+            t_free(request->kvcommand->header);
+            t_free(request->kvcommand->key);
+            t_free(request->kvcommand->val);
+            t_free(request->kvcommand);
+            break;
+        case LIST_COMMAND:
+            t_free(request->klcommand->header);
+            for (int i = 0; i < request->klcommand->len; i++) {
+                t_free(request->klcommand->keys[i]->key);
+                t_free(request->klcommand->keys[i]);
+            }
+            t_free(request->klcommand->keys);
+            t_free(request->klcommand);
+            break;
     }
-    if ((*p)->key) {
-        t_free((*p)->key);
-        (*p)->key = NULL;
-    }
-    if ((*p)->value) {
-        t_free((*p)->value);
-        (*p)->value = NULL;
-    }
-    t_free(*p);
-    *p = NULL;
+
+    t_free(request);
 }
 
 
-void free_get(Get **g) {
-    if (!*g)
-        return;
-    if ((*g)->header) {
-        t_free((*g)->header);
-        (*g)->header = NULL;
+void pack_response(Buffer *b, Response *r, int restype) {
+
+    assert(b && r);
+
+    switch (restype) {
+        case NO_CONTENT:
+            pack_header(r->ncontent->header, b);
+            write_uint8(b, r->ncontent->code);
+            break;
+        case DATA_CONTENT:
+            pack_header(r->dcontent->header, b);
+            // Mandatory fields
+            write_uint32(b, r->dcontent->datalen);
+            write_string(b, r->dcontent->data);
+            break;
+        case VALUE_CONTENT:
+            pack_header(r->vcontent->header, b);
+            // Mandatory fields
+            write_uint32(b, r->vcontent->val);
+            break;
+        case LIST_CONTENT:
+            pack_header(r->lcontent->header, b);
+
+            write_uint16(b, r->lcontent->len);
+
+            for (int i = 0; i < r->lcontent->len; i++) {
+                write_uint16(b, r->lcontent->keys[i]->keysize);
+                write_string(b, r->lcontent->keys[i]->key);
+                write_uint16(b, r->lcontent->keys[i]->is_prefix);
+            }
+            break;
     }
-    if ((*g)->key) {
-        t_free((*g)->key);
-        (*g)->key = NULL;
-    }
-    t_free(*g);
-    *g = NULL;
 }
 
 
-void free_exp(Exp **e) {
-    if (!*e)
-        return;
-    if ((*e)->header) {
-        t_free((*e)->header);
-        (*e)->header = NULL;
+Response *make_nocontent_response(uint8_t code) {
+
+    Response *response = t_malloc(sizeof(*response));
+    if (!response)
+        return NULL;
+
+    response->ncontent = t_malloc(sizeof(NoContent));
+    if (!response->ncontent) {
+        t_free(response);
+        return NULL;
     }
-    if ((*e)->key) {
-        t_free((*e)->key);
-        (*e)->key = NULL;
+
+    response->ncontent->header = t_malloc(sizeof(Header));
+    if (!response->ncontent->header) {
+        t_free(response->ncontent);
+        t_free(response);
+        return NULL;
     }
-    t_free(*e);
-    *e = NULL;
+
+    response->ncontent->header->opcode = code;
+    response->ncontent->header->size = HEADERLEN + sizeof(uint8_t);
+
+    response->ncontent->code = code;
+
+    return response;
 }
 
 
-void free_del(Del **d) {
-    if (!*d)
-        return;
-    if ((*d)->header) {
-        t_free((*d)->header);
-        (*d)->header = NULL;
+Response *make_datacontent_response(uint8_t *data) {
+
+    Response *response = t_malloc(sizeof(*response));
+    if (!response)
+        return NULL;
+
+    response->dcontent = t_malloc(sizeof(DataContent));
+    if (!response->dcontent) {
+        t_free(response);
+        return NULL;
     }
-    for (int i = 0; i < (*d)->len; i++) {
-        if ((*d)->keys[i]) {
-            t_free((*d)->keys[i]->key);
-            t_free((*d)->keys[i]);
-        }
+
+    response->dcontent->header = t_malloc(sizeof(Header));
+    if (!response->dcontent->header) {
+        t_free(response->dcontent);
+        t_free(response);
+        return NULL;
     }
-    t_free((*d)->keys);
-    t_free(*d);
-    *d = NULL;
+
+    response->dcontent->header->opcode = PUT;
+    response->dcontent->header->size =
+        HEADERLEN + sizeof(uint32_t) + strlen((char *) data);
+
+    response->dcontent->datalen = strlen((char *) data);
+    response->dcontent->data = (uint8_t *) strdup((const char *) data);
+
+    return response;
 }
 
 
-void free_ack(Ack **a) {
-    if (!*a)
-        return;
-    if ((*a)->header) {
-        t_free((*a)->header);
-        (*a)->header = NULL;
+Response *make_valuecontent_response(uint32_t value) {
+
+    Response *response = t_malloc(sizeof(*response));
+    if (!response)
+        return NULL;
+
+    response->vcontent = t_malloc(sizeof(ValueContent));
+    if (!response->vcontent) {
+        t_free(response);
+        return NULL;
     }
-    t_free(*a);
-    *a = NULL;
+
+    response->ncontent->header = t_malloc(sizeof(Header));
+    if (!response->ncontent->header) {
+        t_free(response->ncontent);
+        t_free(response);
+        return NULL;
+    }
+
+    response->vcontent->header->opcode = ACK;
+    response->vcontent->header->size = HEADERLEN + sizeof(uint32_t);
+
+    response->vcontent->val = value;
+
+    return response;
+}
+
+
+void free_response(Response *response, int restype) {
+
+    if (!response)
+        return;
+
+    switch (restype) {
+        case NO_CONTENT:
+            t_free(response->ncontent->header);
+            t_free(response->ncontent);
+            break;
+        case DATA_CONTENT:
+            t_free(response->dcontent->header);
+            t_free(response->dcontent->data);
+            t_free(response->dcontent);
+            break;
+        case VALUE_CONTENT:
+            t_free(response->vcontent->header);
+            t_free(response->vcontent);
+            break;
+        case LIST_CONTENT:
+            t_free(response->lcontent->header);
+            for (int i = 0; i < response->lcontent->len; i++) {
+                t_free(response->lcontent->keys[i]->key);
+                t_free(response->lcontent->keys[i]);
+            }
+            t_free(response->lcontent->keys);
+            t_free(response->lcontent);
+            break;
+    }
+
+    t_free(response);
 }

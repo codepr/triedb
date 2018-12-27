@@ -66,14 +66,13 @@ def send_get(sock, key):
     if code in (ACK, NACK):
         payload = struct.unpack('=B', sock.recv(total_len - 5))
     else:
-        klen, vlen = struct.unpack('=HI', sock.recv(6))
-        klen, vlen = ntohs(klen), ntohl(vlen)
-        k, v, t = struct.unpack(f'={klen}s{vlen}sH', sock.recv(klen + vlen + 2))
+        datalen = ntohl(struct.unpack('=I', sock.recv(4))[0])
+        data = struct.unpack(f'={datalen}s', sock.recv(datalen))[0]
 
     return {
         'code': code,
         'total_len': total_len,
-        'payload': (k, v, ntohs(t))
+        'payload': data
     }
 
 

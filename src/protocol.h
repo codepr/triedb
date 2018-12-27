@@ -36,6 +36,17 @@
 #define NOK    0x01
 #define EOOM   0x01
 
+/* Request type */
+#define KEY_COMMAND     0x00
+#define KEY_VAL_COMMAND 0x01
+#define LIST_COMMAND    0x02
+
+/* Response type */
+#define NO_CONTENT      0x00
+#define DATA_CONTENT    0x01
+#define VALUE_CONTENT   0x02
+#define LIST_CONTENT    0x03
+
 /* Operation codes */
 #define PUT    0x10
 #define GET    0x20
@@ -52,69 +63,6 @@
 #define HEADERLEN sizeof(uint8_t) + sizeof(uint32_t)
 
 
-typedef struct {
-    uint8_t opcode;
-    uint32_t size;
-} Header;
-
-
-typedef struct {
-    Header *header;
-    uint16_t keysize;
-    uint32_t valsize;
-    uint8_t *key;
-    uint8_t *value;
-    uint16_t ttl;
-    uint8_t prefix_range;
-} Put;
-
-
-typedef struct {
-    Header *header;
-    uint16_t keysize;
-    uint8_t *key;
-    uint8_t prefix_range;
-} Get;
-
-
-struct Key {
-    uint16_t keysize;
-    uint8_t *key;
-    uint8_t prefix_range;
-};
-
-
-typedef struct {
-    Header *header;
-    uint16_t len;
-    struct Key **keys;
-} Del;
-
-
-typedef struct {
-    Header *header;
-    uint8_t code;
-} Ack;
-
-
-typedef struct {
-    Header *header;
-    uint16_t keysize;
-    uint8_t *key;
-    uint16_t ttl;
-    uint8_t prefix_range;
-} Exp;
-
-
-/* Currently ACK == NACK, so to simplify we assume that they're the same */
-typedef Ack Nack;
-
-/* And the same applies to INC and DEC commands with DEL */
-typedef Del Inc;
-
-typedef Del Dec;
-
-
 /* Buffer structure, provides a convenient way of handling byte string data.
    It is essentially an unsigned char pointer that track the position of the
    last written byte and the total size of the bystestring */
@@ -125,51 +73,139 @@ typedef struct {
 } Buffer;
 
 
-Buffer *buffer_init(const size_t);
+// Buffer constructor, it require a size cause we use a bounded buffer, e.g.
+// no resize over a defined size
+Buffer *buffer_init(size_t);
 void buffer_destroy(Buffer *);
 
 
 /* Reading data on Buffer pointer */
+// bytes -> uint8_t
 uint8_t read_uint8(Buffer *);
+// bytes -> uint16_t
 uint16_t read_uint16(Buffer *);
+// bytes -> uint32_t
 uint32_t read_uint32(Buffer *);
+// read a defined len of bytes
 uint8_t *read_string(Buffer *, size_t);
 
 
 /* Write data on Buffer pointer */
+// append a uint8_t -> bytes into the buffer
 void write_uint8(Buffer *, uint8_t);
+// append a uint16_t -> bytes into the buffer
 void write_uint16(Buffer *, uint16_t);
+// append a uint32_t -> bytes into the buffer
 void write_uint32(Buffer *, uint32_t);
+// append len bytes into the buffer
 void write_string(Buffer *, uint8_t *);
 
 
-/* Pack/Unpack functions for every specific command defined */
-int unpack_put(Buffer *, Put *);
-int unpack_get(Buffer *, Get *);
-int unpack_del(Buffer *, Del *);
-int unpack_exp(Buffer *, Exp *);
-void *unpack(const uint8_t , Buffer *);
+// Definition of the common header, for now it simply define the operation
+// code and the total size of the packet, including the body
+typedef struct {
+    uint8_t opcode;
+    uint32_t size;
+} Header;
+
+// Definition of a single key, with `is_prefix` defining if the key must be
+// treated as a prefix, in other words if the command which operates on it
+// have to be used as a glob style command e.g. DEL hello* deletes all keys
+// starting with hello
+struct Key {
+    uint16_t keysize;
+    uint8_t *key;
+    uint8_t is_prefix;
+};
+
+// For all commands that does only need key field and some extra optionals
+// fields like the time to live (`ttl`) or the `is_prefix` flag
+// e.g. GET, EXP, INC, DEC.. etc
+typedef struct {
+    Header *header;
+    uint16_t keysize;
+    uint8_t* key;
+    uint8_t is_prefix;
+    uint16_t ttl;
+} KeyCommand;
+
+// For all commands that does need key and val fields with some extra optionals
+// fields like the time to live (`ttl`) or the `is_prefix` flag
+// e.g. PUT .. etc
+typedef struct {
+    Header *header;
+    uint16_t keysize;
+    uint32_t valsize;
+    uint8_t *key;
+    uint8_t *val;
+    uint8_t is_prefix;
+    uint16_t ttl;
+} KeyValCommand;
+
+// For all commands that does need a list of keys with some extra optionals
+// fields like the time to live (`ttl`) or the `is_prefix` flag
+// e.g. DEL .. etc
+typedef struct {
+    Header *header;
+    uint16_t len;
+    struct Key **keys;
+} KeyListCommand;
+
+// Define a request, can be either a `KeyCommand`, a `KeyValCommand` or a
+// `KeyListCommand`
+typedef union {
+    KeyCommand *kcommand;
+    KeyValCommand *kvcommand;
+    KeyListCommand *klcommand;
+} Request;
 
 
-void pack_put(Buffer *, Put *);
-void pack_get(Buffer *, Get *);
-void pack_del(Buffer *, Del *);
-void pack_ack(Buffer *, Ack *);
-void pack_exp(Buffer *, Exp *);
+Request *unpack_request(uint8_t, Buffer *);
+
+void free_request(Request *, uint8_t);
 
 
-/* Builder and destroy functions for every specific command defined */
-Put *put_packet(uint8_t *, uint8_t *, uint16_t, uint8_t);
-Ack *ack_packet(uint8_t);
-Nack *nack_packet(uint8_t);
-Exp *exp_packet(uint8_t *, uint16_t);
+// Response structure without body, like ACK, NACK etc.
+typedef struct {
+    Header *header;
+    uint8_t code;
+} NoContent;
+
+// Response with data, like GET etc.
+typedef struct {
+    Header *header;
+    uint32_t datalen;
+    uint8_t *data;
+} DataContent;
+
+// Response with values, like COUNT etc.
+typedef struct {
+    Header *header;
+    uint32_t val;
+} ValueContent;
+
+// Response with list, like glob GET etc.
+typedef struct {
+    Header *header;
+    uint16_t len;
+    struct Key **keys;
+} ListContent;
 
 
-void free_put(Put **);
-void free_get(Get **);
-void free_del(Del **);
-void free_ack(Ack **);
-void free_exp(Exp **);
+typedef union {
+    NoContent *ncontent;
+    DataContent *dcontent;
+    ValueContent *vcontent;
+    ListContent *lcontent;
+} Response;
+
+
+Response *make_nocontent_response(uint8_t);
+Response *make_datacontent_response(uint8_t *);
+Response *make_valuecontent_response(uint32_t);
+
+void pack_response(Buffer *, Response *, int);
+void free_response(Response *, int);
 
 
 #endif
