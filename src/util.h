@@ -44,21 +44,23 @@ bool is_integer(const char *);
 int parse_int(const char *);
 
 /* Logging */
-void t_log(const uint8_t level, const char *, ...);
+void t_log_init(const char *);
+void t_log_close(void);
+void t_log(const uint8_t, const char *, ...);
 
 /* Memory management */
-void *t_malloc(size_t);
+void *tmalloc(size_t);
 void *t_calloc(size_t, size_t);
-void *t_realloc(void *, size_t);
-void t_free(void *);
+void *trealloc(void *, size_t);
+void tfree(void *);
 
 int memory_used(void);
 
 
 #define LOG(...) t_log( __VA_ARGS__ )
-#define DEBUG(...) LOG(DEBUG, __VA_ARGS__)
-#define ERROR(...) LOG(ERROR, __VA_ARGS__)
-#define INFO(...) LOG(INFO, __VA_ARGS__)
+#define tdebug(...) LOG(DEBUG, __VA_ARGS__)
+#define terror(...) LOG(ERROR, __VA_ARGS__)
+#define tinfo(...) LOG(INFO, __VA_ARGS__)
 
 
 #endif

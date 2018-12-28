@@ -41,8 +41,8 @@ static void unpack_header(Buffer *, Header *);
 
 /* Init Buffer data structure, to ease byte arrays handling */
 Buffer *buffer_init(size_t len) {
-    Buffer *b = t_malloc(sizeof(Buffer));
-    b->data = t_malloc(len);
+    Buffer *b = tmalloc(sizeof(Buffer));
+    b->data = tmalloc(len);
     if (!b || !b->data)
         oom("allocating memory for new buffer");
     b->size = len;
@@ -55,8 +55,8 @@ Buffer *buffer_init(size_t len) {
 void buffer_destroy(Buffer *b) {
     assert(b && b->data);
     b->size = b->pos = 0;
-    t_free(b->data);
-    t_free(b);
+    tfree(b->data);
+    tfree(b);
 }
 
 
@@ -91,7 +91,7 @@ uint32_t read_uint32(Buffer *b) {
 uint8_t *read_string(Buffer *b, size_t len) {
     if ((b->pos + len) > b->size)
         return NULL;
-    uint8_t *str = t_malloc(len + 1);
+    uint8_t *str = tmalloc(len + 1);
     memcpy(str, b->data + b->pos, len);
     str[len] = '\0';
     b->pos += len;
@@ -166,11 +166,11 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
 
     assert(b);
 
-    Request *r = t_malloc(sizeof(*r));
+    Request *r = tmalloc(sizeof(*r));
     if (!r)
         return NULL;
 
-    Header *header = t_malloc(sizeof(*header));
+    Header *header = tmalloc(sizeof(*header));
     if (!header)
         return NULL;
 
@@ -185,7 +185,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
 
     switch (code) {
         case KEY_COMMAND:
-            r->kcommand = t_malloc(sizeof(KeyCommand));
+            r->kcommand = tmalloc(sizeof(KeyCommand));
             r->kcommand->header = header;
 
             // Mandatory fields
@@ -199,7 +199,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             break;
 
         case KEY_VAL_COMMAND:
-            r->kvcommand = t_malloc(sizeof(KeyValCommand));
+            r->kvcommand = tmalloc(sizeof(KeyValCommand));
             r->kvcommand->header = header;
 
             // Mandatory fields
@@ -215,7 +215,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             break;
 
         case LIST_COMMAND:
-            r->klcommand = t_malloc(sizeof(KeyListCommand));
+            r->klcommand = tmalloc(sizeof(KeyListCommand));
             r->klcommand->header = header;
 
             // Number of keys, or length of the Key array
@@ -224,7 +224,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             r->klcommand->keys = t_calloc(r->klcommand->len, sizeof(struct Key));
 
             for (int i = 0; i < r->klcommand->len; i++) {
-                struct Key *key = t_malloc(sizeof(*key));
+                struct Key *key = tmalloc(sizeof(*key));
                 key->keysize = read_uint16(b);
                 key->key = read_string(b, key->keysize);
                 key->is_prefix = read_uint8(b);
@@ -234,8 +234,8 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             break;
 
         default:
-            t_free(header);
-            t_free(r);
+            tfree(header);
+            tfree(r);
             r = NULL;
             break;
     };
@@ -251,28 +251,28 @@ void free_request(Request *request, uint8_t reqtype) {
 
     switch (reqtype) {
         case KEY_COMMAND:
-            t_free(request->kcommand->header);
-            t_free(request->kcommand->key);
-            t_free(request->kcommand);
+            tfree(request->kcommand->header);
+            tfree(request->kcommand->key);
+            tfree(request->kcommand);
             break;
         case KEY_VAL_COMMAND:
-            t_free(request->kvcommand->header);
-            t_free(request->kvcommand->key);
-            t_free(request->kvcommand->val);
-            t_free(request->kvcommand);
+            tfree(request->kvcommand->header);
+            tfree(request->kvcommand->key);
+            tfree(request->kvcommand->val);
+            tfree(request->kvcommand);
             break;
         case LIST_COMMAND:
-            t_free(request->klcommand->header);
+            tfree(request->klcommand->header);
             for (int i = 0; i < request->klcommand->len; i++) {
-                t_free(request->klcommand->keys[i]->key);
-                t_free(request->klcommand->keys[i]);
+                tfree(request->klcommand->keys[i]->key);
+                tfree(request->klcommand->keys[i]);
             }
-            t_free(request->klcommand->keys);
-            t_free(request->klcommand);
+            tfree(request->klcommand->keys);
+            tfree(request->klcommand);
             break;
     }
 
-    t_free(request);
+    tfree(request);
 }
 
 
@@ -313,20 +313,20 @@ void pack_response(Buffer *b, Response *r, int restype) {
 
 Response *make_nocontent_response(uint8_t code) {
 
-    Response *response = t_malloc(sizeof(*response));
+    Response *response = tmalloc(sizeof(*response));
     if (!response)
         return NULL;
 
-    response->ncontent = t_malloc(sizeof(NoContent));
+    response->ncontent = tmalloc(sizeof(NoContent));
     if (!response->ncontent) {
-        t_free(response);
+        tfree(response);
         return NULL;
     }
 
-    response->ncontent->header = t_malloc(sizeof(Header));
+    response->ncontent->header = tmalloc(sizeof(Header));
     if (!response->ncontent->header) {
-        t_free(response->ncontent);
-        t_free(response);
+        tfree(response->ncontent);
+        tfree(response);
         return NULL;
     }
 
@@ -341,20 +341,20 @@ Response *make_nocontent_response(uint8_t code) {
 
 Response *make_datacontent_response(uint8_t *data) {
 
-    Response *response = t_malloc(sizeof(*response));
+    Response *response = tmalloc(sizeof(*response));
     if (!response)
         return NULL;
 
-    response->dcontent = t_malloc(sizeof(DataContent));
+    response->dcontent = tmalloc(sizeof(DataContent));
     if (!response->dcontent) {
-        t_free(response);
+        tfree(response);
         return NULL;
     }
 
-    response->dcontent->header = t_malloc(sizeof(Header));
+    response->dcontent->header = tmalloc(sizeof(Header));
     if (!response->dcontent->header) {
-        t_free(response->dcontent);
-        t_free(response);
+        tfree(response->dcontent);
+        tfree(response);
         return NULL;
     }
 
@@ -371,20 +371,20 @@ Response *make_datacontent_response(uint8_t *data) {
 
 Response *make_valuecontent_response(uint32_t value) {
 
-    Response *response = t_malloc(sizeof(*response));
+    Response *response = tmalloc(sizeof(*response));
     if (!response)
         return NULL;
 
-    response->vcontent = t_malloc(sizeof(ValueContent));
+    response->vcontent = tmalloc(sizeof(ValueContent));
     if (!response->vcontent) {
-        t_free(response);
+        tfree(response);
         return NULL;
     }
 
-    response->ncontent->header = t_malloc(sizeof(Header));
+    response->ncontent->header = tmalloc(sizeof(Header));
     if (!response->ncontent->header) {
-        t_free(response->ncontent);
-        t_free(response);
+        tfree(response->ncontent);
+        tfree(response);
         return NULL;
     }
 
@@ -404,28 +404,28 @@ void free_response(Response *response, int restype) {
 
     switch (restype) {
         case NO_CONTENT:
-            t_free(response->ncontent->header);
-            t_free(response->ncontent);
+            tfree(response->ncontent->header);
+            tfree(response->ncontent);
             break;
         case DATA_CONTENT:
-            t_free(response->dcontent->header);
-            t_free(response->dcontent->data);
-            t_free(response->dcontent);
+            tfree(response->dcontent->header);
+            tfree(response->dcontent->data);
+            tfree(response->dcontent);
             break;
         case VALUE_CONTENT:
-            t_free(response->vcontent->header);
-            t_free(response->vcontent);
+            tfree(response->vcontent->header);
+            tfree(response->vcontent);
             break;
         case LIST_CONTENT:
-            t_free(response->lcontent->header);
+            tfree(response->lcontent->header);
             for (int i = 0; i < response->lcontent->len; i++) {
-                t_free(response->lcontent->keys[i]->key);
-                t_free(response->lcontent->keys[i]);
+                tfree(response->lcontent->keys[i]->key);
+                tfree(response->lcontent->keys[i]);
             }
-            t_free(response->lcontent->keys);
-            t_free(response->lcontent);
+            tfree(response->lcontent->keys);
+            tfree(response->lcontent);
             break;
     }
 
-    t_free(response);
+    tfree(response);
 }

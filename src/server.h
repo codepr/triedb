@@ -33,8 +33,7 @@
 #include "protocol.h"
 
 
-#define EPOLL_WORKERS 4
-#define MAX_EVENTS	  64
+#define MAX_EVENTS	  128
 #define EXP_TIMEOUT   50 * 1024 * 1024
 
 

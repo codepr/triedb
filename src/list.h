@@ -55,7 +55,7 @@ List *list_init(void);
 
 /* Release a list, accept a integer flag to control the depth of the free call
  * (e.g. going to free also data field of every node) */
-void list_free(List *, int);
+void listfree(List *, int);
 
 /* Attach a list to another one on tail */
 List *list_attach(List *, ListNode *, unsigned long);

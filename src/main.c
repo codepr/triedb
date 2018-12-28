@@ -36,10 +36,11 @@
 
 
 void sigint_handler(int signum) {
-    for (int i = 0; i < EPOLL_WORKERS + 1; i++) {
-        eventfd_write(config.run, 1);
-        usleep(1500);
-    }
+    /* for (int i = 0; i < EPOLL_WORKERS + 1; i++) { */
+    /*     eventfd_write(config.run, 1); */
+    /*     usleep(1500); */
+    /* } */
+    eventfd_write(config.run, 1);
 }
 
 

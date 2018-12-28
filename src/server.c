@@ -26,6 +26,7 @@
  */
 
 #include <time.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -154,7 +155,7 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
 
 /* Build a reply object and link it to the Client pointer */
 static void set_reply(Client *c, Buffer *payload) {
-    Reply *r = t_malloc(sizeof(*r));
+    Reply *r = tmalloc(sizeof(*r));
     if (!r) oom("setting reply");
 
     r->fd = c->fd;
@@ -169,7 +170,7 @@ static void free_reply(Reply **r) {
         return;
     if ((*r)->payload)
         buffer_destroy((*r)->payload);
-    t_free(*r);
+    tfree(*r);
     *r = NULL;
 }
 
@@ -178,14 +179,14 @@ static void free_client(Client **c) {
     if (!*c)
         return;
     if ((*c)->addr) {
-        t_free((char *) (*c)->addr);
+        tfree((char *) (*c)->addr);
         (*c)->addr = NULL;
     }
     if ((*c)->reply) {
         free_reply(&(*c)->reply);
         (*c)->reply = NULL;
     }
-    t_free(*c);
+    tfree(*c);
     *c = NULL;
 }
 
@@ -213,7 +214,7 @@ static int put_handler(TriteDB *db, Client *c) {
         // calculate the effective expiration of the key
         nd->ctime = nd->latime = (uint64_t) time(NULL);
 
-        struct ExpiringKey *ek = t_malloc(sizeof(*ek));
+        struct ExpiringKey *ek = tmalloc(sizeof(*ek));
         ek->nd = nd;
         ek->key = strdup((const char *) p->key);
         db->expiring_keys = list_push(db->expiring_keys, ek);
@@ -224,13 +225,13 @@ static int put_handler(TriteDB *db, Client *c) {
 
     set_ack_reply(c, OK);
 
-    DEBUG("PUT %s -> %s (s=%d m=%d)",
+    tdebug("PUT %s -> %s (s=%d m=%d)",
             p->key, p->val, db->data->size, memory_used());
 
-    t_free(p->header);
-    t_free(p->key);
-    t_free(p);
-    t_free(c->ptr);
+    tfree(p->header);
+    tfree(p->key);
+    tfree(p);
+    tfree(c->ptr);
 
     return OK;
 }
@@ -246,7 +247,7 @@ static int get_handler(TriteDB *db, Client *c) {
 
     if (found == false || val == NULL) {
         set_ack_reply(c, NOK);
-        DEBUG("GET %s -> not found (s=%d m=%d)",
+        tdebug("GET %s -> not found (s=%d m=%d)",
                 g->key, db->data->size, memory_used());
     } else {
 
@@ -259,7 +260,7 @@ static int get_handler(TriteDB *db, Client *c) {
         if (nd->ttl != -NOTTL && delta <= 0) {
             trie_delete(db->data, (const char *) g->key);
             set_ack_reply(c, NOK);
-            DEBUG("GET %s -> expired (s=%d m=%d)",
+            tdebug("GET %s -> expired (s=%d m=%d)",
                     g->key, db->data->size, memory_used());
         } else {
 
@@ -271,7 +272,7 @@ static int get_handler(TriteDB *db, Client *c) {
             Buffer *b = buffer_init(put->dcontent->header->size);
             pack_response(b, put, DATA_CONTENT);
 
-            DEBUG("GET %s -> %s (s=%d m=%d)",
+            tdebug("GET %s -> %s (s=%d m=%d)",
                     g->key, nd->data, db->data->size, memory_used());
 
             set_reply(c, b);
@@ -294,7 +295,7 @@ static int exp_handler(TriteDB *db, Client *c) {
 
     if (found == false || val == NULL) {
         set_ack_reply(c, NOK);
-        DEBUG("EXP %s -> not found (s=%d m=%d)",
+        tdebug("EXP %s -> not found (s=%d m=%d)",
                 e->key, db->data->size, memory_used());
     } else {
         struct NodeData *nd = val;
@@ -303,7 +304,7 @@ static int exp_handler(TriteDB *db, Client *c) {
         // It's a new TTL, so we update creation_time to now in order to
         // calculate the effective expiration of the key
         nd->ctime = nd->latime = (uint64_t) time(NULL);
-        struct ExpiringKey *ek = t_malloc(sizeof(*ek));
+        struct ExpiringKey *ek = tmalloc(sizeof(*ek));
         ek->nd = nd;
         ek->key = strdup((const char *) e->key);
 
@@ -315,7 +316,7 @@ static int exp_handler(TriteDB *db, Client *c) {
         db->expiring_keys->head = merge_sort(db->expiring_keys->head);
 
         set_ack_reply(c, OK);
-        DEBUG("EXPIRE %s -> %s in %d (s=%d m=%d)",
+        tdebug("EXPIRE %s -> %s in %d (s=%d m=%d)",
                 e->key, nd->data, e->ttl, db->data->size, memory_used());
     }
 
@@ -341,15 +342,15 @@ static int del_handler(TriteDB *db, Client *c) {
             // We are dealing with a wildcard, so we apply the deletion to all
             // keys below the wildcard
             trie_prefix_delete(db->data, (const char *) d->keys[i]->key);
-            DEBUG("DEL prefix %s (s=%d m=%d)", d->keys[i]->key, memory_used());
+            tdebug("DEL prefix %s (s=%d m=%d)", d->keys[i]->key, memory_used());
         } else {
             found = trie_delete(db->data, (const char *) d->keys[i]->key);
             if (found == false) {
                 code = NOK;
-                DEBUG("DEL %s failed (s=%d m=%d)",
+                tdebug("DEL %s failed (s=%d m=%d)",
                         d->keys[i]->key, db->data->size, memory_used());
             } else {
-                DEBUG("DEL %s (s=%d m=%d)",
+                tdebug("DEL %s (s=%d m=%d)",
                         d->keys[i]->key, db->data->size, memory_used());
             }
         }
@@ -379,13 +380,13 @@ static int inc_handler(TriteDB *db, Client *c) {
         found = trie_search(db->data, (const char *) inc->keys[i]->key, &val);
         if (found == false || !val) {
             code = NOK;
-            DEBUG("INC %s failed (s=%d m=%d)",
+            tdebug("INC %s failed (s=%d m=%d)",
                     inc->keys[i]->key, db->data->size, memory_used());
         } else {
             struct NodeData *nd = val;
             if (!is_integer(nd->data)) {
                 code = NOK;
-                DEBUG("INC %s failed, not an integer value (s=%d m=%d)",
+                tdebug("INC %s failed, not an integer value (s=%d m=%d)",
                         inc->keys[i]->key, db->data->size, memory_used());
             } else {
                 n = parse_int(nd->data);
@@ -394,9 +395,9 @@ static int inc_handler(TriteDB *db, Client *c) {
                 char tmp[12];  // max size in bytes
                 sprintf(tmp, "%d", n);  // XXX Unsafe
                 size_t len = strlen(tmp);
-                nd->data = t_realloc(nd->data, len + 1);
+                nd->data = trealloc(nd->data, len + 1);
                 strncpy(nd->data, tmp, len + 1);
-                DEBUG("INC %s (s=%d m=%d)",
+                tdebug("INC %s (s=%d m=%d)",
                         inc->keys[i]->key, db->data->size, memory_used());
             }
         }
@@ -426,13 +427,13 @@ static int dec_handler(TriteDB *db, Client *c) {
         found = trie_search(db->data, (const char *) dec->keys[i]->key, &val);
         if (found == false || !val) {
             code = NOK;
-            DEBUG("DEC %s failed (s=%d m=%d)",
+            tdebug("DEC %s failed (s=%d m=%d)",
                     dec->keys[i]->key, db->data->size, memory_used());
         } else {
             struct NodeData *nd = val;
             if (!is_integer(nd->data)) {
                 code = NOK;
-                DEBUG("DEC %s failed, not an integer value (s=%d m=%d)",
+                tdebug("DEC %s failed, not an integer value (s=%d m=%d)",
                         dec->keys[i]->key, db->data->size, memory_used());
             } else {
                 n = parse_int(nd->data);
@@ -441,9 +442,9 @@ static int dec_handler(TriteDB *db, Client *c) {
                 char tmp[12];
                 sprintf(tmp, "%d", n);
                 size_t len = strlen(tmp);
-                nd->data = t_realloc(nd->data, len + 1);
+                nd->data = trealloc(nd->data, len + 1);
                 strncpy(nd->data, tmp, len + 1);
-                DEBUG("DEC %s (s=%d m=%d)",
+                tdebug("DEC %s (s=%d m=%d)",
                         dec->keys[i]->key, db->data->size, memory_used());
             }
         }
@@ -519,7 +520,7 @@ static int request_handler(TriteDB *db, Client *client) {
 
     // If no handler is found, it must be an error case
     if (executed == 0)
-        ERROR("Unknown command");
+        terror("Unknown command");
 
     // Set reply handler as the current context handler
     client->ctx_handler = reply_handler;
@@ -586,7 +587,7 @@ static int accept_handler(TriteDB *db, Client *server) {
         return -1;
 
     /* Create a server structure to handle his context connection */
-    Client *client = t_malloc(sizeof(Client));
+    Client *client = tmalloc(sizeof(Client));
     if (!client) oom("creating client during accept");
 
     client->addr = strdup(ip_buff);
@@ -639,17 +640,17 @@ static void free_expiring_keys(List *ekeys) {
         if (h) {
             if (h->data) {
                 ek = h->data;
-                if (ek->key) t_free((char *) ek->key);
-                t_free(ek);
+                if (ek->key) tfree((char *) ek->key);
+                tfree(ek);
             }
-            t_free(h);
+            tfree(h);
         }
 
         h = tmp;
     }
 
     // free List structure pointer
-    t_free(ekeys);
+    tfree(ekeys);
 }
 
 /* Cycle through sorted list of expiring keys and remove those which are
@@ -688,11 +689,11 @@ static void expire_keys(TriteDB *db) {
             list_remove(db->expiring_keys, &delnode, compare_node);
         }
 
-        DEBUG("EXPIRE %s (s=%d m=%d)",
+        tdebug("EXPIRE %s (s=%d m=%d)",
                 ek->key, db->data->size, memory_used());
 
-        t_free((char *) ek->key);
-        t_free(ek);
+        tfree((char *) ek->key);
+        tfree(ek);
         ek = NULL;
 
         if (!db->expiring_keys->head || !db->expiring_keys->head->next)
@@ -707,7 +708,7 @@ static void expire_keys(TriteDB *db) {
    EPOLL fd, use the same way for clients or peer to distribute messages */
 static void *run_server(TriteDB *db) {
 
-    struct epoll_event *evs = t_malloc(sizeof(*evs) * MAX_EVENTS);
+    struct epoll_event *evs = tmalloc(sizeof(*evs) * MAX_EVENTS);
 
     if (!evs)
         oom("allocating events");
@@ -734,7 +735,16 @@ static void *run_server(TriteDB *db) {
 
     long int timers = 0;
 
-    while ((events = epoll_wait(db->epollfd, evs, MAX_EVENTS, timeout)) > -1) {
+    while (1) {
+
+        events = epoll_wait(db->epollfd, evs, MAX_EVENTS, timeout);
+
+        if (events < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            break;
+        }
 
         for (int i = 0; i < events; i++) {
 
@@ -745,7 +755,7 @@ static void *run_server(TriteDB *db) {
 
                 /* An error has occured on this fd, or the socket is not
                    ready for reading */
-                perror ("epoll_wait(2)");
+                perror("epoll_wait(2)");
                 close(evs[i].data.fd);
                 continue;
             } else if (evs[i].data.fd == config.run) {
@@ -754,7 +764,7 @@ static void *run_server(TriteDB *db) {
                 eventfd_t val;
                 eventfd_read(config.run, &val);
 
-                DEBUG("Stopping epoll loop.");
+                tdebug("Stopping epoll loop.");
 
                 goto exit;
 
@@ -770,10 +780,11 @@ static void *run_server(TriteDB *db) {
     }
 
 exit:
-    if (events == 0 && config.run == 0)
+
+    if (events <= 0 && config.run != 1)
         perror("epoll_wait(2) error");
 
-    t_free(evs);
+    tfree(evs);
 
     return NULL;
 }
@@ -798,6 +809,8 @@ int start_server(const char *addr, char *port, int node_fd) {
     config.epoll_timeout = -1;
     config.socket_family = INET;
     config.logpath = "/tmp/tritedb.log";
+
+    t_log_init(config.logpath);
 
     /* Main datastore reference */
     TriteDB tritedb;
@@ -843,14 +856,14 @@ int start_server(const char *addr, char *port, int node_fd) {
 
     tritedb.epollfd = epollfd;
 
-    INFO("TriteDB v0.1.0");
-    INFO("Starting server on %s:%s", addr, port);
+    tinfo("TriteDB v0.1.0");
+    tinfo("Starting server on %s:%s", addr, port);
 
     run_server(&tritedb);
 
 cleanup:
     /* Free all resources allocated */
-    list_free(tritedb.peers, 1);
+    listfree(tritedb.peers, 1);
     trie_free(tritedb.data);
 
     for (ListNode *cursor = tritedb.clients->head; cursor; cursor = cursor->next) {
@@ -858,9 +871,11 @@ cleanup:
         free_client(&c);
     }
 
-    list_free(tritedb.clients, 0);
+    listfree(tritedb.clients, 0);
     free_expiring_keys(tritedb.expiring_keys);
 
-    DEBUG("Bye\n");
+    t_log_close();
+
+    tdebug("Bye\n");
     return 0;
 }

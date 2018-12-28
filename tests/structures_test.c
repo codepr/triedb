@@ -191,7 +191,7 @@ static char *test_ringbuf_bulk_pop(void) {
 static char *test_list_init(void) {
     List *l = list_init();
     ASSERT("[! list_init]: list not created", l != NULL);
-    list_free(l, 0);
+    listfree(l, 0);
     return 0;
 }
 
@@ -199,10 +199,10 @@ static char *test_list_init(void) {
 /*
  * Tests the free feature of the list
  */
-static char *test_list_free(void) {
+static char *test_listfree(void) {
     List *l = list_init();
-    ASSERT("[! list_free]: list not created", l != NULL);
-    list_free(l, 0);
+    ASSERT("[! listfree]: list not created", l != NULL);
+    listfree(l, 0);
     return 0;
 }
 
@@ -215,7 +215,7 @@ static char *test_list_push(void) {
     char *x = "abc";
     list_push(l, x);
     ASSERT("[! list_push]: item not pushed in", l->len == 1);
-    list_free(l, 0);
+    listfree(l, 0);
     return 0;
 }
 
@@ -228,7 +228,7 @@ static char *test_list_push_back(void) {
     char *x = "abc";
     list_push_back(l, x);
     ASSERT("[! list_push_back]: item not pushed in", l->len == 1);
-    list_free(l, 0);
+    listfree(l, 0);
     return 0;
 }
 
@@ -367,7 +367,7 @@ char *structures_test() {
     RUN_TEST(test_ringbuf_bulk_push);
     RUN_TEST(test_ringbuf_bulk_pop);
     RUN_TEST(test_list_init);
-    RUN_TEST(test_list_free);
+    RUN_TEST(test_listfree);
     RUN_TEST(test_list_push);
     RUN_TEST(test_list_push_back);
     RUN_TEST(test_trie_new);

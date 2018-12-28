@@ -39,6 +39,25 @@
 
 static size_t memory = 0;
 
+static FILE *fh = NULL;
+
+
+void t_log_init(const char *file) {
+    assert(file);
+    fh = fopen(file, "a+");
+    if (!fh)
+        printf("%lu ! Unable to open file %s\n",
+                (unsigned long) time(NULL), file);
+}
+
+
+void t_log_close(void) {
+    if (fh) {
+        fflush(fh);
+        fclose(fh);
+    }
+}
+
 
 void t_log(const uint8_t level, const char *fmt, ...) {
 
@@ -63,19 +82,16 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     // Open two handler, one for standard output and a second for the
     // persistent log file
     FILE *fp = stdout;
-    FILE *fh = fopen(config.logpath, "a+");
-
-    if (!fh)
-        fprintf(fp, "%lu %c Unable to open file %s\n",
-                (unsigned long) time(NULL), mark[1], config.logpath);
 
     if (!fp) return;
 
     fprintf(fp, "%lu %c %s\n", (unsigned long) time(NULL), mark[level], msg);
-    fprintf(fh, "%lu %c %s\n", (unsigned long) time(NULL), mark[level], msg);
+    if (fh)
+        fprintf(fh, "%lu %c %s\n", (unsigned long) time(NULL), mark[level], msg);
 
     fflush(fp);
-    fflush(fh);
+    if (fh)
+        fflush(fh);
 }
 
 /* auxiliary function to check wether a string is an integer */
@@ -106,7 +122,7 @@ void oom(const char *msg) {
 }
 
 
-void *t_malloc(size_t size) {
+void *tmalloc(size_t size) {
     assert(size > 0);
     void *ptr = malloc(size);
     if (ptr)
@@ -124,14 +140,14 @@ void *t_calloc(size_t len, size_t size) {
 }
 
 
-void *t_realloc(void *ptr, size_t size) {
+void *trealloc(void *ptr, size_t size) {
 
     assert(size > 0);
 
     int curr_size = malloc_usable_size(ptr);
 
     if (!ptr)
-        return t_malloc(size);
+        return tmalloc(size);
 
     if (size == curr_size)
         return ptr;
@@ -145,7 +161,7 @@ void *t_realloc(void *ptr, size_t size) {
 }
 
 
-void t_free(void *ptr) {
+void tfree(void *ptr) {
     if (!ptr)
         return;
     memory -= malloc_usable_size(ptr);

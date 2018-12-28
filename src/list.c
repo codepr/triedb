@@ -42,7 +42,7 @@ static ListNode *list_node_remove(ListNode *, ListNode *, compare_func, int *);
  */
 List *list_init(void) {
 
-    List *l = t_malloc(sizeof(List));
+    List *l = tmalloc(sizeof(List));
 
     if (!l) {
         perror("malloc(3) failed");
@@ -60,7 +60,7 @@ List *list_init(void) {
 /*
  * Destroy a list, releasing all allocated memory
  */
-void list_free(List *l, int deep) {
+void listfree(List *l, int deep) {
 
     if (!l) return;
 
@@ -73,15 +73,15 @@ void list_free(List *l, int deep) {
         tmp = h->next;
 
         if (h) {
-            if (h->data && deep == 1) t_free(h->data);
-            t_free(h);
+            if (h->data && deep == 1) tfree(h->data);
+            tfree(h);
         }
 
         h = tmp;
     }
 
     // free List structure pointer
-    t_free(l);
+    tfree(l);
 }
 
 
@@ -101,7 +101,7 @@ List *list_attach(List *l, ListNode *head, unsigned long len) {
  */
 List *list_push(List *l, void *val) {
 
-    ListNode *new_node = t_malloc(sizeof(ListNode));
+    ListNode *new_node = tmalloc(sizeof(ListNode));
 
     if (!new_node) {
         perror("malloc(3) failed");
@@ -130,7 +130,7 @@ List *list_push(List *l, void *val) {
  */
 List *list_push_back(List *l, void *val) {
 
-    ListNode *new_node = t_malloc(sizeof(ListNode));
+    ListNode *new_node = tmalloc(sizeof(ListNode));
 
     if (!new_node) {
         perror("malloc(3) failed");
@@ -176,7 +176,7 @@ static ListNode *list_node_remove(ListNode *head,
     if (cmp(head, node) == 0) {
 
         ListNode *tmp_next = head->next;
-        t_free(head);
+        tfree(head);
         head = NULL;
 
         // Update remove counter

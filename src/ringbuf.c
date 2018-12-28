@@ -44,7 +44,7 @@ Ringbuffer *ringbuf_init(uint8_t *buffer, size_t size) {
 
     assert(buffer && size);
 
-    Ringbuffer *rbuf = t_malloc(sizeof(Ringbuffer));
+    Ringbuffer *rbuf = tmalloc(sizeof(Ringbuffer));
     assert(rbuf);
 
     rbuf->buffer = buffer;
@@ -69,7 +69,7 @@ void ringbuf_reset(Ringbuffer *rbuf) {
 
 void ringbuf_free(Ringbuffer *rbuf) {
     assert(rbuf);
-    t_free(rbuf);
+    tfree(rbuf);
     rbuf = NULL;
 }
 

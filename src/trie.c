@@ -50,11 +50,11 @@ static bool trie_is_free_node(TrieNode *node) {
 // Returns new trie node (initialized to NULL)
 TrieNode *trie_new_node(void *data, int16_t ttl) {
 
-    TrieNode *new_node = t_malloc(sizeof(*new_node));
+    TrieNode *new_node = tmalloc(sizeof(*new_node));
 
     if (new_node) {
 
-        struct NodeData *ndata = t_malloc(sizeof(*ndata));
+        struct NodeData *ndata = tmalloc(sizeof(*ndata));
 
         ndata->ttl = ttl;
         ndata->ctime = ndata->latime = (uint64_t) time(NULL);
@@ -72,7 +72,7 @@ TrieNode *trie_new_node(void *data, int16_t ttl) {
 
 // Returns new Trie, with a NULL root and 0 size
 Trie *trie_new(void) {
-    Trie *trie = t_malloc(sizeof(*trie));
+    Trie *trie = tmalloc(sizeof(*trie));
     trie->root = trie_new_node(NULL, -NOTTL);
     trie->size = 0;
     return trie;
@@ -276,11 +276,13 @@ void trie_node_free(TrieNode *node) {
 
         if (node->leaf)
             node->leaf = false;
+
         if (node->ndata && node->ndata->data) {
-            t_free(node->ndata->data);
-            t_free(node->ndata);
+            tfree(node->ndata->data);
+            tfree(node->ndata);
+
         } else if (node->ndata) {
-            t_free(node->ndata);
+            tfree(node->ndata);
         }
 
         for (int i = 0; i < ALPHABET_SIZE; i++) {
@@ -288,7 +290,7 @@ void trie_node_free(TrieNode *node) {
             node->children[i] = NULL;
         }
 
-        t_free(node);
+        tfree(node);
     }
 }
 
@@ -297,5 +299,5 @@ void trie_free(Trie *trie) {
     if (!trie)
         return;
     trie_node_free(trie->root);
-    t_free(trie);
+    tfree(trie);
 }

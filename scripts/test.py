@@ -1,5 +1,6 @@
-import argparse
+import time
 import struct
+import argparse
 from socket import socket, htons, htonl, ntohs, ntohl
 
 
@@ -11,6 +12,30 @@ NACK = 0x50
 EXP = 0x60
 INC = 0x70
 DEC = 0x80
+
+
+def send_putbulk(sock, n):
+    for i in range(n):
+        key, value = f'key{i}', f'value{i}'
+        keylen = len(key)
+        vallen = len(value)
+        put = struct.pack(
+            f'=BIHI{keylen}s{vallen}s',
+            PUT,
+            htonl(11 + keylen + vallen),
+            htons(keylen),
+            htonl(vallen),
+            key.encode(),
+            value.encode()
+        )
+        sock.send(put)
+        header = sock.recv(5)
+        code, total_len = struct.unpack('=BI', header)
+        total_len = ntohl(total_len)
+        payload = struct.unpack('=B', sock.recv(total_len - 5))
+        # time.sleep(.001)
+
+    return 'done'
 
 
 def send_put(sock, key, value, exp=None):
@@ -186,5 +211,7 @@ if __name__ == '__main__':
             print(send_inc(sock, tail.split(), False))
         elif head.lower() == 'pdel':
             print(send_del(sock, tail.split(), True))
+        elif head.lower() == 'putbulk':
+            print(send_putbulk(sock, int(tail)))
         else:
             print(send_del(sock, tail.split()))

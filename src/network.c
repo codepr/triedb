@@ -186,7 +186,7 @@ int accept_connection(int serversock) {
         return -1;
     }
 
-    DEBUG("Client connection from %s", ip_buff);
+    tdebug("Client connection from %s", ip_buff);
 
     return clientsock;
 }
@@ -272,10 +272,10 @@ int recvbytes(int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
 
 EpollLoop *epoll_loop_init(int max_events) {
 
-    EpollLoop *loop = t_malloc(sizeof(*loop));
+    EpollLoop *loop = tmalloc(sizeof(*loop));
 
     loop->max_events = max_events;
-    loop->events = t_malloc(sizeof(struct epoll_event) * max_events);
+    loop->events = tmalloc(sizeof(struct epoll_event) * max_events);
     loop->epollfd = epoll_create1(1024);
     loop->tasks = list_init();
 
@@ -288,16 +288,16 @@ EpollLoop *epoll_loop_init(int max_events) {
 
 
 void epoll_loop_free(EpollLoop *loop) {
-    t_free(loop->events);
-    list_free(loop->tasks, 0);
-    t_free(loop);
+    tfree(loop->events);
+    listfree(loop->tasks, 0);
+    tfree(loop);
 }
 
 
 void epoll_create_task(EpollLoop *loop,
         int fd, void (*task)(void *ptr), void *args) {
 
-    Task *t = t_malloc(sizeof(*t));
+    Task *t = tmalloc(sizeof(*t));
     t->fd = fd;
     t->type = TASK;
     t->args = args;
@@ -339,7 +339,7 @@ void epoll_create_periodic_task(EpollLoop *loop,
         return;
     }
 
-    Task *t = t_malloc(sizeof(*t));
+    Task *t = tmalloc(sizeof(*t));
     t->fd = timerfd;
     t->type = PERIODIC;
     t->args = args;
@@ -382,7 +382,7 @@ void epoll_loop_wait(EpollLoop *el) {
                 eventfd_t val;
                 eventfd_read(config.run, &val);
 
-                DEBUG("Stopping epoll el.");
+                tdebug("Stopping epoll el.");
 
                 break;
             }
