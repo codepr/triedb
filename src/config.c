@@ -121,7 +121,7 @@ bool config_load(const char *configpath) {
         // Ignore eventually incomplete configuration, but notify it
         if (line[0] == '\0') {
             // TODO make warning
-            terror("Incomplete configuration %s", key);
+            terror("Incomplete configuration '%s' at line %d", key, linenr);
             continue;
         }
 
