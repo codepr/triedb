@@ -136,6 +136,33 @@ tritedb/fast:
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/build
 .PHONY : tritedb/fast
 
+src/config.o: src/config.c.o
+
+.PHONY : src/config.o
+
+# target to build an object file
+src/config.c.o:
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/config.c.o
+.PHONY : src/config.c.o
+
+src/config.i: src/config.c.i
+
+.PHONY : src/config.i
+
+# target to preprocess a source file
+src/config.c.i:
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/config.c.i
+.PHONY : src/config.c.i
+
+src/config.s: src/config.c.s
+
+.PHONY : src/config.s
+
+# target to generate assembly for a file
+src/config.c.s:
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/config.c.s
+.PHONY : src/config.c.s
+
 src/list.o: src/list.c.o
 
 .PHONY : src/list.o
@@ -437,6 +464,9 @@ help:
 	@echo "... tritedb_test"
 	@echo "... rebuild_cache"
 	@echo "... tritedb"
+	@echo "... src/config.o"
+	@echo "... src/config.i"
+	@echo "... src/config.s"
 	@echo "... src/list.o"
 	@echo "... src/list.i"
 	@echo "... src/list.s"

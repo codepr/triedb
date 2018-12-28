@@ -50,7 +50,7 @@ void t_log(const uint8_t, const char *, ...);
 
 /* Memory management */
 void *tmalloc(size_t);
-void *t_calloc(size_t, size_t);
+void *tcalloc(size_t, size_t);
 void *trealloc(void *, size_t);
 void tfree(void *);
 

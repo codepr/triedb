@@ -40,6 +40,7 @@
 #include "list.h"
 #include "util.h"
 #include "server.h"
+#include "config.h"
 #include "ringbuf.h"
 #include "network.h"
 #include "protocol.h"

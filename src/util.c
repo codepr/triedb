@@ -34,7 +34,7 @@
 #include <stdarg.h>
 #include <malloc.h>
 #include "util.h"
-#include "server.h"
+#include "config.h"
 
 
 static size_t memory = 0;
@@ -131,7 +131,7 @@ void *tmalloc(size_t size) {
 }
 
 
-void *t_calloc(size_t len, size_t size) {
+void *tcalloc(size_t len, size_t size) {
     assert(len > 0 && size > 0);
     void *ptr = calloc(len, size);
     if (ptr)

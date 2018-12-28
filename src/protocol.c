@@ -221,7 +221,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             // Number of keys, or length of the Key array
             r->klcommand->len = read_uint16(b);
 
-            r->klcommand->keys = t_calloc(r->klcommand->len, sizeof(struct Key));
+            r->klcommand->keys = tcalloc(r->klcommand->len, sizeof(struct Key));
 
             for (int i = 0; i < r->klcommand->len; i++) {
                 struct Key *key = tmalloc(sizeof(*key));

@@ -25,57 +25,31 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/eventfd.h>
-#include "server.h"
-#include "network.h"
-#include "util.h"
-#include "config.h"
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include <stdint.h>
+#include <stdbool.h>
 
 
-void sigint_handler(int signum) {
-    /* for (int i = 0; i < EPOLL_WORKERS + 1; i++) { */
-    /*     eventfd_write(config.run, 1); */
-    /*     usleep(1500); */
-    /* } */
-    eventfd_write(config.run, 1);
-}
+struct config {
+    /* Eventfd to break the epoll_wait loop in case of signals */
+    uint8_t run;
+    /* Logging level, to be set by reading configuration */
+    uint8_t loglevel;
+    /* Epoll wait timeout, define even the number of times per second that the
+       system will check for expired keys */
+    int epoll_timeout;
+    /* Socket family (Unix domain or TCP) */
+    int socket_family;
+    /* Log file path */
+    const char *logpath;
+};
+
+extern struct config config;
 
 
-int main(int argc, char **argv) {
-    signal(SIGINT, sigint_handler);
-    signal(SIGTERM, sigint_handler);
-    char *addr = "127.0.0.1";
-    char *port = "9090";
-    int debug = 1;
-    int fd = -1;
-    int opt;
+bool config_load(const char *);
 
-    while ((opt = getopt(argc, argv, "a:p:vn:")) != -1) {
-        switch (opt) {
-            case 'a':
-                addr = optarg;
-                break;
-            case 'p':
-                port = optarg;
-                break;
-            case 'v':
-                debug = 1;
-                break;
-            default:
-                fprintf(stderr, "Usage: %s [-a addr] [-p port] [-v]\n", argv[0]);
-                exit(EXIT_FAILURE);
-        }
-    }
 
-    if (debug == 1) config.loglevel = DEBUG;
-    else config.loglevel = INFO;
-
-    config_load("/tmp/tritedb.conf");
-
-    start_server(addr, port, fd);
-    return 0;
-}
+#endif

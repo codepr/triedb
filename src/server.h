@@ -102,25 +102,25 @@ struct tritedb {
 };
 
 
-struct config {
-    /* Eventfd to break the epoll_wait loop in case of signals */
-    uint8_t run;
-    /* Logging level, to be set by reading configuration */
-    uint8_t loglevel;
-    /* Epoll wait timeout, define even the number of times per second that the
-       system will check for expired keys */
-    int epoll_timeout;
-    /* Socket family (Unix domain or TCP) */
-    int socket_family;
-    /* Log file path */
-    const char *logpath;
-};
+// struct config {
+//     /* Eventfd to break the epoll_wait loop in case of signals */
+//     uint8_t run;
+//     /* Logging level, to be set by reading configuration */
+//     uint8_t loglevel;
+//     /* Epoll wait timeout, define even the number of times per second that the
+//        system will check for expired keys */
+//     int epoll_timeout;
+//     /* Socket family (Unix domain or TCP) */
+//     int socket_family;
+//     /* Log file path */
+//     const char *logpath;
+// };
 
 
 int start_server(const char *, char *, int );
 
 
-extern struct config config;
+// extern struct config config;
 
 
 #endif
