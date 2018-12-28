@@ -142,6 +142,7 @@ src/config.o: src/config.c.o
 
 # target to build an object file
 src/config.c.o:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/config.c.o
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/config.c.o
 .PHONY : src/config.c.o
 
@@ -151,6 +152,7 @@ src/config.i: src/config.c.i
 
 # target to preprocess a source file
 src/config.c.i:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/config.c.i
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/config.c.i
 .PHONY : src/config.c.i
 
@@ -160,6 +162,7 @@ src/config.s: src/config.c.s
 
 # target to generate assembly for a file
 src/config.c.s:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/config.c.s
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/config.c.s
 .PHONY : src/config.c.s
 

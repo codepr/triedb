@@ -32,6 +32,7 @@
 #include <assert.h>
 #include "util.h"
 #include "config.h"
+#include "network.h"
 
 
 #define STREQ(s1, s2, len) strncasecmp(s1, s2, len) == 0 ? true : false
@@ -42,11 +43,17 @@ struct llevel {
     int loglevel;
 };
 
-static const struct llevel lmap[3] = {
+static const struct llevel lmap[4] = {
     {"DEBUG", DEBUG},
+    {"WARNING", WARNING},
     {"ERROR", ERROR},
     {"INFO", INFO}
 };
+
+
+// Reference to the config structure, could be refactored lately to a more
+// structured configuration
+struct config config;
 
 
 /* static void config_deploy(Trie *ctrie); */
@@ -60,8 +67,16 @@ static void add_config_value(const char *key, const char *value) {
             if (STREQ(lmap[i].lname, value, vlen) == true)
                 config.loglevel = lmap[i].loglevel;
         }
-    } else if (STREQ("logpath", key, klen) == true) {
+    } else if (STREQ("log_path", key, klen) == true) {
         config.logpath = value;
+    } else if (STREQ("unix_socket", key, klen) == true) {
+        config.socket_family = UNIX;
+        config.hostname = value;
+    } else if (STREQ("ip_address", key, klen) == true) {
+        config.socket_family = INET;
+        config.hostname = value;
+    } else if (STREQ("ip_port", key, klen) == true) {
+        config.port = value;
     }
 }
 

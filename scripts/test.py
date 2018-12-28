@@ -1,5 +1,7 @@
 import time
+import string
 import struct
+import random
 import argparse
 from socket import socket, htons, htonl, ntohs, ntohl
 
@@ -13,6 +15,30 @@ EXP = 0x60
 INC = 0x70
 DEC = 0x80
 COUNT = 0x90
+
+
+def send_putbulkrng(sock, n):
+
+    for i in range(n):
+        key, value = f'{"".join(random.choices(string.ascii_letters + string.digits, k=random.randint(1, 30)))}', f'value{i}'
+        keylen = len(key)
+        vallen = len(value)
+        put = struct.pack(
+            f'=BIHI{keylen}s{vallen}s',
+            PUT,
+            htonl(11 + keylen + vallen),
+            htons(keylen),
+            htonl(vallen),
+            key.encode(),
+            value.encode()
+        )
+        sock.send(put)
+        header = sock.recv(5)
+        code, total_len = struct.unpack('=BI', header)
+        total_len = ntohl(total_len)
+        payload = struct.unpack('=B', sock.recv(total_len - 5))
+
+    return 'done'
 
 
 def send_putbulk(sock, n):
@@ -235,6 +261,8 @@ if __name__ == '__main__':
             print(send_del(sock, tail.split(), True))
         elif head.lower() == 'putbulk':
             print(send_putbulk(sock, int(tail)))
+        elif head.lower() == 'putbulkrng':
+            print(send_putbulkrng(sock, int(tail)))
         elif head.lower() == 'count':
             print(send_count(sock, tail))
         else:

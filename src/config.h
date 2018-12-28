@@ -32,7 +32,12 @@
 #include <stdbool.h>
 
 
+#define VERSION "0.2.2"
+
+
 struct config {
+    /* TriteDB version <MAJOR.MINOR.PATCH> */
+    const char *version;
     /* Eventfd to break the epoll_wait loop in case of signals */
     uint8_t run;
     /* Logging level, to be set by reading configuration */
@@ -44,6 +49,11 @@ struct config {
     int socket_family;
     /* Log file path */
     const char *logpath;
+    /* Hostname to listen on */
+    const char *hostname;
+    /* Port to open while listening, only if socket_family is INET,
+     * otherwise it's ignored */
+    const char *port;
 };
 
 extern struct config config;

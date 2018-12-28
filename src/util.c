@@ -77,7 +77,7 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     msg[MAX_LOG_SIZE + 3] = '\0';
 
     // Distinguish message level prefix
-    const char *mark = "i*!#";
+    const char *mark = "#i*!";
 
     // Open two handler, one for standard output and a second for the
     // persistent log file
@@ -169,6 +169,6 @@ void tfree(void *ptr) {
 }
 
 
-int memory_used(void) {
+size_t memory_used(void) {
     return memory;
 }

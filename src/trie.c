@@ -125,6 +125,10 @@ static int trie_node_insert(TrieNode *root,
     if (mod)
         rc = 1;
 
+    // Clear out if already taken
+    if (cursor->leaf == true)
+        tfree(cursor->ndata->data);
+
     // mark last node as leaf
     cursor->leaf = true;
     cursor->ndata->data = data;

@@ -1,7 +1,8 @@
-0.2.2 - 2018/12/28
+0.2.3 - 2018/12/28
 
 - Add basic configuration handling
 - Add COUNT command, prefix command, return the number of keys matching a given prefix
+- Fixed bug in insertion causing memory leaks while updating keys
 
 
 0.2.0 - 2018/12/27

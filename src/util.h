@@ -54,7 +54,7 @@ void *tcalloc(size_t, size_t);
 void *trealloc(void *, size_t);
 void tfree(void *);
 
-int memory_used(void);
+size_t memory_used(void);
 
 
 #define log(...) t_log( __VA_ARGS__ )

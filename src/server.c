@@ -55,11 +55,6 @@
 } while (0)
 
 
-// Reference to the config structure, could be refactored lately to a more
-// structured configuration
-struct config config;
-
-
 static void free_reply(Reply **);
 static void free_client(Client **);
 static int reply_handler(TriteDB *, Client *);
@@ -245,8 +240,15 @@ static int get_handler(TriteDB *db, Client *c) {
     KeyCommand *g = ((Request *) c->ptr)->kcommand;
     void *val = NULL;
 
+    float start_time = (float) clock() / CLOCKS_PER_SEC;
+
     // Test for the presence of the key in the trie structure
     bool found = trie_search(db->data, (const char *) g->key, &val);
+
+    float end_time = (float)clock() / CLOCKS_PER_SEC;
+
+    // ms of execution
+    float time_elapsed = (end_time - start_time) * 1000.0;
 
     if (found == false || val == NULL) {
         set_ack_reply(c, NOK);
@@ -275,8 +277,8 @@ static int get_handler(TriteDB *db, Client *c) {
             Buffer *b = buffer_init(put->dcontent->header->size);
             pack_response(b, put, DATA_CONTENT);
 
-            tdebug("GET %s -> %s (s=%d m=%d)",
-                    g->key, nd->data, db->data->size, memory_used());
+            tdebug("GET %s -> %s in %f ms (s=%d m=%d)",
+                    g->key, nd->data, time_elapsed, db->data->size, memory_used());
 
             set_reply(c, b);
             free_response(put, DATA_CONTENT);
@@ -342,10 +344,17 @@ static int del_handler(TriteDB *db, Client *c) {
         // a prefix wildcard (*) and we'll remove all keys below it in the trie
         if (d->keys[i]->is_prefix == 1) {
 
+            float start_time = (float) clock() / CLOCKS_PER_SEC;
             // We are dealing with a wildcard, so we apply the deletion to all
             // keys below the wildcard
             trie_prefix_delete(db->data, (const char *) d->keys[i]->key);
-            tdebug("DEL prefix %s (s=%d m=%d)", d->keys[i]->key, memory_used());
+
+            float end_time = (float) clock() / CLOCKS_PER_SEC;
+
+            // ms of execution
+            float time_elapsed = (end_time - start_time) * 1000.0;
+            tdebug("DEL prefix %s in %d ms (s=%d m=%d)",
+                    d->keys[i]->key, time_elapsed, memory_used());
         } else {
             found = trie_delete(db->data, (const char *) d->keys[i]->key);
             if (found == false) {
@@ -474,9 +483,16 @@ static int count_handler(TriteDB *db, Client *c) {
 
     } else {
 
+        float start_time = (float) clock() / CLOCKS_PER_SEC;
+
         // Get the size of each key below the requested one, glob operation
         count = trie_prefix_count(db->data, (const char *) cnt->key);
-        tdebug("COUNT %d (s=%d m=%d)", count, db->data->size, memory_used());
+        float end_time = (float)clock() / CLOCKS_PER_SEC;
+
+        // ms of execution
+        float time_elapsed = (end_time - start_time) * 1000.0;
+        tdebug("COUNT %d in %f ms (s=%d m=%d)",
+                count, time_elapsed, db->data->size, memory_used());
     }
 
     Response *res = make_valuecontent_response(count);
@@ -838,6 +854,7 @@ exit:
 int start_server(const char *addr, char *port, int node_fd) {
 
     /* Initialize config server object */
+    config.version = VERSION;
     config.loglevel = DEBUG;
     config.run = eventfd(0, EFD_NONBLOCK);
     config.epoll_timeout = -1;
@@ -890,7 +907,7 @@ int start_server(const char *addr, char *port, int node_fd) {
 
     tritedb.epollfd = epollfd;
 
-    tinfo("TriteDB v0.1.0");
+    tinfo("TriteDB v%s", config.version);
     tinfo("Starting server on %s:%s", addr, port);
 
     run_server(&tritedb);
