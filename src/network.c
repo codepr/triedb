@@ -41,7 +41,6 @@
 #include <sys/socket.h>
 #include <sys/eventfd.h>
 #include "util.h"
-#include "server.h"
 #include "config.h"
 #include "network.h"
 

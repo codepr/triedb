@@ -46,7 +46,7 @@ void t_log_init(const char *file) {
     assert(file);
     fh = fopen(file, "a+");
     if (!fh)
-        printf("%lu ! Unable to open file %s\n",
+        printf("%lu * WARNING: Unable to open file %s\n",
                 (unsigned long) time(NULL), file);
 }
 
@@ -66,7 +66,7 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     va_list ap;
     char msg[MAX_LOG_SIZE + 4];
 
-    if (level > config.loglevel) return;
+    if (level < config.loglevel) return;
 
     va_start(ap, fmt);
     vsnprintf(msg, sizeof(msg), fmt, ap);
@@ -77,7 +77,7 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     msg[MAX_LOG_SIZE + 3] = '\0';
 
     // Distinguish message level prefix
-    const char *mark = "I!#";
+    const char *mark = "i*!#";
 
     // Open two handler, one for standard output and a second for the
     // persistent log file

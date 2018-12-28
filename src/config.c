@@ -87,7 +87,7 @@ bool config_load(const char *configpath) {
     FILE *fh = fopen(configpath, "r");
 
     if (!fh) {
-        terror("Unable to open conf file %s", configpath);
+        twarning("WARNING: Unable to open conf file %s", configpath);
         return false;
     }
 
@@ -121,7 +121,7 @@ bool config_load(const char *configpath) {
         // Ignore eventually incomplete configuration, but notify it
         if (line[0] == '\0') {
             // TODO make warning
-            terror("Incomplete configuration '%s' at line %d", key, linenr);
+            twarning("Incomplete configuration '%s' at line %d", key, linenr);
             continue;
         }
 

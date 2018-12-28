@@ -47,6 +47,25 @@ static bool trie_is_free_node(TrieNode *node) {
     return true;
 }
 
+
+static int trie_node_count(TrieNode *node) {
+
+    if (trie_is_free_node(node))
+        return 1;
+
+    int count = 0;
+
+    for (int i = 0; i < ALPHABET_SIZE; i++)
+        if (node->children[i])
+            count += trie_node_count(node->children[i]);
+
+    if (node->leaf)
+        count++;
+
+    return count;
+}
+
+
 // Returns new trie node (initialized to NULL)
 TrieNode *trie_new_node(void *data, int16_t ttl) {
 
@@ -238,6 +257,8 @@ bool trie_search(Trie *trie, const char *key, void **ret) {
 */
 void trie_prefix_delete(Trie *trie, const char *prefix) {
 
+    assert(trie && prefix);
+
     int index = 0;
     const char *k = prefix;
 
@@ -267,6 +288,41 @@ void trie_prefix_delete(Trie *trie, const char *prefix) {
     // as a leaf and delete the prefix key as well
     cursor->leaf = true;
     trie_delete(trie, prefix);
+}
+
+
+int trie_prefix_count(Trie *trie, const char *prefix) {
+
+    assert(trie && prefix);
+
+    int count = 0;
+    int index = 0;
+    const char *k = prefix;
+
+    TrieNode *cursor = trie->root;
+
+    // Move to the end of the prefix first
+    for (char c = *k; c != '\0'; c = *(++k)) {
+
+        index = INDEX(c);
+
+        // No key with the full prefix in the trie
+        if (!cursor->children[index])
+            return count;
+
+        cursor = cursor->children[index];
+    }
+
+    // Counting the prefix itself as the first match if it is a leaf
+    if (cursor->leaf == true)
+        count++;
+
+    // Check all possible sub-paths and add to count where there is a leaf
+    for (int i = 0; i < ALPHABET_SIZE; i++)
+        if (cursor->children[i])
+            count += trie_node_count(cursor->children[i]);
+
+    return count;
 }
 
 

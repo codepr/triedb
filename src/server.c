@@ -73,6 +73,7 @@ static int del_handler(TriteDB *, Client *);
 static int exp_handler(TriteDB *, Client *);
 static int inc_handler(TriteDB *, Client *);
 static int dec_handler(TriteDB *, Client *);
+static int count_handler(TriteDB *, Client *);
 
 // Fixed size of the header of each packet, consists of essentially the first
 // 5 bytes containing respectively the type of packet (PUT, GET, DEL etc ...)
@@ -86,7 +87,8 @@ static struct command commands_map[] = {
     {DEL, del_handler},
     {EXP, exp_handler},
     {INC, inc_handler},
-    {DEC, dec_handler}
+    {DEC, dec_handler},
+    {COUNT, count_handler}
 };
 
 
@@ -453,6 +455,37 @@ static int dec_handler(TriteDB *db, Client *c) {
 
     set_ack_reply(c, code);
     free_request(c->ptr, LIST_COMMAND);
+
+    return OK;
+}
+
+
+static int count_handler(TriteDB *db, Client *c) {
+
+    int count = 0;
+    KeyCommand *cnt = ((Request *) c->ptr)->kcommand;
+
+    if (!cnt->key) {
+
+        // Get size of the entire trie
+        tdebug("COUNT %d (s=%d m=%d)",
+                db->data->size, db->data->size, memory_used());
+        count = db->data->size;
+
+    } else {
+
+        // Get the size of each key below the requested one, glob operation
+        count = trie_prefix_count(db->data, (const char *) cnt->key);
+        tdebug("COUNT %d (s=%d m=%d)", count, db->data->size, memory_used());
+    }
+
+    Response *res = make_valuecontent_response(count);
+    Buffer *b = buffer_init(res->vcontent->header->size);
+    pack_response(b, res, VALUE_CONTENT);
+    set_reply(c, b);
+    free_response(res, VALUE_CONTENT);
+
+    free_request(c->ptr, KEY_COMMAND);
 
     return OK;
 }

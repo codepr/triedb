@@ -12,6 +12,7 @@ NACK = 0x50
 EXP = 0x60
 INC = 0x70
 DEC = 0x80
+COUNT = 0x90
 
 
 def send_putbulk(sock, n):
@@ -33,7 +34,6 @@ def send_putbulk(sock, n):
         code, total_len = struct.unpack('=BI', header)
         total_len = ntohl(total_len)
         payload = struct.unpack('=B', sock.recv(total_len - 5))
-        # time.sleep(.001)
 
     return 'done'
 
@@ -188,6 +188,28 @@ def send_inc(sock, keys, inc=True):
     }
 
 
+def send_count(sock, key):
+    fmt = f'=BIH{len(key)}s'
+    count = struct.pack(
+        fmt,
+        COUNT,
+        htonl(7 + len(key)),
+        htons(len(key)),
+        key.encode()
+    )
+    sock.send(count)
+    header = sock.recv(5)
+    code, total_len = struct.unpack('=BI', header)
+    total_len = ntohl(total_len)
+    payload = ntohl(struct.unpack('=I', sock.recv(total_len - 5))[0])
+
+    return {
+        'code': code,
+        'total_len': total_len,
+        'payload': payload
+    }
+
+
 if __name__ == '__main__':
     sock = socket()
     sock.connect(('127.0.0.1', 9090))
@@ -213,5 +235,7 @@ if __name__ == '__main__':
             print(send_del(sock, tail.split(), True))
         elif head.lower() == 'putbulk':
             print(send_putbulk(sock, int(tail)))
+        elif head.lower() == 'count':
+            print(send_count(sock, tail))
         else:
             print(send_del(sock, tail.split()))

@@ -157,7 +157,8 @@ int opcode_req_map[7][2] = {
     {DEL, LIST_COMMAND},
     {EXP, KEY_COMMAND},
     {INC, KEY_COMMAND},
-    {DEC, KEY_COMMAND}
+    {DEC, KEY_COMMAND},
+    {COUNT, KEY_COMMAND}
 };
 
 /* Main unpacking function, to translates bytes received from clients to a

@@ -105,4 +105,8 @@ void display(TrieNode *, char [], int);
 /* Remove all keys matching a given prefix in a less than linear time complexity */
 void trie_prefix_delete(Trie *, const char *);
 
+/* Count all keys matching a give prefix in a less than linear time complexity */
+int trie_prefix_count(Trie *, const char *);
+
+
 #endif

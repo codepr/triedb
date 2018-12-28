@@ -56,6 +56,7 @@
 #define EXP    0x60
 #define INC    0x70
 #define DEC    0x80
+#define COUNT  0x90
 
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
