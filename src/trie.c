@@ -80,7 +80,7 @@ static int trie_node_count(TrieNode *node) {
         if (node->children[i])
             count += trie_node_count(node->children[i]);
 
-    if (node->leaf)
+    if (node->ndata)
         count++;
 
     return count;
@@ -88,20 +88,13 @@ static int trie_node_count(TrieNode *node) {
 
 
 // Returns new trie node (initialized to NULL)
-TrieNode *trie_new_node(void *data, int16_t ttl) {
+TrieNode *trie_new_node(void) {
 
     TrieNode *new_node = tmalloc(sizeof(*new_node));
 
     if (new_node) {
 
-        struct NodeData *ndata = tmalloc(sizeof(*ndata));
-
-        ndata->ttl = ttl;
-        ndata->ctime = ndata->latime = (uint64_t) time(NULL);
-        ndata->data = data;
-
-        new_node->leaf = false;
-        new_node->ndata = ndata;
+        new_node->ndata = NULL;
 
         for (int i = 0; i < ALPHABET_SIZE; i++)
             new_node->children[i] = NULL;
@@ -113,7 +106,7 @@ TrieNode *trie_new_node(void *data, int16_t ttl) {
 // Returns new Trie, with a NULL root and 0 size
 Trie *trie_new(void) {
     Trie *trie = tmalloc(sizeof(*trie));
-    trie->root = trie_new_node(NULL, -NOTTL);
+    trie->root = trie_new_node();
     trie->size = 0;
     return trie;
 }
@@ -136,7 +129,7 @@ static int trie_node_insert(TrieNode *root,
     for (char x = *k; x != '\0'; x = *(++k)) {
         index = INDEX(x);
         if (!cursor->children[index]) {
-            cursor->children[index] = trie_new_node(NULL, ttl);
+            cursor->children[index] = trie_new_node();
             mod = true;
         }
 
@@ -147,13 +140,13 @@ static int trie_node_insert(TrieNode *root,
         rc = 1;
 
     // Clear out if already taken
-    if (cursor->leaf == true)
+    if (cursor->ndata)
         tfree(cursor->ndata->data);
     else
         rc = 1;
 
     // mark last node as leaf
-    cursor->leaf = true;
+    cursor->ndata = tmalloc(sizeof(struct NodeData));
     cursor->ndata->data = data;
     cursor->ndata->ttl = ttl;
 
@@ -170,9 +163,7 @@ static bool trie_node_recursive_delete(TrieNode *node,
 
     // Base case
     if (*key == '\0') {
-        if (node->leaf) {
-            // Unmark leaf node
-            node->leaf = false;
+        if (node->ndata) {
             // Update trie size
             (*size)--;
             // Update found flag
@@ -186,12 +177,13 @@ static bool trie_node_recursive_delete(TrieNode *node,
         int index = INDEX(*key);
 
         if (trie_node_recursive_delete(node->children[index], key + 1, size, found)) {
+
             // last node marked, delete it
             trie_node_free(node->children[index]);
             node->children[index] = NULL;
 
             // recursively climb up, and delete eligible nodes
-            return (!node->leaf && trie_is_free_node(node));
+            return (!node->ndata && trie_is_free_node(node));
         }
     }
 
@@ -204,7 +196,7 @@ void display(TrieNode* root, char str[], int level) {
     // If node is leaf node, it indiicates end
     // of string, so a null charcter is added
     // and string is displayed
-    if (root->leaf) {
+    if (root->ndata) {
         str[level] = '\0';
         printf("%s\n", str);
     }
@@ -228,7 +220,7 @@ static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
     // Walk the trie till the end of the key
     TrieNode *cursor = trie_node_find(root, key);
 
-    *ret = (cursor && cursor->leaf) ? cursor->ndata : NULL;
+    *ret = (cursor && cursor->ndata) ? cursor->ndata : NULL;
 
     // No complete key found
     if (!*ret)
@@ -294,7 +286,6 @@ void trie_prefix_delete(Trie *trie, const char *prefix) {
 
     // Set the current node (the one storing the last character of the prefix)
     // as a leaf and delete the prefix key as well
-    cursor->leaf = true;
     trie_delete(trie, prefix);
 }
 
@@ -328,7 +319,7 @@ static void trie_node_integer_mod(TrieNode *node, int value, bool inc) {
         if (node->children[i])
             trie_node_count(node->children[i]);
 
-    if (node->leaf && is_integer(node->ndata->data)) {
+    if (node->ndata && is_integer(node->ndata->data)) {
         int n = parse_int(node->ndata->data);
         n = inc == true ? n + 1 : n - 1;
         // Check for realloc if the new value is "larger" then previous
@@ -377,9 +368,6 @@ void trie_prefix_dec(Trie *trie, const char *prefix) {
 void trie_node_free(TrieNode *node) {
 
     if (node) {
-
-        if (node->leaf)
-            node->leaf = false;
 
         if (node->ndata && node->ndata->data) {
             tfree(node->ndata->data);

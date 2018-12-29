@@ -864,17 +864,7 @@ exit:
  * domain socket, addr represents the path on the FS where the socket fd is
  * located, port will be ignored.
  */
-int start_server(const char *addr, char *port, int node_fd) {
-
-    /* Initialize config server object */
-    config.version = VERSION;
-    config.loglevel = DEBUG;
-    config.run = eventfd(0, EFD_NONBLOCK);
-    config.epoll_timeout = -1;
-    config.socket_family = INET;
-    config.logpath = "/tmp/tritedb.log";
-
-    t_log_init(config.logpath);
+int start_server(const char *addr, const char *port, int node_fd) {
 
     /* Main datastore reference */
     TriteDB tritedb;
@@ -921,7 +911,10 @@ int start_server(const char *addr, char *port, int node_fd) {
     tritedb.epollfd = epollfd;
 
     tinfo("TriteDB v%s", config.version);
-    tinfo("Starting server on %s:%s", addr, port);
+    if (config.socket_family == UNIX)
+        tinfo("Starting server on %s", addr);
+    else
+        tinfo("Starting server on %s:%s", addr, port);
 
     run_server(&tritedb);
 

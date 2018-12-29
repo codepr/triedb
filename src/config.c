@@ -30,6 +30,7 @@
 #include <string.h>
 #include <strings.h>
 #include <assert.h>
+#include <sys/eventfd.h>
 #include "util.h"
 #include "config.h"
 #include "network.h"
@@ -68,15 +69,18 @@ static void add_config_value(const char *key, const char *value) {
                 config.loglevel = lmap[i].loglevel;
         }
     } else if (STREQ("log_path", key, klen) == true) {
-        config.logpath = value;
+        strcpy(config.logpath, value);
     } else if (STREQ("unix_socket", key, klen) == true) {
         config.socket_family = UNIX;
-        config.hostname = value;
+        strcpy(config.hostname, value);
+    } else if (STREQ("unix_socket", key, klen) == true) {
     } else if (STREQ("ip_address", key, klen) == true) {
         config.socket_family = INET;
-        config.hostname = value;
+        strcpy(config.hostname, value);
+    } else if (STREQ("unix_socket", key, klen) == true) {
     } else if (STREQ("ip_port", key, klen) == true) {
-        config.port = value;
+        strcpy(config.port, value);
+    } else if (STREQ("unix_socket", key, klen) == true) {
     }
 }
 
@@ -146,8 +150,42 @@ bool config_load(const char *configpath) {
 
         // At this point we have key -> value ready to be ingested on the
         // global configuration object
-        add_config_value(key, strdup(value));
+        add_config_value(key, value);
     }
 
     return true;
+}
+
+
+void config_set_default(void) {
+    config.version = VERSION;
+    config.socket_family = DEFAULT_SOCKET_FAMILY;
+    config.loglevel = DEFAULT_LOG_LEVEL;
+    strcpy(config.logpath, DEFAULT_LOG_PATH);
+    strcpy(config.hostname, DEFAULT_HOSTNAME);
+    strcpy(config.port, DEFAULT_PORT);
+    config.epoll_timeout = -1;
+    config.run = eventfd(0, EFD_NONBLOCK);
+}
+
+
+void config_print(void) {
+    if (config.loglevel < WARNING) {
+        const char *sfamily = config.socket_family == UNIX ? "Unix" : "Tcp";
+        const char *llevel = NULL;
+        for (int i = 0; i < 4; i++) {
+            if (lmap[i].loglevel == config.loglevel)
+                llevel = lmap[i].lname;
+        }
+        tinfo("Socket family: %s", sfamily);
+        if (config.socket_family == UNIX) {
+            tinfo("\tUnix socket: %s", config.hostname);
+        } else {
+            tinfo("\tAddress: %s", config.hostname);
+            tinfo("\tPort: %s", config.port);
+        }
+        tinfo("Logging:");
+        tinfo("\tlevel: %s", llevel);
+        tinfo("\tlogpath: %s", config.logpath);
+    }
 }

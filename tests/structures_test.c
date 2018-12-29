@@ -248,7 +248,7 @@ static char *test_trie_new(void) {
  * Tests the creation of a new node
  */
 static char *test_trie_new_node(void) {
-    struct TrieNode *node = trie_new_node(NULL, -NOTTL);
+    struct TrieNode *node = trie_new_node();
     ASSERT("[! trie_new_node]: TrieNode not created", node != NULL);
     trie_node_free(node);
     return 0;

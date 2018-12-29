@@ -57,8 +57,6 @@ struct NodeData {
 struct TrieNode {
 	struct TrieNode *children[ALPHABET_SIZE];
     struct NodeData *ndata;
- 	/* leaf is true if the node represents end of a word */
-	bool leaf;
 };
 
 
@@ -69,7 +67,7 @@ struct Trie {
 };
 
 // Returns new trie node (initialized to NULLs)
-struct TrieNode *trie_new_node(void *, int16_t);
+struct TrieNode *trie_new_node(void);
 
 struct Trie *trie_new(void);
 

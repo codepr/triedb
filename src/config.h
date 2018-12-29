@@ -31,8 +31,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// DEFAULT PARAMETERS
 
-#define VERSION "0.2.4"
+#define VERSION                 "0.2.4"
+#define DEFAULT_SOCKET_FAMILY   INET
+#define DEFAULT_LOG_LEVEL       INFO
+#define DEFAULT_LOG_PATH        "/tmp/tritedb.log"
+#define DEFAULT_HOSTNAME        "127.0.0.1"
+#define DEFAULT_PORT            "9090"
 
 
 struct config {
@@ -48,17 +54,19 @@ struct config {
     /* Socket family (Unix domain or TCP) */
     int socket_family;
     /* Log file path */
-    const char *logpath;
+    char logpath[0xFF];
     /* Hostname to listen on */
-    const char *hostname;
+    char hostname[0xFF];
     /* Port to open while listening, only if socket_family is INET,
      * otherwise it's ignored */
-    const char *port;
+    char port[0xFF];
 };
 
 extern struct config config;
 
 
+void config_set_default(void);
+void config_print(void);
 bool config_load(const char *);
 
 

@@ -36,31 +36,35 @@
 #include "config.h"
 
 
+// Stops epoll_wait loops by sending an event
 void sigint_handler(int signum) {
-    /* for (int i = 0; i < EPOLL_WORKERS + 1; i++) { */
-    /*     eventfd_write(config.run, 1); */
-    /*     usleep(1500); */
-    /* } */
     eventfd_write(config.run, 1);
 }
 
 
 int main(int argc, char **argv) {
+
     signal(SIGINT, sigint_handler);
     signal(SIGTERM, sigint_handler);
-    char *addr = "127.0.0.1";
-    char *port = "9090";
-    int debug = 1;
+
+    char *addr = DEFAULT_HOSTNAME;
+    char *port = DEFAULT_PORT;
+    int debug = 0;
     int fd = -1;
     int opt;
+
+    // Set default configuration
+    config_set_default();
 
     while ((opt = getopt(argc, argv, "a:p:vn:")) != -1) {
         switch (opt) {
             case 'a':
                 addr = optarg;
+                strcpy(config.hostname, addr);
                 break;
             case 'p':
                 port = optarg;
+                strcpy(config.port, port);
                 break;
             case 'v':
                 debug = 1;
@@ -71,11 +75,20 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Override default DEBUG mode
     if (debug == 1) config.loglevel = DEBUG;
     else config.loglevel = INFO;
 
+    // Try to load a configuration, if found
     config_load("/tmp/tritedb.conf");
 
-    start_server(addr, port, fd);
+    // Initialize logging
+    t_log_init(config.logpath);
+
+    config_print();
+
+    // Start
+    start_server(config.hostname, config.port, fd);
+
     return 0;
 }

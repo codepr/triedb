@@ -102,7 +102,7 @@ struct tritedb {
 };
 
 
-int start_server(const char *, char *, int );
+int start_server(const char *, const char *, int );
 
 
 #endif

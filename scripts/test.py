@@ -1,9 +1,10 @@
+import sys
 import time
 import string
 import struct
 import random
 import argparse
-from socket import socket, htons, htonl, ntohs, ntohl
+from socket import socket, htons, htonl, ntohs, ntohl, AF_UNIX
 
 
 PUT = 0x10
@@ -237,8 +238,12 @@ def send_count(sock, key):
 
 
 if __name__ == '__main__':
-    sock = socket()
-    sock.connect(('127.0.0.1', 9090))
+    if sys.argv[1] and sys.argv[1] == 'local':
+        sock = socket(AF_UNIX)
+        sock.connect('/tmp/tritedb.sock')
+    else:
+        sock = socket()
+        sock.connect(('127.0.0.1', 9090))
     while True:
         command = input("> ")
         head, tail = command.split(' ', 1)
