@@ -105,8 +105,18 @@ void display(TrieNode *, char [], int);
 /* Remove all keys matching a given prefix in a less than linear time complexity */
 void trie_prefix_delete(Trie *, const char *);
 
-/* Count all keys matching a give prefix in a less than linear time complexity */
+/* Count all keys matching a given prefix in a less than linear time complexity */
 int trie_prefix_count(Trie *, const char *);
+
+/* Integer modifying function. Check if a subset of the trie matching a given
+ * prefix contains integer and increment it by a value
+ */
+void trie_prefix_inc(Trie *, const char *);
+
+/* Integer modifying function. Check if a subset of the trie matching a given
+ * prefix contains integer and decrement it by a value
+ */
+void trie_prefix_dec(Trie *, const char *);
 
 
 #endif

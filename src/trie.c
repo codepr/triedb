@@ -48,6 +48,27 @@ static bool trie_is_free_node(TrieNode *node) {
 }
 
 
+static TrieNode *trie_node_find(TrieNode *node, const char *prefix) {
+
+    int index = 0;
+    const char *k = prefix;
+
+    // Move to the end of the prefix first
+    for (char c = *k; c != '\0'; c = *(++k)) {
+
+        index = INDEX(c);
+
+        // No key with the full prefix in the trie
+        if (!node->children[index])
+            return NULL;
+
+        node = node->children[index];
+    }
+
+    return node;
+}
+
+
 static int trie_node_count(TrieNode *node) {
 
     if (trie_is_free_node(node))
@@ -128,6 +149,8 @@ static int trie_node_insert(TrieNode *root,
     // Clear out if already taken
     if (cursor->leaf == true)
         tfree(cursor->ndata->data);
+    else
+        rc = 1;
 
     // mark last node as leaf
     cursor->leaf = true;
@@ -142,32 +165,33 @@ static int trie_node_insert(TrieNode *root,
 static bool trie_node_recursive_delete(TrieNode *node,
         const char *key, size_t *size, bool *found) {
 
-    if (node) {
-        // Base case
-        if (*key == '\0') {
-            if (node->leaf) {
-                // Unmark leaf node
-                node->leaf = false;
-                // Update trie size
-                (*size)--;
-                // Update found flag
-                *found = true;
+    if (!node)
+        return false;
 
-                // If empty, node to be deleted
-                return trie_is_free_node(node);
-            }
-        } else {
+    // Base case
+    if (*key == '\0') {
+        if (node->leaf) {
+            // Unmark leaf node
+            node->leaf = false;
+            // Update trie size
+            (*size)--;
+            // Update found flag
+            *found = true;
 
-            int index = INDEX(*key);
+            // If empty, node to be deleted
+            return trie_is_free_node(node);
+        }
+    } else {
 
-            if (trie_node_recursive_delete(node->children[index], key + 1, size, found)) {
-                // last node marked, delete it
-                trie_node_free(node->children[index]);
-                node->children[index] = NULL;
+        int index = INDEX(*key);
 
-                // recursively climb up, and delete eligible nodes
-                return (!node->leaf && trie_is_free_node(node));
-            }
+        if (trie_node_recursive_delete(node->children[index], key + 1, size, found)) {
+            // last node marked, delete it
+            trie_node_free(node->children[index]);
+            node->children[index] = NULL;
+
+            // recursively climb up, and delete eligible nodes
+            return (!node->leaf && trie_is_free_node(node));
         }
     }
 
@@ -201,27 +225,17 @@ void display(TrieNode* root, char str[], int level) {
    runtime is guaranteed O(m) with `m` as length of the key. */
 static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 
-    int index;
-    const char *k = key;
+    // Walk the trie till the end of the key
+    TrieNode *cursor = trie_node_find(root, key);
 
-    TrieNode *cursor = root;
+    *ret = (cursor && cursor->leaf) ? cursor->ndata : NULL;
 
-    for (char c = *k; c != '\0'; c = *(++k)) {
-        index = INDEX(c);
+    // No complete key found
+    if (!*ret)
+        return false;
 
-        if (!cursor->children[index]) {
-            *ret = NULL;
-            return false;
-        }
+    return true;
 
-        cursor = cursor->children[index];
-    }
-
-    if (cursor && cursor->leaf) {
-        *ret = cursor->ndata;
-        return true;
-    }
-    return false;
 }
 
 
@@ -255,30 +269,20 @@ bool trie_search(Trie *trie, const char *key, void **ret) {
 /* Remove and delete all keys matching a given prefix in the trie
    e.g. hello*
    - hello
-        hellot
-        helloworld
-        hello
-*/
+   hellot
+   helloworld
+   hello
+   */
 void trie_prefix_delete(Trie *trie, const char *prefix) {
 
     assert(trie && prefix);
 
-    int index = 0;
-    const char *k = prefix;
+    // Walk the trie till the end of the key
+    TrieNode *cursor = trie_node_find(trie->root, prefix);
 
-    TrieNode *cursor = trie->root;
-
-    // Move to the end of the prefix first
-    for (char c = *k; c != '\0'; c = *(++k)) {
-
-        index = INDEX(c);
-
-        // No key with the full prefix in the trie
-        if (!cursor->children[index])
-            return;
-
-        cursor = cursor->children[index];
-    }
+    // No complete key found
+    if (!cursor)
+        return;
 
     // Clear out all possible sub-paths
     for (int i = 0; i < ALPHABET_SIZE; i++)
@@ -300,33 +304,73 @@ int trie_prefix_count(Trie *trie, const char *prefix) {
     assert(trie && prefix);
 
     int count = 0;
-    int index = 0;
-    const char *k = prefix;
 
-    TrieNode *cursor = trie->root;
+    // Walk the trie till the end of the key
+    TrieNode *cursor = trie_node_find(trie->root, prefix);
 
-    // Move to the end of the prefix first
-    for (char c = *k; c != '\0'; c = *(++k)) {
+    // No complete key found
+    if (!cursor)
+        return count;
 
-        index = INDEX(c);
-
-        // No key with the full prefix in the trie
-        if (!cursor->children[index])
-            return count;
-
-        cursor = cursor->children[index];
-    }
-
-    // Counting the prefix itself as the first match if it is a leaf
-    if (cursor->leaf == true)
-        count++;
-
-    // Check all possible sub-paths and add to count where there is a leaf
-    for (int i = 0; i < ALPHABET_SIZE; i++)
-        if (cursor->children[i])
-            count += trie_node_count(cursor->children[i]);
+    // Check all possible sub-paths and add to count where there is a leaf */
+    count += trie_node_count(cursor);
 
     return count;
+}
+
+
+static void trie_node_integer_mod(TrieNode *node, int value, bool inc) {
+
+    if (trie_is_free_node(node))
+        return;
+
+    for (int i = 0; i < ALPHABET_SIZE; i++)
+        if (node->children[i])
+            trie_node_count(node->children[i]);
+
+    if (node->leaf && is_integer(node->ndata->data)) {
+        int n = parse_int(node->ndata->data);
+        n = inc == true ? n + 1 : n - 1;
+        // Check for realloc if the new value is "larger" then previous
+        char tmp[12];  // max size in bytes
+        sprintf(tmp, "%d", n);  // XXX Unsafe
+        size_t len = strlen(tmp);
+        node->ndata->data = trealloc(node->ndata->data, len + 1);
+        strncpy(node->ndata->data, tmp, len + 1);
+    }
+
+}
+
+
+void trie_prefix_inc(Trie *trie, const char *prefix) {
+
+    assert(trie && prefix);
+
+    // Walk the trie till the end of the key
+    TrieNode *cursor = trie_node_find(trie->root, prefix);
+
+    // No complete key found
+    if (!cursor)
+        return;
+
+    // Check all possible sub-paths and add to count where there is a leaf
+    trie_node_integer_mod(cursor, 1, true);
+}
+
+
+void trie_prefix_dec(Trie *trie, const char *prefix) {
+
+    assert(trie && prefix);
+
+    // Walk the trie till the end of the key
+    TrieNode *cursor = trie_node_find(trie->root, prefix);
+
+    // No complete key found
+    if (!cursor)
+        return;
+
+    // Check all possible sub-paths and add to count where there is a leaf
+    trie_node_integer_mod(cursor, 1, false);
 }
 
 

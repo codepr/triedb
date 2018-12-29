@@ -1,7 +1,16 @@
+0.2.4 - 2018/12/28
+==================
+
+- Add prefix command handling to INC and DEC commands, now they can be applied
+  in a glob matching key
+
+
 0.2.3 - 2018/12/28
+==================
 
 - Add basic configuration handling
-- Add COUNT command, prefix command, return the number of keys matching a given prefix
+- Add COUNT command, prefix command, return the number of keys matching a given
+  prefix
 - Fixed bug in insertion causing memory leaks while updating keys
 
 

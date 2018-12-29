@@ -32,7 +32,7 @@
 #include <stdbool.h>
 
 
-#define VERSION "0.2.2"
+#define VERSION "0.2.4"
 
 
 struct config {

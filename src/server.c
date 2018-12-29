@@ -387,30 +387,36 @@ static int inc_handler(TriteDB *db, Client *c) {
 
     for (int i = 0; i < inc->len; i++) {
 
-        // For each key in the keys array, check for presence and increment it
-        // by one
-        found = trie_search(db->data, (const char *) inc->keys[i]->key, &val);
-        if (found == false || !val) {
-            code = NOK;
-            tdebug("INC %s failed (s=%d m=%d)",
+        if (inc->keys[i]->is_prefix) {
+            trie_prefix_inc(db->data, (const char *) inc->keys[i]->key);
+            tdebug("INC %s (s=%d m=%d)",
                     inc->keys[i]->key, db->data->size, memory_used());
         } else {
-            struct NodeData *nd = val;
-            if (!is_integer(nd->data)) {
+            // For each key in the keys array, check for presence and increment it
+            // by one
+            found = trie_search(db->data, (const char *) inc->keys[i]->key, &val);
+            if (found == false || !val) {
                 code = NOK;
-                tdebug("INC %s failed, not an integer value (s=%d m=%d)",
+                tdebug("INC %s failed (s=%d m=%d)",
                         inc->keys[i]->key, db->data->size, memory_used());
             } else {
-                n = parse_int(nd->data);
-                ++n;
-                // Check for realloc if the new value is "larger" then previous
-                char tmp[12];  // max size in bytes
-                sprintf(tmp, "%d", n);  // XXX Unsafe
-                size_t len = strlen(tmp);
-                nd->data = trealloc(nd->data, len + 1);
-                strncpy(nd->data, tmp, len + 1);
-                tdebug("INC %s (s=%d m=%d)",
-                        inc->keys[i]->key, db->data->size, memory_used());
+                struct NodeData *nd = val;
+                if (!is_integer(nd->data)) {
+                    code = NOK;
+                    tdebug("INC %s failed, not an integer value (s=%d m=%d)",
+                            inc->keys[i]->key, db->data->size, memory_used());
+                } else {
+                    n = parse_int(nd->data);
+                    ++n;
+                    // Check for realloc if the new value is "larger" then previous
+                    char tmp[12];  // max size in bytes
+                    sprintf(tmp, "%d", n);  // XXX Unsafe
+                    size_t len = strlen(tmp);
+                    nd->data = trealloc(nd->data, len + 1);
+                    strncpy(nd->data, tmp, len + 1);
+                    tdebug("INC %s (s=%d m=%d)",
+                            inc->keys[i]->key, db->data->size, memory_used());
+                }
             }
         }
     }
@@ -434,30 +440,37 @@ static int dec_handler(TriteDB *db, Client *c) {
 
     for (int i = 0; i < dec->len; i++) {
 
-        // For each key in the keys array, check for presence and increment it
-        // by one
-        found = trie_search(db->data, (const char *) dec->keys[i]->key, &val);
-        if (found == false || !val) {
-            code = NOK;
-            tdebug("DEC %s failed (s=%d m=%d)",
+        if (dec->keys[i]->is_prefix) {
+            trie_prefix_dec(db->data, (const char *) dec->keys[i]->key);
+            tdebug("DEC %s (s=%d m=%d)",
                     dec->keys[i]->key, db->data->size, memory_used());
         } else {
-            struct NodeData *nd = val;
-            if (!is_integer(nd->data)) {
+
+            // For each key in the keys array, check for presence and increment it
+            // by one
+            found = trie_search(db->data, (const char *) dec->keys[i]->key, &val);
+            if (found == false || !val) {
                 code = NOK;
-                tdebug("DEC %s failed, not an integer value (s=%d m=%d)",
+                tdebug("DEC %s failed (s=%d m=%d)",
                         dec->keys[i]->key, db->data->size, memory_used());
             } else {
-                n = parse_int(nd->data);
-                --n;
-                // Check for realloc if the new value is "smaller" then previous
-                char tmp[12];
-                sprintf(tmp, "%d", n);
-                size_t len = strlen(tmp);
-                nd->data = trealloc(nd->data, len + 1);
-                strncpy(nd->data, tmp, len + 1);
-                tdebug("DEC %s (s=%d m=%d)",
-                        dec->keys[i]->key, db->data->size, memory_used());
+                struct NodeData *nd = val;
+                if (!is_integer(nd->data)) {
+                    code = NOK;
+                    tdebug("DEC %s failed, not an integer value (s=%d m=%d)",
+                            dec->keys[i]->key, db->data->size, memory_used());
+                } else {
+                    n = parse_int(nd->data);
+                    --n;
+                    // Check for realloc if the new value is "smaller" then previous
+                    char tmp[12];
+                    sprintf(tmp, "%d", n);
+                    size_t len = strlen(tmp);
+                    nd->data = trealloc(nd->data, len + 1);
+                    strncpy(nd->data, tmp, len + 1);
+                    tdebug("DEC %s (s=%d m=%d)",
+                            dec->keys[i]->key, db->data->size, memory_used());
+                }
             }
         }
     }
@@ -913,6 +926,7 @@ int start_server(const char *addr, char *port, int node_fd) {
     run_server(&tritedb);
 
 cleanup:
+
     /* Free all resources allocated */
     listfree(tritedb.peers, 1);
     trie_free(tritedb.data);
