@@ -55,7 +55,6 @@ static const struct llevel lmap[4] = {
 struct config config;
 
 
-/* static void config_deploy(Trie *ctrie); */
 static void add_config_value(const char *key, const char *value) {
 
     size_t klen = strlen(key);

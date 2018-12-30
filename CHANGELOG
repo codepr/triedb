@@ -1,3 +1,11 @@
+0.3.1 - 2018/12/30
+==================
+
+- Refactored trie structure in order to reduce the homongous memory
+  requirements it demanded, while not decreasing that much the performance
+- Added INC and DEC support for prefix range query
+
+
 0.2.4 - 2018/12/28
 ==================
 
