@@ -7,15 +7,14 @@ import argparse
 from socket import socket, htons, htonl, ntohs, ntohl, AF_UNIX
 
 
-PUT = 0x10
-GET = 0x20
-DEL = 0x30
-ACK = 0x40
-NACK = 0x50
-EXP = 0x60
-INC = 0x70
-DEC = 0x80
-COUNT = 0x90
+ACK = 0x00
+PUT = 0x01
+GET = 0x02
+DEL = 0x03
+TTL = 0x04
+INC = 0x05
+DEC = 0x06
+COUNT = 0x07
 
 
 def send_putbulkrng(sock, n):
@@ -65,10 +64,10 @@ def send_putbulk(sock, n):
     return 'done'
 
 
-def send_put(sock, key, value, exp=None):
+def send_put(sock, key, value, ttl=None):
     keylen = len(key)
     vallen = len(value)
-    if not exp:
+    if not ttl:
         put = struct.pack(
             f'=BIHI{keylen}s{vallen}s',
             PUT,
@@ -80,14 +79,15 @@ def send_put(sock, key, value, exp=None):
         )
     else:
         put = struct.pack(
-            f'=BIHI{keylen}s{vallen}sH',
+            f'=BIHI{keylen}s{vallen}sBH',
             PUT,
-            htonl(13 + keylen + vallen),
+            htonl(14 + keylen + vallen),
             htons(keylen),
             htonl(vallen),
             key.encode(),
             value.encode(),
-            htons(exp)
+            0,
+            htons(ttl)
         )
     sock.send(put)
     header = sock.recv(5)
@@ -116,7 +116,7 @@ def send_get(sock, key):
     code, total_len = struct.unpack('=BI', header)
     total_len = ntohl(total_len)
     print(code)
-    if code in (ACK, NACK):
+    if code == ACK:
         payload = struct.unpack('=B', sock.recv(total_len - 5))
         data = code
     else:
@@ -130,21 +130,22 @@ def send_get(sock, key):
     }
 
 
-def send_exp(sock, key, ttl):
+def send_ttl(sock, key, ttl):
     keylen = len(key)
-    exp = struct.pack(
-        f'=BIH{keylen}sH',
-        EXP,
-        htonl(9 + keylen),
+    ttl = struct.pack(
+        f'=BIH{keylen}sBH',
+        TTL,
+        htonl(10 + keylen),
         htons(keylen),
         key.encode(),
+        0,
         htons(ttl)
     )
-    sock.send(exp)
+    sock.send(ttl)
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
     total_len = ntohl(total_len)
-    if code in (ACK, NACK):
+    if code == ACK:
         payload = struct.unpack('=B', sock.recv(total_len - 5))
     else:
         klen, vlen = struct.unpack('=HI', sock.recv(6))
@@ -190,21 +191,27 @@ def send_del(sock, keys, is_prefix=False):
     }
 
 
-def send_inc(sock, keys, inc=True):
+def send_inc(sock, keys, inc=True, is_prefix=False):
     opcode = INC if inc else DEC
     totlen = sum(len(k) for k in keys)
     fmtinit = '=BIH'
-    fmt = ''.join(f'H{len(key)}s' for key in keys)
+    if is_prefix:
+        fmt = ''.join(f'H{len(key)}sH' for key in keys)
+        totlen += 7 + 4 * len(keys)
+        keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
+    else:
+        fmt = ''.join(f'H{len(key)}s' for key in keys)
+        totlen += 7 + 2 * len(keys)
+        keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     fmt = fmtinit + fmt
-    keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
-    delete = struct.pack(
+    inc = struct.pack(
         fmt,
         opcode,
-        htonl(7 + totlen + 2 * len(keys)),
+        htonl(totlen),
         htons(len(keys)),
         *keys_to_net
     )
-    sock.send(delete)
+    sock.send(inc)
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
     total_len = ntohl(total_len)
@@ -252,18 +259,22 @@ if __name__ == '__main__':
         if head.lower() == 'put':
             k, v = tail.split()
             print(send_put(sock, k, v))
-        elif head.lower() == 'putexp':
+        elif head.lower() == 'putttl':
             k, v, e = tail.split()
             print(send_put(sock, k, v, int(e)))
         elif head.lower() == 'get':
             print(send_get(sock, tail))
-        elif head.lower() == 'exp' or head.lower() == 'expire':
+        elif head.lower() == 'ttl' or head.lower() == 'expire':
             k, t = tail.split()
-            print(send_exp(sock, k, int(t)))
+            print(send_ttl(sock, k, int(t)))
         elif head.lower() == 'inc':
             print(send_inc(sock, tail.split()))
         elif head.lower() == 'dec':
             print(send_inc(sock, tail.split(), False))
+        elif head.lower() == 'pinc':
+            print(send_inc(sock, tail.split(), True, True))
+        elif head.lower() == 'pdec':
+            print(send_inc(sock, tail.split(), False, True))
         elif head.lower() == 'pdel':
             print(send_del(sock, tail.split(), True))
         elif head.lower() == 'putbulk':

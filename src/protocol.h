@@ -32,33 +32,33 @@
 #include <stdint.h>
 
 /* Error codes */
-#define OK              0x00
-#define NOK             0x01
-#define EOOM            0x01
+#define OK                      0x00
+#define NOK                     0x01
+#define EOOM                    0x01
 
 /* Request type */
-#define KEY_COMMAND     0x00
-#define KEY_VAL_COMMAND 0x01
-#define LIST_COMMAND    0x02
+#define KEY_COMMAND             0x00
+#define KEY_VAL_COMMAND         0x01
+#define KEY_LIST_COMMAND        0x02
+#define KEY_VAL_LIST_COMMAND    0x03
 
 /* Response type */
-#define NO_CONTENT      0x00
-#define DATA_CONTENT    0x01
-#define VALUE_CONTENT   0x02
-#define LIST_CONTENT    0x03
+#define NO_CONTENT              0x00
+#define DATA_CONTENT            0x01
+#define VALUE_CONTENT           0x02
+#define LIST_CONTENT            0x03
 
-#define COMMAND_COUNT   7
+#define COMMAND_COUNT           7
 
 /* Operation codes */
-#define PUT             0x10
-#define GET             0x20
-#define DEL             0x30
-#define ACK             0x40
-#define NACK            0x50
-#define EXP             0x60
-#define INC             0x70
-#define DEC             0x80
-#define COUNT           0x90
+#define ACK                     0x00
+#define PUT                     0x01
+#define GET                     0x02
+#define DEL                     0x03
+#define TTL                     0x04
+#define INC                     0x05
+#define DEC                     0x06
+#define COUNT                   0x07
 
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
@@ -104,26 +104,37 @@ void write_uint32(Buffer *, uint32_t);
 void write_string(Buffer *, uint8_t *);
 
 
-// Definition of the common header, for now it simply define the operation
-// code and the total size of the packet, including the body
+/* Definition of the common header, for now it simply define the operation
+ * code and the total size of the packet, including the body
+ */
 typedef struct {
     uint8_t opcode;
     uint32_t size;
 } Header;
 
-// Definition of a single key, with `is_prefix` defining if the key must be
-// treated as a prefix, in other words if the command which operates on it
-// have to be used as a glob style command e.g. DEL hello* deletes all keys
-// starting with hello
+/* Definition of a single key, with `is_prefix` defining if the key must be
+ * treated as a prefix, in other words if the command which operates on it
+ * have to be used as a glob style command e.g. DEL hello* deletes all keys
+ * starting with hello
+ */
 struct Key {
     uint16_t keysize;
     uint8_t *key;
     uint8_t is_prefix;
 };
 
+/* Definition of a key-value pair, for the rest it is equal to Key */
+struct KeyVal {
+    uint16_t keysize;
+    uint32_t valsize;
+    uint8_t *key;
+    uint8_t *val;
+    uint8_t is_prefix;
+};
+
 // For all commands that does only need key field and some extra optionals
 // fields like the time to live (`ttl`) or the `is_prefix` flag
-// e.g. GET, EXP, INC, DEC.. etc
+// e.g. GET, TTL, INC, DEC.. etc
 typedef struct {
     Header *header;
     uint16_t keysize;
@@ -154,6 +165,13 @@ typedef struct {
     struct Key **keys;
 } KeyListCommand;
 
+// For commands list formed by key-value complete pairs
+typedef struct {
+    Header *header;
+    uint16_t len;
+    struct KeyValue **pairs;
+} KeyValListCommand;
+
 // Define a request, can be either a `KeyCommand`, a `KeyValCommand` or a
 // `KeyListCommand`
 typedef union {
@@ -168,7 +186,7 @@ Request *unpack_request(uint8_t, Buffer *);
 void free_request(Request *, uint8_t);
 
 
-// Response structure without body, like ACK, NACK etc.
+// Response structure without body, like ACK etc.
 typedef struct {
     Header *header;
     uint8_t code;

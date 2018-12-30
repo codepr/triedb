@@ -322,8 +322,6 @@ void epoll_create_periodic_task(EpollLoop *loop,
     timervalue.it_value.tv_nsec = ns;
     timervalue.it_interval.tv_nsec = ns;
 
-    add_epoll(loop->epollfd, timerfd, NULL);
-
     if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0) {
         perror("timerfd_settime");
         return;

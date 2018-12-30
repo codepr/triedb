@@ -33,8 +33,8 @@
 #include "protocol.h"
 
 
-#define MAX_EVENTS	  128
-#define EXP_TIMEOUT   50 * 1024 * 1024
+#define MAX_EVENTS	        128
+#define TTL_CHECK_INTERVAL  50 * 1024 * 1024
 
 
 typedef struct client Client;

@@ -154,10 +154,10 @@ static void unpack_header(Buffer *b, Header *h) {
 int opcode_req_map[COMMAND_COUNT][2] = {
     {PUT, KEY_VAL_COMMAND},
     {GET, KEY_COMMAND},
-    {DEL, LIST_COMMAND},
-    {EXP, KEY_COMMAND},
-    {INC, KEY_COMMAND},
-    {DEC, KEY_COMMAND},
+    {DEL, KEY_LIST_COMMAND},
+    {TTL, KEY_COMMAND},
+    {INC, KEY_LIST_COMMAND},
+    {DEC, KEY_LIST_COMMAND},
     {COUNT, KEY_COMMAND}
 };
 
@@ -215,7 +215,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
 
             break;
 
-        case LIST_COMMAND:
+        case KEY_LIST_COMMAND:
             r->klcommand = tmalloc(sizeof(KeyListCommand));
             r->klcommand->header = header;
 
@@ -262,7 +262,7 @@ void free_request(Request *request, uint8_t reqtype) {
             tfree(request->kvcommand->val);
             tfree(request->kvcommand);
             break;
-        case LIST_COMMAND:
+        case KEY_LIST_COMMAND:
             tfree(request->klcommand->header);
             for (int i = 0; i < request->klcommand->len; i++) {
                 tfree(request->klcommand->keys[i]->key);
@@ -331,7 +331,7 @@ Response *make_nocontent_response(uint8_t code) {
         return NULL;
     }
 
-    response->ncontent->header->opcode = code;
+    response->ncontent->header->opcode = ACK;
     response->ncontent->header->size = HEADERLEN + sizeof(uint8_t);
 
     response->ncontent->code = code;

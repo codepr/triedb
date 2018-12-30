@@ -356,7 +356,6 @@ static void trie_node_integer_mod(TrieNode *node, int value, bool inc) {
 
     for (ListNode *cur = node->children->head; cur; cur = cur->next)
         trie_node_integer_mod(((TrieNode *) cur->data), value, inc);
-
 }
 
 // Add 1 to all integer values matching a given prefix

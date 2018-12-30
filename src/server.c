@@ -65,7 +65,7 @@ static int request_handler(TriteDB *, Client *);
 static int put_handler(TriteDB *, Client *);
 static int get_handler(TriteDB *, Client *);
 static int del_handler(TriteDB *, Client *);
-static int exp_handler(TriteDB *, Client *);
+static int ttl_handler(TriteDB *, Client *);
 static int inc_handler(TriteDB *, Client *);
 static int dec_handler(TriteDB *, Client *);
 static int count_handler(TriteDB *, Client *);
@@ -80,7 +80,7 @@ static struct command commands_map[] = {
     {PUT, put_handler},
     {GET, get_handler},
     {DEL, del_handler},
-    {EXP, exp_handler},
+    {TTL, ttl_handler},
     {INC, inc_handler},
     {DEC, dec_handler},
     {COUNT, count_handler}
@@ -261,7 +261,7 @@ static int get_handler(TriteDB *db, Client *c) {
     time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NACK);
+        set_ack_reply(c, NOK);
         tdebug("GET %s -> not found (s=%d m=%d)",
                 g->key, db->data->size, memory_used());
     } else {
@@ -274,7 +274,7 @@ static int get_handler(TriteDB *db, Client *c) {
 
         if (nd->ttl != -NOTTL && delta <= 0) {
             trie_delete(db->data, (const char *) g->key);
-            set_ack_reply(c, NACK);
+            set_ack_reply(c, NOK);
             tdebug("GET %s -> expired (s=%d m=%d)",
                     g->key, db->data->size, memory_used());
         } else {
@@ -300,7 +300,7 @@ static int get_handler(TriteDB *db, Client *c) {
 }
 
 
-static int exp_handler(TriteDB *db, Client *c) {
+static int ttl_handler(TriteDB *db, Client *c) {
 
     KeyCommand *e = ((Request *) c->ptr)->kcommand;
     void *val = NULL;
@@ -309,8 +309,8 @@ static int exp_handler(TriteDB *db, Client *c) {
     bool found = trie_find(db->data, (const char *) e->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NACK);
-        tdebug("EXP %s -> not found (s=%d m=%d)",
+        set_ack_reply(c, NOK);
+        tdebug("TTL %s -> not found (s=%d m=%d)",
                 e->key, db->data->size, memory_used());
     } else {
         struct NodeData *nd = val;
@@ -330,8 +330,8 @@ static int exp_handler(TriteDB *db, Client *c) {
         db->expiring_keys = list_push(db->expiring_keys, ek);
         db->expiring_keys->head = merge_sort(db->expiring_keys->head);
 
-        set_ack_reply(c, OK);
-        tdebug("EXPIRE %s -> %s in %d (s=%d m=%d)",
+        set_ack_reply(c, NOK);
+        tdebug("TTL %s -> %s set %d (s=%d m=%d)",
                 e->key, nd->data, e->ttl, db->data->size, memory_used());
     }
 
@@ -382,7 +382,7 @@ static int del_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, LIST_COMMAND);
+    free_request(c->ptr, KEY_LIST_COMMAND);
 
     return OK;
 }
@@ -435,7 +435,7 @@ static int inc_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, LIST_COMMAND);
+    free_request(c->ptr, KEY_LIST_COMMAND);
 
     return OK;
 }
@@ -489,7 +489,7 @@ static int dec_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, LIST_COMMAND);
+    free_request(c->ptr, KEY_LIST_COMMAND);
 
     return OK;
 }
@@ -767,7 +767,7 @@ static void expire_keys(TriteDB *db) {
             list_remove(db->expiring_keys, &delnode, compare_node);
         }
 
-        tdebug("EXPIRE %s (s=%d m=%d)",
+        tdebug("EXPIRING %s (s=%d m=%d)",
                 ek->key, db->data->size, memory_used());
 
         tfree((char *) ek->key);
@@ -801,15 +801,21 @@ static void *run_server(TriteDB *db) {
     memset(&timervalue, 0x00, sizeof(timervalue));
 
     timervalue.it_value.tv_sec = 0;
-    timervalue.it_value.tv_nsec = EXP_TIMEOUT;
+    timervalue.it_value.tv_nsec = TTL_CHECK_INTERVAL;
     timervalue.it_interval.tv_sec = 0;
-    timervalue.it_interval.tv_nsec = EXP_TIMEOUT;
-
-    add_epoll(db->epollfd, timerfd, NULL);
+    timervalue.it_interval.tv_nsec = TTL_CHECK_INTERVAL;
 
     if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0) {
         perror("timerfd_settime");
     }
+
+    // Add the timer to the event loop
+    struct epoll_event ev;
+    ev.data.fd = timerfd;
+    ev.events = EPOLLIN;
+
+    if (epoll_ctl(db->epollfd, EPOLL_CTL_ADD, timerfd, &ev) < 0)
+        perror("epoll_ctl(2): EPOLLIN");
 
     long int timers = 0;
 
