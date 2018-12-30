@@ -25,44 +25,50 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include "trie.h"
 #include "util.h"
 
 
-/* Converts key current character into index starting from <space> till '~',
-   96 characters in total, lowercase and uppercase letters included */
-#define INDEX(c) ((int)c - (int)' ')
+/* Auxiliary comparison function, uses on list searches, this one compare the
+ * char field stored in each TrieNode structure contained in each node of the
+ * list.
+ */
+ static int with_char(void *arg1, void *arg2) {
 
+    TrieNode *tn1 = ((ListNode *) arg1)->data;
+    TrieNode *tn2 = ((ListNode *) arg2)->data;
 
+    if (tn1->chr == tn2->chr)
+        return 0;
+
+    return -1;
+}
+
+// Check for children in a TrieNode, if a node has no children is considered
+// free
 static bool trie_is_free_node(TrieNode *node) {
-    for (int i = 0; i < ALPHABET_SIZE; i++) {
-        if (node->children[i])
-            return false;
-    }
-    return true;
+    return node->children->len == 0 ? true : false;
 }
 
 
 static TrieNode *trie_node_find(TrieNode *node, const char *prefix) {
 
-    int index = 0;
     const char *k = prefix;
 
     // Move to the end of the prefix first
     for (char c = *k; c != '\0'; c = *(++k)) {
 
-        index = INDEX(c);
+        // O(n), the best we can have
+        ListNode *child = linear_search(node->children, c);
 
         // No key with the full prefix in the trie
-        if (!node->children[index])
+        if (!child)
             return NULL;
 
-        node = node->children[index];
+        node = child->data;
     }
 
     return node;
@@ -76,9 +82,8 @@ static int trie_node_count(TrieNode *node) {
 
     int count = 0;
 
-    for (int i = 0; i < ALPHABET_SIZE; i++)
-        if (node->children[i])
-            count += trie_node_count(node->children[i]);
+    for (ListNode *cur = node->children->head; cur; cur = cur->next)
+        count += trie_node_count(cur->data);
 
     if (node->ndata)
         count++;
@@ -88,16 +93,15 @@ static int trie_node_count(TrieNode *node) {
 
 
 // Returns new trie node (initialized to NULL)
-TrieNode *trie_new_node(void) {
+TrieNode *trie_new_node(char c) {
 
     TrieNode *new_node = tmalloc(sizeof(*new_node));
 
     if (new_node) {
 
+        new_node->chr = c;
         new_node->ndata = NULL;
-
-        for (int i = 0; i < ALPHABET_SIZE; i++)
-            new_node->children[i] = NULL;
+        new_node->children = list_init();
     }
 
     return new_node;
@@ -106,7 +110,7 @@ TrieNode *trie_new_node(void) {
 // Returns new Trie, with a NULL root and 0 size
 Trie *trie_new(void) {
     Trie *trie = tmalloc(sizeof(*trie));
-    trie->root = trie_new_node();
+    trie->root = trie_new_node(' ');
     trie->size = 0;
     return trie;
 }
@@ -120,26 +124,47 @@ static int trie_node_insert(TrieNode *root,
         const char *key, void *data, int16_t ttl) {
 
     int rc = 0;
-    bool mod = false;
-    int index;
     const char *k = key;
 
     TrieNode *cursor = root;
+    TrieNode *cur_node = NULL;
+    ListNode *tmp = NULL;
 
+    // Iterate through the key char by char
     for (char x = *k; x != '\0'; x = *(++k)) {
-        index = INDEX(x);
-        if (!cursor->children[index]) {
-            cursor->children[index] = trie_new_node();
-            mod = true;
-        }
 
-        cursor = cursor->children[index];
+        /* We can use a linear search as on a linked list O(n) is the best find
+         * algorithm we can use, as binary search would have the same if not
+         * worse performance by not having direct access to node like in an
+         * array.
+         *
+         * Anyway we expect to have an average O(n/2) cause at every insertion
+         * the list is sorted so we expect to find our char in the middle on
+         * average.
+         *
+         * As a future improvement it's advisable to substitute list with a
+         * B-tree or RBTree to improve searching complexity to O(logn) at best,
+         * avg and worst while maintaining O(n) space complexity, but it really
+         * depends also on the size of the alphabet.
+         */
+        tmp = linear_search(cursor->children, x);
+
+        // No match, we add a new node and sort the list with the new added link
+        if (!tmp) {
+            cur_node = trie_new_node(x);
+            cursor->children = list_push(cursor->children, cur_node);
+            cursor->children->head = merge_sort_tnode(cursor->children->head);
+        } else {
+            // Match found, no need to sort the list, the child already exists
+            cur_node = tmp->data;
+        }
+        cursor = cur_node;
     }
 
-    if (mod)
-        rc = 1;
-
-    // Clear out if already taken
+    /* Clear out if already taken (e.g. we are in a leaf node), rc = 0 to not
+     * change the trie size, otherwise 1 means that we added a new node,
+     * effectively changing the size
+     */
     if (cursor->ndata)
         tfree(cursor->ndata->data);
     else
@@ -163,24 +188,46 @@ static bool trie_node_recursive_delete(TrieNode *node,
 
     // Base case
     if (*key == '\0') {
+
         if (node->ndata) {
+
             // Update trie size
             (*size)--;
+
             // Update found flag
             *found = true;
+
+            // Free resources, covering the case of a sub-prefix
+            if (node->ndata->data) {
+                tfree(node->ndata->data);
+                node->ndata->data = NULL;
+            }
+            tfree(node->ndata);
+            node->ndata = NULL;
 
             // If empty, node to be deleted
             return trie_is_free_node(node);
         }
+
     } else {
 
-        int index = INDEX(*key);
+        // O(n), the best we can have
+        ListNode *cur = linear_search(node->children, *key);
 
-        if (trie_node_recursive_delete(node->children[index], key + 1, size, found)) {
+        if (!cur)
+            return false;
+
+        TrieNode *child = cur->data;
+
+        if (trie_node_recursive_delete(child, key + 1, size, found)) {
+
+            // Messy solution, requiring probably avoidable allocations
+            TrieNode t = {*key, NULL, NULL};
+            ListNode tmp = {&t, NULL};
+            list_remove(node->children, &tmp, with_char);
 
             // last node marked, delete it
-            trie_node_free(node->children[index]);
-            node->children[index] = NULL;
+            trie_node_free(child);
 
             // recursively climb up, and delete eligible nodes
             return (!node->ndata && trie_is_free_node(node));
@@ -190,31 +237,8 @@ static bool trie_node_recursive_delete(TrieNode *node,
     return false;
 }
 
-// XXX debugging only
-// function to display the content of Trie
-void display(TrieNode* root, char str[], int level) {
-    // If node is leaf node, it indiicates end
-    // of string, so a null charcter is added
-    // and string is displayed
-    if (root->ndata) {
-        str[level] = '\0';
-        printf("%s\n", str);
-    }
-
-    for (int i = 0; i < ALPHABET_SIZE; i++) {
-        // if NON NULL child is found
-        // add parent key to str and
-        // call the display function recursively
-        // for child node
-        if (root->children[i]) {
-            str[level] = i + ' ';
-            display(root->children[i], str, level + 1);
-        }
-    }
-}
-
-/* Returns true if key presents in trie, else false. Also for lookup the big-O
-   runtime is guaranteed O(m) with `m` as length of the key. */
+/* Returns true if key is present in trie, else false. Also for lookup the
+   big-O runtime is guaranteed O(m) with `m` as length of the key. */
 static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 
     // Walk the trie till the end of the key
@@ -230,7 +254,7 @@ static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 
 }
 
-
+/* Insert a new key-value pair in the Trie structure */
 void trie_insert(Trie *trie, const char *key, void *data, int16_t ttl) {
 
     assert(trie && key);
@@ -253,7 +277,7 @@ bool trie_delete(Trie *trie, const char *key) {
 }
 
 
-bool trie_search(Trie *trie, const char *key, void **ret) {
+bool trie_find(Trie *trie, const char *key, void **ret) {
     assert(trie && key);
     return trie_node_search(trie->root, key, ret);
 }
@@ -276,17 +300,20 @@ void trie_prefix_delete(Trie *trie, const char *prefix) {
     if (!cursor)
         return;
 
+    /* ListNode *rm = NULL; */
+
     // Clear out all possible sub-paths
-    for (int i = 0; i < ALPHABET_SIZE; i++)
-        if (cursor->children[i]) {
-            trie_node_free(cursor->children[i]);
-            cursor->children[i] = NULL;
-            trie->size--;
-        }
+    for (ListNode *cur = cursor->children->head; cur; cur = cur->next) {
+        trie_node_free(cur->data);
+        cur->data = NULL;
+        trie->size--;
+    }
 
     // Set the current node (the one storing the last character of the prefix)
     // as a leaf and delete the prefix key as well
     trie_delete(trie, prefix);
+
+    list_clear(cursor->children, 1);
 }
 
 
@@ -309,15 +336,12 @@ int trie_prefix_count(Trie *trie, const char *prefix) {
     return count;
 }
 
-
+/* Auxiliary function to modify trie values only if they're effectively
+ * integers, by adding a quantity or subtracting it */
 static void trie_node_integer_mod(TrieNode *node, int value, bool inc) {
 
-    if (trie_is_free_node(node))
+    if (trie_is_free_node(node) && !node->ndata)
         return;
-
-    for (int i = 0; i < ALPHABET_SIZE; i++)
-        if (node->children[i])
-            trie_node_count(node->children[i]);
 
     if (node->ndata && is_integer(node->ndata->data)) {
         int n = parse_int(node->ndata->data);
@@ -330,9 +354,12 @@ static void trie_node_integer_mod(TrieNode *node, int value, bool inc) {
         strncpy(node->ndata->data, tmp, len + 1);
     }
 
+    for (ListNode *cur = node->children->head; cur; cur = cur->next)
+        trie_node_integer_mod(((TrieNode *) cur->data), value, inc);
+
 }
 
-
+// Add 1 to all integer values matching a given prefix
 void trie_prefix_inc(Trie *trie, const char *prefix) {
 
     assert(trie && prefix);
@@ -348,7 +375,7 @@ void trie_prefix_inc(Trie *trie, const char *prefix) {
     trie_node_integer_mod(cursor, 1, true);
 }
 
-
+// Subtract 1 to all integer values matching a given prefix
 void trie_prefix_dec(Trie *trie, const char *prefix) {
 
     assert(trie && prefix);
@@ -367,23 +394,24 @@ void trie_prefix_dec(Trie *trie, const char *prefix) {
 
 void trie_node_free(TrieNode *node) {
 
-    if (node) {
+    if (!node)
+        return;
 
-        if (node->ndata && node->ndata->data) {
-            tfree(node->ndata->data);
-            tfree(node->ndata);
-
-        } else if (node->ndata) {
-            tfree(node->ndata);
-        }
-
-        for (int i = 0; i < ALPHABET_SIZE; i++) {
-            trie_node_free(node->children[i]);
-            node->children[i] = NULL;
-        }
-
-        tfree(node);
+    if (node->children) {
+        for (ListNode *cur = node->children->head; cur; cur = cur->next)
+            trie_node_free(cur->data);
+        list_free(node->children, 0);
     }
+
+    if (node->ndata && node->ndata->data) {
+        tfree(node->ndata->data);
+        tfree(node->ndata);
+
+    } else if (node->ndata) {
+        tfree(node->ndata);
+    }
+
+    tfree(node);
 }
 
 

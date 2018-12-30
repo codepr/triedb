@@ -151,7 +151,7 @@ static void unpack_header(Buffer *b, Header *h) {
 }
 
 // Refactoring
-int opcode_req_map[7][2] = {
+int opcode_req_map[COMMAND_COUNT][2] = {
     {PUT, KEY_VAL_COMMAND},
     {GET, KEY_COMMAND},
     {DEL, LIST_COMMAND},
@@ -180,7 +180,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
     // TODO write a more efficient solution for this hack
     int code = 0;
 
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < COMMAND_COUNT; i++)
         if (opcode_req_map[i][0] == opcode)
             code = opcode_req_map[i][1];
 

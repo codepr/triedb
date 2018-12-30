@@ -21,7 +21,7 @@ COUNT = 0x90
 def send_putbulkrng(sock, n):
 
     for i in range(n):
-        key, value = f'{"".join(random.choices(string.ascii_letters + string.digits, k=random.randint(1, 30)))}', f'value{i}'
+        key, value = f'{"".join(random.choices(string.ascii_letters + string.digits, k=random.randint(6, 30)))}', f'value{i}'
         keylen = len(key)
         vallen = len(value)
         put = struct.pack(
@@ -115,8 +115,10 @@ def send_get(sock, key):
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
     total_len = ntohl(total_len)
+    print(code)
     if code in (ACK, NACK):
         payload = struct.unpack('=B', sock.recv(total_len - 5))
+        data = code
     else:
         datalen = ntohl(struct.unpack('=I', sock.recv(4))[0])
         data = struct.unpack(f'={datalen}s', sock.recv(datalen))[0]

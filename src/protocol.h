@@ -32,9 +32,9 @@
 #include <stdint.h>
 
 /* Error codes */
-#define OK     0x00
-#define NOK    0x01
-#define EOOM   0x01
+#define OK              0x00
+#define NOK             0x01
+#define EOOM            0x01
 
 /* Request type */
 #define KEY_COMMAND     0x00
@@ -47,16 +47,18 @@
 #define VALUE_CONTENT   0x02
 #define LIST_CONTENT    0x03
 
+#define COMMAND_COUNT   7
+
 /* Operation codes */
-#define PUT    0x10
-#define GET    0x20
-#define DEL    0x30
-#define ACK    0x40
-#define NACK   0x50
-#define EXP    0x60
-#define INC    0x70
-#define DEC    0x80
-#define COUNT  0x90
+#define PUT             0x10
+#define GET             0x20
+#define DEL             0x30
+#define ACK             0x40
+#define NACK            0x50
+#define EXP             0x60
+#define INC             0x70
+#define DEC             0x80
+#define COUNT           0x90
 
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length

@@ -192,9 +192,16 @@ static void free_client(Client **c) {
 static int put_handler(TriteDB *db, Client *c) {
 
     KeyValCommand *p = ((Request *) c->ptr)->kvcommand;
+    clock_t start, end;
+    double time_elapsed;
 
     int16_t ttl = p->ttl != 0 ? p->ttl : -NOTTL;
+
+    start = clock();
     trie_insert(db->data, (const char *) p->key, p->val, ttl);
+    end = clock();
+
+    time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
 
     // Update expiring keys if ttl != -NOTTL and sort it
     if (ttl != -NOTTL) {
@@ -203,7 +210,7 @@ static int put_handler(TriteDB *db, Client *c) {
         void *val = NULL;
 
         // Check for key presence in the trie structure
-        trie_search(db->data, (const char *) p->key, &val);
+        trie_find(db->data, (const char *) p->key, &val);
 
         struct NodeData *nd = val;
         nd->ttl = p->ttl;
@@ -223,8 +230,8 @@ static int put_handler(TriteDB *db, Client *c) {
 
     set_ack_reply(c, OK);
 
-    tdebug("PUT %s -> %s (s=%d m=%d)",
-            p->key, p->val, db->data->size, memory_used());
+    tdebug("PUT %s -> %s in %f ms (s=%d m=%d)",
+            p->key, p->val, time_elapsed, db->data->size, memory_used());
 
     tfree(p->header);
     tfree(p->key);
@@ -240,23 +247,26 @@ static int get_handler(TriteDB *db, Client *c) {
     KeyCommand *g = ((Request *) c->ptr)->kcommand;
     void *val = NULL;
 
-    float start_time = (float) clock() / CLOCKS_PER_SEC;
+    clock_t start, end;
+    double time_elapsed;
+
+    start = clock();
 
     // Test for the presence of the key in the trie structure
-    bool found = trie_search(db->data, (const char *) g->key, &val);
+    bool found = trie_find(db->data, (const char *) g->key, &val);
 
-    float end_time = (float)clock() / CLOCKS_PER_SEC;
+    end = clock();
 
     // ms of execution
-    float time_elapsed = (end_time - start_time) * 1000.0;
+    time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK);
+        set_ack_reply(c, NACK);
         tdebug("GET %s -> not found (s=%d m=%d)",
                 g->key, db->data->size, memory_used());
     } else {
 
-        struct NodeData *nd = (struct NodeData *) val;
+        struct NodeData *nd = val;
 
         // If the key results expired, remove it instead of returning it
         int64_t now = time(NULL);
@@ -264,7 +274,7 @@ static int get_handler(TriteDB *db, Client *c) {
 
         if (nd->ttl != -NOTTL && delta <= 0) {
             trie_delete(db->data, (const char *) g->key);
-            set_ack_reply(c, NOK);
+            set_ack_reply(c, NACK);
             tdebug("GET %s -> expired (s=%d m=%d)",
                     g->key, db->data->size, memory_used());
         } else {
@@ -296,10 +306,10 @@ static int exp_handler(TriteDB *db, Client *c) {
     void *val = NULL;
 
     // Check for key presence in the trie structure
-    bool found = trie_search(db->data, (const char *) e->key, &val);
+    bool found = trie_find(db->data, (const char *) e->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK);
+        set_ack_reply(c, NACK);
         tdebug("EXP %s -> not found (s=%d m=%d)",
                 e->key, db->data->size, memory_used());
     } else {
@@ -336,6 +346,8 @@ static int del_handler(TriteDB *db, Client *c) {
     int code = OK;
     KeyListCommand *d = ((Request *) c->ptr)->klcommand;
     bool found = false;
+    clock_t start, end;
+    double time_elapsed;
 
     for (int i = 0; i < d->len; i++) {
 
@@ -344,15 +356,16 @@ static int del_handler(TriteDB *db, Client *c) {
         // a prefix wildcard (*) and we'll remove all keys below it in the trie
         if (d->keys[i]->is_prefix == 1) {
 
-            float start_time = (float) clock() / CLOCKS_PER_SEC;
+            start = clock();
+
             // We are dealing with a wildcard, so we apply the deletion to all
             // keys below the wildcard
             trie_prefix_delete(db->data, (const char *) d->keys[i]->key);
 
-            float end_time = (float) clock() / CLOCKS_PER_SEC;
+            end = clock();
 
             // ms of execution
-            float time_elapsed = (end_time - start_time) * 1000.0;
+            time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
             tdebug("DEL prefix %s in %d ms (s=%d m=%d)",
                     d->keys[i]->key, time_elapsed, memory_used());
         } else {
@@ -394,7 +407,7 @@ static int inc_handler(TriteDB *db, Client *c) {
         } else {
             // For each key in the keys array, check for presence and increment it
             // by one
-            found = trie_search(db->data, (const char *) inc->keys[i]->key, &val);
+            found = trie_find(db->data, (const char *) inc->keys[i]->key, &val);
             if (found == false || !val) {
                 code = NOK;
                 tdebug("INC %s failed (s=%d m=%d)",
@@ -448,7 +461,7 @@ static int dec_handler(TriteDB *db, Client *c) {
 
             // For each key in the keys array, check for presence and increment it
             // by one
-            found = trie_search(db->data, (const char *) dec->keys[i]->key, &val);
+            found = trie_find(db->data, (const char *) dec->keys[i]->key, &val);
             if (found == false || !val) {
                 code = NOK;
                 tdebug("DEC %s failed (s=%d m=%d)",
@@ -486,6 +499,8 @@ static int count_handler(TriteDB *db, Client *c) {
 
     int count = 0;
     KeyCommand *cnt = ((Request *) c->ptr)->kcommand;
+    clock_t start, end;
+    double time_elapsed;
 
     if (!cnt->key) {
 
@@ -496,14 +511,14 @@ static int count_handler(TriteDB *db, Client *c) {
 
     } else {
 
-        float start_time = (float) clock() / CLOCKS_PER_SEC;
+        start = clock();
 
         // Get the size of each key below the requested one, glob operation
         count = trie_prefix_count(db->data, (const char *) cnt->key);
-        float end_time = (float)clock() / CLOCKS_PER_SEC;
+        end = clock();
 
         // ms of execution
-        float time_elapsed = (end_time - start_time) * 1000.0;
+        time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
         tdebug("COUNT %d in %f ms (s=%d m=%d)",
                 count, time_elapsed, db->data->size, memory_used());
     }
@@ -921,7 +936,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
 cleanup:
 
     /* Free all resources allocated */
-    listfree(tritedb.peers, 1);
+    list_free(tritedb.peers, 1);
     trie_free(tritedb.data);
 
     for (ListNode *cursor = tritedb.clients->head; cursor; cursor = cursor->next) {
@@ -929,7 +944,7 @@ cleanup:
         free_client(&c);
     }
 
-    listfree(tritedb.clients, 0);
+    list_free(tritedb.clients, 0);
     free_expiring_keys(tritedb.expiring_keys);
 
     t_log_close();

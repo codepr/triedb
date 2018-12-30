@@ -29,21 +29,18 @@
 #define TRIE_H
 
 #include <time.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include "list.h"
 
 
-#define ALPHABET_SIZE (94)
-
-#define NOTTL 1
+#define NOTTL           1
 
 
 typedef struct Trie Trie;
 
 typedef struct TrieNode TrieNode;
 
-
+/* Main data structure, contains the data to be stored on leaf nodes */
 struct NodeData {
     time_t ctime;  // creation time
     time_t latime; // last access time
@@ -55,7 +52,8 @@ struct NodeData {
    alphabet length size of children), a flag defining if the node represent
    the end of a word and then if it contains a value defined by data. */
 struct TrieNode {
-	struct TrieNode *children[ALPHABET_SIZE];
+    char chr;
+    List *children;
     struct NodeData *ndata;
 };
 
@@ -67,8 +65,9 @@ struct Trie {
 };
 
 // Returns new trie node (initialized to NULLs)
-struct TrieNode *trie_new_node(void);
+struct TrieNode *trie_new_node(char);
 
+// Returns a new Trie, which is formed by a root node and a size
 struct Trie *trie_new(void);
 
 /* The leaf represents the node with the associated data
@@ -92,7 +91,7 @@ bool trie_delete(Trie *, const char *);
 /* Returns true if key presents in trie, else false, the last pointer to
    pointer is used to store the value associated with the searched key, if
    present */
-bool trie_search(Trie *, const char *, void **);
+bool trie_find(Trie *, const char *, void **);
 
 void trie_node_free(TrieNode *);
 

@@ -55,7 +55,10 @@ List *list_init(void);
 
 /* Release a list, accept a integer flag to control the depth of the free call
  * (e.g. going to free also data field of every node) */
-void listfree(List *, int);
+void list_free(List *, int);
+
+/* Clear out the list without de-allocating it */
+void list_clear(List *, int);
 
 /* Attach a list to another one on tail */
 List *list_attach(List *, ListNode *, unsigned long);
@@ -71,7 +74,18 @@ List *list_push_back(List *, void *);
    args, which generally means a node and his subsequent */
 void list_remove(List *, ListNode *, compare_func);
 
+/* Remove a single node from the list, the first one satisfy compare_func
+ * criteria, without de-allocating it
+ */
+ListNode *list_remove_node(List *, void *, compare_func);
+
 /* Merge sort customized on TTL of new values data with complexity of O(nlogn) */
-ListNode *merge_sort(ListNode *head);
+ListNode *merge_sort(ListNode *);
+
+/* Merge sort customized on char comparison */
+ListNode *merge_sort_tnode(ListNode *);
+
+/* Perform a linear search in O(n) at worst */
+ListNode *linear_search(List *, int);
 
 #endif

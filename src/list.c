@@ -25,12 +25,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <time.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include "list.h"
-#include "trie.h"
 #include "util.h"
 #include "server.h"
 
@@ -60,7 +56,7 @@ List *list_init(void) {
 /*
  * Destroy a list, releasing all allocated memory
  */
-void listfree(List *l, int deep) {
+void list_free(List *l, int deep) {
 
     if (!l) return;
 
@@ -84,6 +80,32 @@ void listfree(List *l, int deep) {
     tfree(l);
 }
 
+/*
+ * Destroy a list, releasing all allocated memory but the list itself
+ */
+void list_clear(List *l, int deep) {
+
+    if (!l) return;
+
+    ListNode *h = l->head;
+    ListNode *tmp;
+
+    // free all nodes
+    while (l->len--) {
+
+        tmp = h->next;
+
+        if (h) {
+            if (h->data && deep == 1) tfree(h->data);
+            tfree(h);
+        }
+
+        h = tmp;
+    }
+
+    l->head = l->tail = NULL;
+    l->len = 0L;
+}
 
 /*
  * Attach a node to the head of a new list
@@ -190,6 +212,48 @@ static ListNode *list_node_remove(ListNode *head,
     return head;
 }
 
+
+static ListNode *list_remove_single_node(ListNode *head,
+        void *data, ListNode **ret, compare_func cmp) {
+
+    if (!head)
+        return NULL;
+
+    // We want the first match
+    if (cmp(head, data) == 0 && !*ret) {
+
+        ListNode *tmp_next = head->next;
+
+        *ret = head;
+
+        return tmp_next;
+
+    }
+
+    head->next = list_remove_single_node(head->next, data, ret, cmp);
+
+    return head;
+
+}
+
+
+ListNode *list_remove_node(List *list, void *data, compare_func cmp){
+
+    if (list->len == 0 || !list)
+        return NULL;
+
+    ListNode *node = NULL;
+
+    list_remove_single_node(list->head, data, &node, cmp);
+
+    if (node) {
+        list->len--;
+        node->next = NULL;
+    }
+
+    return node;
+}
+
 /*
  * Returns a pointer to a node near the middle of the list,
  * after having truncated the original list before that point.
@@ -231,7 +295,7 @@ static ListNode *merge_list(ListNode *list1, ListNode *list2) {
         delta_l1 = (n1->ctime + n1->ttl) - now;
         delta_l2 = (n2->ctime + n2->ttl) - now;
 
-        ListNode **min = delta_l1 >= delta_l2 ? &list1 : &list2;
+        ListNode **min = delta_l1 <= delta_l2 ? &list1 : &list2;
         ListNode *next = (*min)->next;
         tail = tail->next = *min;
         *min = next;
@@ -256,4 +320,57 @@ ListNode *merge_sort(ListNode *head) {
     ListNode *list2 = bisect_list(list1);
 
     return merge_list(merge_sort(list1), merge_sort(list2));
+}
+
+/* Search for a given node based on a comparison of char stored in structure
+ * and a value, O(n) at worst
+ */
+ListNode *linear_search(List *list, int value) {
+
+    if (!list || list->len == 0)
+        return NULL;
+
+    for (ListNode *cur = list->head; cur != NULL; cur = cur->next) {
+        if (((TrieNode *) cur->data)->chr == value)
+            return cur;
+        else if (((TrieNode *) cur->data)->chr > value)
+            break;
+    }
+
+    return NULL;
+}
+
+
+static ListNode *merge_tnode_list(ListNode *list1, ListNode *list2) {
+
+    ListNode dummy_head = { NULL, NULL }, *tail = &dummy_head;
+
+    while (list1 && list2) {
+
+        /* cast to cluster_node */
+        char chr1 = ((TrieNode *) list1->data)->chr;
+        char chr2 = ((TrieNode *) list2->data)->chr;
+
+        ListNode **min = chr1 <= chr2 ? &list1 : &list2;
+        ListNode *next = (*min)->next;
+        tail = tail->next = *min;
+        *min = next;
+    }
+
+    tail->next = list1 ? list1 : list2;
+    return dummy_head.next;
+}
+
+
+ListNode *merge_sort_tnode(ListNode *head) {
+
+    ListNode *list1 = head;
+
+    if (!list1 || !list1->next)
+        return list1;
+
+    /* find the middle */
+    ListNode *list2 = bisect_list(list1);
+
+    return merge_tnode_list(merge_sort_tnode(list1), merge_sort_tnode(list2));
 }

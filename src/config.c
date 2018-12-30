@@ -25,10 +25,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
 #include <ctype.h>
 #include <string.h>
-#include <strings.h>
 #include <assert.h>
 #include <sys/eventfd.h>
 #include "util.h"

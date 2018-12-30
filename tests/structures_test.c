@@ -29,6 +29,7 @@
 #include <string.h>
 #include "unit.h"
 #include "structures_test.h"
+#include "../src/util.h"
 #include "../src/trie.h"
 #include "../src/list.h"
 #include "../src/ringbuf.h"
@@ -191,7 +192,7 @@ static char *test_ringbuf_bulk_pop(void) {
 static char *test_list_init(void) {
     List *l = list_init();
     ASSERT("[! list_init]: list not created", l != NULL);
-    listfree(l, 0);
+    list_free(l, 0);
     return 0;
 }
 
@@ -199,10 +200,10 @@ static char *test_list_init(void) {
 /*
  * Tests the free feature of the list
  */
-static char *test_listfree(void) {
+static char *test_list_free(void) {
     List *l = list_init();
-    ASSERT("[! listfree]: list not created", l != NULL);
-    listfree(l, 0);
+    ASSERT("[! list_free]: list not created", l != NULL);
+    list_free(l, 0);
     return 0;
 }
 
@@ -215,7 +216,7 @@ static char *test_list_push(void) {
     char *x = "abc";
     list_push(l, x);
     ASSERT("[! list_push]: item not pushed in", l->len == 1);
-    listfree(l, 0);
+    list_free(l, 0);
     return 0;
 }
 
@@ -228,7 +229,32 @@ static char *test_list_push_back(void) {
     char *x = "abc";
     list_push_back(l, x);
     ASSERT("[! list_push_back]: item not pushed in", l->len == 1);
-    listfree(l, 0);
+    list_free(l, 0);
+    return 0;
+}
+
+
+static int compare_str(void *arg1, void *arg2) {
+
+    const char *tn1 = ((ListNode *) arg1)->data;
+    const char *tn2 = arg2;
+
+    if (strcmp(tn1, tn2) == 0)
+        return 0;
+
+    return -1;
+}
+
+
+static char *test_list_remove_node(void) {
+    List *l = list_init();
+    char *x = "abc";
+    l = list_push(l, x);
+    ASSERT("[! list_remove_node :: list_push]: item not pushed in", l->len == 1);
+    ListNode *node = list_remove_node(l, x, compare_str);
+    ASSERT("[! list_remove_node]: item not removed", strcmp(node->data, x) == 0);
+    tfree(node);
+    list_free(l, 0);
     return 0;
 }
 
@@ -248,7 +274,7 @@ static char *test_trie_new(void) {
  * Tests the creation of a new node
  */
 static char *test_trie_new_node(void) {
-    struct TrieNode *node = trie_new_node();
+    struct TrieNode *node = trie_new_node('a');
     ASSERT("[! trie_new_node]: TrieNode not created", node != NULL);
     trie_node_free(node);
     return 0;
@@ -264,7 +290,7 @@ static char *test_trie_insert(void) {
     char *val = strdup("world");
     trie_insert(root, key, val, -NOTTL);
     void *payload = NULL;
-    bool found = trie_search(root, key, &payload);
+    bool found = trie_find(root, key, &payload);
     ASSERT("[! trie_insert]: Trie insertion failed", (found == true && payload != NULL));
     trie_free(root);
     return 0;
@@ -274,14 +300,14 @@ static char *test_trie_insert(void) {
 /*
  * Tests the search on the trie
  */
-static char *test_trie_search(void) {
+static char *test_trie_find(void) {
     struct Trie *root = trie_new();
     const char *key = "hello";
     char *val = strdup("world");
     trie_insert(root, key, val, -NOTTL);
     void *payload = NULL;
-    bool found = trie_search(root, key, &payload);
-    ASSERT("[! trie_search]: Trie search failed", (found == true && payload != NULL));
+    bool found = trie_find(root, key, &payload);
+    ASSERT("[! trie_find]: Trie search failed", (found == true && payload != NULL));
     trie_free(root);
     return 0;
 }
@@ -305,11 +331,11 @@ static char *test_trie_delete(void) {
     trie_delete(root, key2);
     trie_delete(root, key3);
     void *payload = NULL;
-    bool found = trie_search(root, key1, &payload);
+    bool found = trie_find(root, key1, &payload);
     ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
-    found = trie_search(root, key2, &payload);
+    found = trie_find(root, key2, &payload);
     ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
-    found = trie_search(root, key3, &payload);
+    found = trie_find(root, key3, &payload);
     ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
     trie_free(root);
     return 0;
@@ -334,16 +360,16 @@ static char *test_trie_prefix_delete(void) {
     trie_insert(root, key4, val4, -NOTTL);
     trie_prefix_delete(root, key1);
     void *payload = NULL;
-    bool found = trie_search(root, key1, &payload);
+    bool found = trie_find(root, key1, &payload);
     ASSERT("[! trie_prefix_delete]: Trie prefix delete key1 failed",
             (found == false || payload == NULL));
-    found = trie_search(root, key2, &payload);
+    found = trie_find(root, key2, &payload);
     ASSERT("[! trie_prefix_delete]: Trie prefix delete key2 failed",
             (found == false || payload == NULL));
-    found = trie_search(root, key3, &payload);
+    found = trie_find(root, key3, &payload);
     ASSERT("[! trie_prefix_delete]: Trie prefix delete key3 failed",
             (found == false || payload == NULL));
-    found = trie_search(root, key4, &payload);
+    found = trie_find(root, key4, &payload);
     ASSERT("[! trie_prefix_delete]: Trie prefix delete key4 success",
             (found == true || payload != NULL));
     trie_free(root);
@@ -367,13 +393,14 @@ char *structures_test() {
     RUN_TEST(test_ringbuf_bulk_push);
     RUN_TEST(test_ringbuf_bulk_pop);
     RUN_TEST(test_list_init);
-    RUN_TEST(test_listfree);
+    RUN_TEST(test_list_free);
     RUN_TEST(test_list_push);
     RUN_TEST(test_list_push_back);
+    RUN_TEST(test_list_remove_node);
     RUN_TEST(test_trie_new);
     RUN_TEST(test_trie_new_node);
     RUN_TEST(test_trie_insert);
-    RUN_TEST(test_trie_search);
+    RUN_TEST(test_trie_find);
     RUN_TEST(test_trie_delete);
     RUN_TEST(test_trie_prefix_delete);
 
