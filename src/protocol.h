@@ -37,10 +37,11 @@
 #define EOOM                    0x01
 
 /* Request type */
-#define KEY_COMMAND             0x00
-#define KEY_VAL_COMMAND         0x01
-#define KEY_LIST_COMMAND        0x02
-#define KEY_VAL_LIST_COMMAND    0x03
+#define EMPTY_COMMAND           0x00
+#define KEY_COMMAND             0x01
+#define KEY_VAL_COMMAND         0x02
+#define KEY_LIST_COMMAND        0x03
+#define KEY_VAL_LIST_COMMAND    0x04
 
 /* Response type */
 #define NO_CONTENT              0x00
@@ -48,7 +49,7 @@
 #define VALUE_CONTENT           0x02
 #define LIST_CONTENT            0x03
 
-#define COMMAND_COUNT           7
+#define COMMAND_COUNT           8
 
 /* Operation codes */
 #define ACK                     0x00
@@ -59,6 +60,7 @@
 #define INC                     0x05
 #define DEC                     0x06
 #define COUNT                   0x07
+#define QUIT                    0xff
 
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
@@ -132,6 +134,12 @@ struct KeyVal {
     uint8_t is_prefix;
 };
 
+// Empty command, for those commands that doesn't require a body at all, like
+// QUIT
+typedef struct {
+    Header *header;
+} EmptyCommand;
+
 // For all commands that does only need key field and some extra optionals
 // fields like the time to live (`ttl`) or the `is_prefix` flag
 // e.g. GET, TTL, INC, DEC.. etc
@@ -175,6 +183,7 @@ typedef struct {
 // Define a request, can be either a `KeyCommand`, a `KeyValCommand` or a
 // `KeyListCommand`
 typedef union {
+    EmptyCommand *ecommand;
     KeyCommand *kcommand;
     KeyValCommand *kvcommand;
     KeyListCommand *klcommand;

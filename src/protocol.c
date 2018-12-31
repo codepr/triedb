@@ -158,7 +158,8 @@ int opcode_req_map[COMMAND_COUNT][2] = {
     {TTL, KEY_COMMAND},
     {INC, KEY_LIST_COMMAND},
     {DEC, KEY_LIST_COMMAND},
-    {COUNT, KEY_COMMAND}
+    {COUNT, KEY_COMMAND},
+    {QUIT, EMPTY_COMMAND}
 };
 
 /* Main unpacking function, to translates bytes received from clients to a
@@ -185,6 +186,10 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             code = opcode_req_map[i][1];
 
     switch (code) {
+        case EMPTY_COMMAND:
+            r->ecommand = tmalloc(sizeof(EmptyCommand));
+            r->ecommand->header = header;
+            break;
         case KEY_COMMAND:
             r->kcommand = tmalloc(sizeof(KeyCommand));
             r->kcommand->header = header;
@@ -251,6 +256,10 @@ void free_request(Request *request, uint8_t reqtype) {
         return;
 
     switch (reqtype) {
+        case EMPTY_COMMAND:
+            tfree(request->ecommand->header);
+            tfree(request->ecommand);
+            break;
         case KEY_COMMAND:
             tfree(request->kcommand->header);
             tfree(request->kcommand->key);

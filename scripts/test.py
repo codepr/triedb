@@ -15,6 +15,13 @@ TTL = 0x04
 INC = 0x05
 DEC = 0x06
 COUNT = 0x07
+QUIT = 0xff
+
+
+def send_quit(sock):
+    quit = struct.pack('=BI', QUIT, htonl(5))
+    sock.send(quit);
+    return 'done'
 
 
 def send_putbulkrng(sock, n):
@@ -277,6 +284,8 @@ if __name__ == '__main__':
             print(send_inc(sock, tail.split(), False, True))
         elif head.lower() == 'pdel':
             print(send_del(sock, tail.split(), True))
+        elif head.lower() == 'del':
+            print(send_del(sock, tail.split()))
         elif head.lower() == 'putbulk':
             print(send_putbulk(sock, int(tail)))
         elif head.lower() == 'putbulkrng':
@@ -284,4 +293,4 @@ if __name__ == '__main__':
         elif head.lower() == 'count':
             print(send_count(sock, tail))
         else:
-            print(send_del(sock, tail.split()))
+            print(send_quit(sock))

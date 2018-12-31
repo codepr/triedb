@@ -69,6 +69,7 @@ static int ttl_handler(TriteDB *, Client *);
 static int inc_handler(TriteDB *, Client *);
 static int dec_handler(TriteDB *, Client *);
 static int count_handler(TriteDB *, Client *);
+static int quit_handler(TriteDB *, Client *);
 
 // Fixed size of the header of each packet, consists of essentially the first
 // 5 bytes containing respectively the type of packet (PUT, GET, DEL etc ...)
@@ -83,7 +84,8 @@ static struct command commands_map[] = {
     {TTL, ttl_handler},
     {INC, inc_handler},
     {DEC, dec_handler},
-    {COUNT, count_handler}
+    {COUNT, count_handler},
+    {QUIT, quit_handler}
 };
 
 
@@ -186,6 +188,20 @@ static void free_client(Client **c) {
     }
     tfree(*c);
     *c = NULL;
+}
+
+
+static int quit_handler(TriteDB *db, Client *c) {
+
+    c->last_action_time = time(NULL);
+    tdebug("Closing connection with %s", c->addr);
+    close(c->fd);
+    del_epoll(db->epollfd, c->fd);
+
+    free_request(c->ptr, EMPTY_COMMAND);
+    // TODO clean up client list
+
+    return -1;
 }
 
 
@@ -587,11 +603,12 @@ static int request_handler(TriteDB *db, Client *client) {
     client->ptr = pkt;
 
     int executed = 0;
+    int dc = 0;
 
     // Loop through commands_hashmap array to find the correct handler
     for (int i = 0; i < commands_map_len(); i++) {
         if (commands_map[i].ctype == opcode) {
-            commands_map[i].handler(db, client);
+            dc = commands_map[i].handler(db, client);
             executed = 1;
         }
     }
@@ -599,6 +616,9 @@ static int request_handler(TriteDB *db, Client *client) {
     // If no handler is found, it must be an error case
     if (executed == 0)
         terror("Unknown command");
+
+    if (dc == -1)
+        return 0;
 
     // Set reply handler as the current context handler
     client->ctx_handler = reply_handler;
