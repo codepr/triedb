@@ -33,6 +33,7 @@
 #include "../src/trie.h"
 #include "../src/list.h"
 #include "../src/ringbuf.h"
+#include "../src/vector.h"
 
 /*
  * Tests the creation of a ringbuffer
@@ -377,6 +378,39 @@ static char *test_trie_prefix_delete(void) {
 }
 
 
+static bool compare(void *ptr1, void *ptr2) {
+
+    int *a = ptr1;
+    int *b = ptr2;
+
+    if (*a <= *b)
+        return true;
+
+    return false;
+}
+
+
+static char *test_vector_qsort(void) {
+    Vector *v = vector_init();
+    int n1 = 0;
+    vector_append(v, &n1);
+    int n2 = n1 + 5;
+    vector_append(v, &n2);
+    int n3 = n2 - 2;
+    vector_append(v, &n3);
+    int n4 = n3 + 1;
+    vector_append(v, &n4);
+    // At this point the vector should contains 0 - 5 - 3 - 4
+    vector_qsort(v, compare, sizeof(int));
+
+    ASSERT("[! vector_qsort]: Vector is not correctly sorted",
+            *((int *) v->items[0]) == 0 && *((int *) v->items[1]) == 3 && *((int *) v->items[2]) == 4);
+
+    vector_free(v);
+
+    return 0;
+}
+
 
 /*
  * All datastructure tests
@@ -403,6 +437,7 @@ char *structures_test() {
     RUN_TEST(test_trie_find);
     RUN_TEST(test_trie_delete);
     RUN_TEST(test_trie_prefix_delete);
+    RUN_TEST(test_vector_qsort);
 
     return 0;
 }

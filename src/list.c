@@ -305,7 +305,6 @@ static ListNode *merge_list(ListNode *list1, ListNode *list2) {
     return dummy_head.next;
 }
 
-
 /*
  * Merge sort for nodes list, based on the name field of every node
  */

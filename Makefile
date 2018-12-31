@@ -403,6 +403,36 @@ src/util.c.s:
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/util.c.s
 .PHONY : src/util.c.s
 
+src/vector.o: src/vector.c.o
+
+.PHONY : src/vector.o
+
+# target to build an object file
+src/vector.c.o:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/vector.c.o
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/vector.c.o
+.PHONY : src/vector.c.o
+
+src/vector.i: src/vector.c.i
+
+.PHONY : src/vector.i
+
+# target to preprocess a source file
+src/vector.c.i:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/vector.c.i
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/vector.c.i
+.PHONY : src/vector.c.i
+
+src/vector.s: src/vector.c.s
+
+.PHONY : src/vector.s
+
+# target to generate assembly for a file
+src/vector.c.s:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/vector.c.s
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/vector.c.s
+.PHONY : src/vector.c.s
+
 tests/structures_test.o: tests/structures_test.c.o
 
 .PHONY : tests/structures_test.o
@@ -494,6 +524,9 @@ help:
 	@echo "... src/util.o"
 	@echo "... src/util.i"
 	@echo "... src/util.s"
+	@echo "... src/vector.o"
+	@echo "... src/vector.i"
+	@echo "... src/vector.s"
 	@echo "... tests/structures_test.o"
 	@echo "... tests/structures_test.i"
 	@echo "... tests/structures_test.s"
