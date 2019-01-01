@@ -53,6 +53,7 @@ void *tmalloc(size_t);
 void *tcalloc(size_t, size_t);
 void *trealloc(void *, size_t);
 void tfree(void *);
+char *tstrdup(const char *);
 
 size_t memory_used(void);
 

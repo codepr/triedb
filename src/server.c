@@ -242,7 +242,7 @@ static int put_handler(TriteDB *db, Client *c) {
 
             struct ExpiringKey *ek = tmalloc(sizeof(*ek));
             ek->nd = nd;
-            ek->key = strdup((const char *) p->key);
+            ek->key = tstrdup((const char *) p->key);
             db->expiring_keys = list_push(db->expiring_keys, ek);
 
             // Sort in O(n) if there's more than one element in the list
@@ -257,10 +257,7 @@ static int put_handler(TriteDB *db, Client *c) {
     tdebug("PUT %s -> %s in %f ms (s=%d m=%d)",
             p->key, p->val, time_elapsed, db->data->size, memory_used());
 
-    tfree(p->header);
-    tfree(p->key);
-    tfree(p);
-    tfree(c->ptr);
+    free_request(c->ptr, KEY_VAL_COMMAND);
 
     return OK;
 }
@@ -345,7 +342,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
         nd->ctime = nd->latime = (uint64_t) time(NULL);
         struct ExpiringKey *ek = tmalloc(sizeof(*ek));
         ek->nd = nd;
-        ek->key = strdup((const char *) e->key);
+        ek->key = tstrdup((const char *) e->key);
 
         // Push into the expiring keys list and merge sort it shortly after,
         // this way we have a mostly updated list of expiring keys at each
@@ -696,7 +693,7 @@ static int accept_handler(TriteDB *db, Client *server) {
     Client *client = tmalloc(sizeof(Client));
     if (!client) oom("creating client during accept");
 
-    client->addr = strdup(ip_buff);
+    client->addr = tstrdup(ip_buff);
     client->fd = clientsock;
     client->ctx_handler = request_handler;
 

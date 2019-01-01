@@ -93,7 +93,7 @@ bool trie_delete(Trie *, const char *);
    present */
 bool trie_find(Trie *, const char *, void **);
 
-void trie_node_free(TrieNode *);
+void trie_node_free(TrieNode *, size_t *);
 
 void trie_free(Trie *);
 

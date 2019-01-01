@@ -32,7 +32,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <malloc.h>
 #include "util.h"
 #include "config.h"
 
@@ -123,20 +122,36 @@ void oom(const char *msg) {
 
 
 void *tmalloc(size_t size) {
+
     assert(size > 0);
-    void *ptr = malloc(size);
-    if (ptr)
-        memory += size;
-    return ptr;
+
+    void *ptr = malloc(size + sizeof(size_t));
+
+    if (!ptr)
+        return NULL;
+
+    memory += size + sizeof(size_t);
+
+    *((size_t *) ptr) = size;
+
+    return (char *) ptr + sizeof(size_t);
 }
 
 
 void *tcalloc(size_t len, size_t size) {
+
     assert(len > 0 && size > 0);
-    void *ptr = calloc(len, size);
-    if (ptr)
-        memory += len * size;
-    return ptr;
+
+    void *ptr = calloc(len, size + sizeof(size_t));
+
+    if (!ptr)
+        return NULL;
+
+    *((size_t *) ptr) = size;
+
+    memory += len * (size + sizeof(size_t));
+
+    return (char *) ptr + sizeof(size_t);
 }
 
 
@@ -144,28 +159,58 @@ void *trealloc(void *ptr, size_t size) {
 
     assert(size > 0);
 
-    int curr_size = malloc_usable_size(ptr);
-
     if (!ptr)
         return tmalloc(size);
+
+    void *realptr = (char *)ptr-sizeof(size_t);
+
+    size_t curr_size = *((size_t *) realptr);
 
     if (size == curr_size)
         return ptr;
 
-    void *newptr = realloc(ptr, size);
+    void *newptr = realloc(realptr, size + sizeof(size_t));
 
-    memory += (-curr_size) + size;
+    if (!newptr)
+        return NULL;
 
-    return newptr;
+    *((size_t *) newptr) = size;
+
+    memory += (-curr_size) + size + sizeof(size_t);
+
+    return (char *) newptr + sizeof(size_t);
 
 }
 
 
 void tfree(void *ptr) {
+
     if (!ptr)
         return;
-    memory -= malloc_usable_size(ptr);
-    free(ptr);
+
+    void *realptr = (char *) ptr - sizeof(size_t);
+
+    if (!realptr)
+        return;
+
+    size_t ptr_size = *((size_t *) realptr);
+
+    memory -= ptr_size + sizeof(size_t);
+
+    free(realptr);
+}
+
+
+char *tstrdup(const char *s) {
+
+    char *ds = tmalloc(strlen(s) + 1);
+
+    if (!ds)
+        return NULL;
+
+    strcpy(ds, s);
+
+    return ds;
 }
 
 

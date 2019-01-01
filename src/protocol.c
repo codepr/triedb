@@ -373,7 +373,7 @@ Response *make_datacontent_response(uint8_t *data) {
         HEADERLEN + sizeof(uint32_t) + strlen((char *) data);
 
     response->dcontent->datalen = strlen((char *) data);
-    response->dcontent->data = (uint8_t *) strdup((const char *) data);
+    response->dcontent->data = (uint8_t *) tstrdup((const char *) data);
 
     return response;
 }

@@ -173,7 +173,7 @@ static int trie_node_insert(TrieNode *root,
     }
 
     // mark last node as leaf
-    cursor->ndata->data = data;
+    cursor->ndata->data = tstrdup(data);
     cursor->ndata->ttl = ttl;
     cursor->ndata->ctime = cursor->ndata->latime = time(NULL);
 
@@ -192,9 +192,6 @@ static bool trie_node_recursive_delete(TrieNode *node,
     if (*key == '\0') {
 
         if (node->ndata) {
-
-            // Update trie size
-            (*size)--;
 
             // Update found flag
             *found = true;
@@ -229,7 +226,7 @@ static bool trie_node_recursive_delete(TrieNode *node,
             list_remove(node->children, &tmp, with_char);
 
             // last node marked, delete it
-            trie_node_free(child);
+            trie_node_free(child, size);
 
             // recursively climb up, and delete eligible nodes
             return (!node->ndata && trie_is_free_node(node));
@@ -302,13 +299,10 @@ void trie_prefix_delete(Trie *trie, const char *prefix) {
     if (!cursor)
         return;
 
-    /* ListNode *rm = NULL; */
-
     // Clear out all possible sub-paths
     for (ListNode *cur = cursor->children->head; cur; cur = cur->next) {
-        trie_node_free(cur->data);
+        trie_node_free(cur->data, &(trie->size));
         cur->data = NULL;
-        trie->size--;
     }
 
     // Set the current node (the one storing the last character of the prefix)
@@ -354,6 +348,7 @@ static void trie_node_integer_mod(TrieNode *node, int value, bool inc) {
         size_t len = strlen(tmp);
         node->ndata->data = trealloc(node->ndata->data, len + 1);
         strncpy(node->ndata->data, tmp, len + 1);
+        node->ndata->latime = time(NULL);
     }
 
     for (ListNode *cur = node->children->head; cur; cur = cur->next)
@@ -398,15 +393,16 @@ static void trie_node_prefix_insert(TrieNode *node, void *val, int16_t ttl) {
     if (!node)
         return;
 
+    for (ListNode *cur = node->children->head; cur; cur = cur->next)
+        trie_node_prefix_insert(cur->data, val, ttl);
+
     // mark last node as leaf
     if (node->ndata && node->ndata->data) {
         tfree(node->ndata->data);
-        node->ndata->data = val;
+        node->ndata->data = tstrdup(val);
         node->ndata->ttl = ttl;
+        node->ndata->latime = time(NULL);
     }
-
-    for (ListNode *cur = node->children->head; cur; cur = cur->next)
-        trie_node_prefix_insert(cur->data, val, ttl);
 }
 
 
@@ -425,26 +421,31 @@ void trie_prefix_insert(Trie *trie, const char *prefix, void *val, int16_t ttl) 
     trie_node_prefix_insert(node, val, ttl);
 }
 
+/* Release memory of a node while updating size of the trie */
+void trie_node_free(TrieNode *node, size_t *size) {
 
-void trie_node_free(TrieNode *node) {
-
+    // Base case
     if (!node)
         return;
 
+    // Recursive call to all children of the node
     if (node->children) {
         for (ListNode *cur = node->children->head; cur; cur = cur->next)
-            trie_node_free(cur->data);
+            trie_node_free(cur->data, size);
         list_free(node->children, 0);
     }
 
+    // Release memory on data stored on the node
     if (node->ndata && node->ndata->data) {
         tfree(node->ndata->data);
         tfree(node->ndata);
-
+        (*size)--;
     } else if (node->ndata) {
         tfree(node->ndata);
+        (*size)--;
     }
 
+    // Release the node itself
     tfree(node);
 }
 
@@ -452,6 +453,6 @@ void trie_node_free(TrieNode *node) {
 void trie_free(Trie *trie) {
     if (!trie)
         return;
-    trie_node_free(trie->root);
+    trie_node_free(trie->root, &(trie->size));
     tfree(trie);
 }

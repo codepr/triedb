@@ -276,8 +276,9 @@ static char *test_trie_new(void) {
  */
 static char *test_trie_new_node(void) {
     struct TrieNode *node = trie_new_node('a');
+    size_t size = 0;
     ASSERT("[! trie_new_node]: TrieNode not created", node != NULL);
-    trie_node_free(node);
+    trie_node_free(node, &size);
     return 0;
 }
 
@@ -288,7 +289,7 @@ static char *test_trie_new_node(void) {
 static char *test_trie_insert(void) {
     struct Trie *root = trie_new();
     const char *key = "hello";
-    char *val = strdup("world");
+    char *val = "world";
     trie_insert(root, key, val, -NOTTL);
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);
@@ -304,7 +305,7 @@ static char *test_trie_insert(void) {
 static char *test_trie_find(void) {
     struct Trie *root = trie_new();
     const char *key = "hello";
-    char *val = strdup("world");
+    char *val = "world";
     trie_insert(root, key, val, -NOTTL);
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);
@@ -322,9 +323,9 @@ static char *test_trie_delete(void) {
     const char *key1 = "hello";
     const char *key2 = "hel";
     const char *key3 = "del";
-    char *val1 = strdup("world");
-    char *val2 = strdup("world");
-    char *val3 = strdup("world");
+    char *val1 = "world";
+    char *val2 = "world";
+    char *val3 = "world";
     trie_insert(root, key1, val1, -NOTTL);
     trie_insert(root, key2, val2, -NOTTL);
     trie_insert(root, key3, val3, -NOTTL);
@@ -351,10 +352,10 @@ static char *test_trie_prefix_delete(void) {
     const char *key2 = "helloworld";
     const char *key3 = "hellot";
     const char *key4 = "hel";
-    char *val1 = strdup("world");
-    char *val2 = strdup("world");
-    char *val3 = strdup("world");
-    char *val4 = strdup("world");
+    char *val1 = "world";
+    char *val2 = "world";
+    char *val3 = "world";
+    char *val4 = "world";
     trie_insert(root, key1, val1, -NOTTL);
     trie_insert(root, key2, val2, -NOTTL);
     trie_insert(root, key3, val3, -NOTTL);
