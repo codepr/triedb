@@ -92,7 +92,7 @@ uint16_t read_uint16(Buffer *);
 // bytes -> uint32_t
 uint32_t read_uint32(Buffer *);
 // read a defined len of bytes
-uint8_t *read_string(Buffer *, size_t);
+uint8_t *read_bytes(Buffer *, size_t);
 
 
 /* Write data on Buffer pointer */

@@ -116,4 +116,7 @@ void trie_prefix_inc(Trie *, const char *);
 void trie_prefix_dec(Trie *, const char *);
 
 
+void trie_prefix_insert(Trie *, const char *, void *, int16_t);
+
+
 #endif

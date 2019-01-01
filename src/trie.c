@@ -165,15 +165,17 @@ static int trie_node_insert(TrieNode *root,
      * change the trie size, otherwise 1 means that we added a new node,
      * effectively changing the size
      */
-    if (cursor->ndata)
+    if (cursor->ndata) {
         tfree(cursor->ndata->data);
-    else
+    } else {
         rc = 1;
+        cursor->ndata = tmalloc(sizeof(struct NodeData));
+    }
 
     // mark last node as leaf
-    cursor->ndata = tmalloc(sizeof(struct NodeData));
     cursor->ndata->data = data;
     cursor->ndata->ttl = ttl;
+    cursor->ndata->ctime = cursor->ndata->latime = time(NULL);
 
     return rc;
 }
@@ -324,14 +326,14 @@ int trie_prefix_count(Trie *trie, const char *prefix) {
     int count = 0;
 
     // Walk the trie till the end of the key
-    TrieNode *cursor = trie_node_find(trie->root, prefix);
+    TrieNode *node = trie_node_find(trie->root, prefix);
 
     // No complete key found
-    if (!cursor)
+    if (!node)
         return count;
 
     // Check all possible sub-paths and add to count where there is a leaf */
-    count += trie_node_count(cursor);
+    count += trie_node_count(node);
 
     return count;
 }
@@ -364,14 +366,14 @@ void trie_prefix_inc(Trie *trie, const char *prefix) {
     assert(trie && prefix);
 
     // Walk the trie till the end of the key
-    TrieNode *cursor = trie_node_find(trie->root, prefix);
+    TrieNode *node = trie_node_find(trie->root, prefix);
 
     // No complete key found
-    if (!cursor)
+    if (!node)
         return;
 
     // Check all possible sub-paths and add to count where there is a leaf
-    trie_node_integer_mod(cursor, 1, true);
+    trie_node_integer_mod(node, 1, true);
 }
 
 // Subtract 1 to all integer values matching a given prefix
@@ -380,14 +382,47 @@ void trie_prefix_dec(Trie *trie, const char *prefix) {
     assert(trie && prefix);
 
     // Walk the trie till the end of the key
-    TrieNode *cursor = trie_node_find(trie->root, prefix);
+    TrieNode *node = trie_node_find(trie->root, prefix);
 
     // No complete key found
-    if (!cursor)
+    if (!node)
         return;
 
     // Check all possible sub-paths and add to count where there is a leaf
-    trie_node_integer_mod(cursor, 1, false);
+    trie_node_integer_mod(node, 1, false);
+}
+
+
+static void trie_node_prefix_insert(TrieNode *node, void *val, int16_t ttl) {
+
+    if (!node)
+        return;
+
+    // mark last node as leaf
+    if (node->ndata && node->ndata->data) {
+        tfree(node->ndata->data);
+        node->ndata->data = val;
+        node->ndata->ttl = ttl;
+    }
+
+    for (ListNode *cur = node->children->head; cur; cur = cur->next)
+        trie_node_prefix_insert(cur->data, val, ttl);
+}
+
+
+void trie_prefix_insert(Trie *trie, const char *prefix, void *val, int16_t ttl) {
+
+    assert(trie && prefix);
+
+    // Walk the trie till the end of the key
+    TrieNode *node = trie_node_find(trie->root, prefix);
+
+    // No complete key found
+    if (!node)
+        return;
+
+    // Check all possible sub-paths and add to count where there is a leaf
+    trie_node_prefix_insert(node, val, ttl);
 }
 
 

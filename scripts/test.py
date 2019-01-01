@@ -71,18 +71,19 @@ def send_putbulk(sock, n):
     return 'done'
 
 
-def send_put(sock, key, value, ttl=None):
+def send_put(sock, key, value, ttl=None, prefix=False):
     keylen = len(key)
     vallen = len(value)
     if not ttl:
         put = struct.pack(
-            f'=BIHI{keylen}s{vallen}s',
+            f'=BIHI{keylen}s{vallen}sB',
             PUT,
-            htonl(11 + keylen + vallen),
+            htonl(12 + keylen + vallen),
             htons(keylen),
             htonl(vallen),
             key.encode(),
-            value.encode()
+            value.encode(),
+            prefix
         )
     else:
         put = struct.pack(
@@ -93,7 +94,7 @@ def send_put(sock, key, value, ttl=None):
             htonl(vallen),
             key.encode(),
             value.encode(),
-            0,
+            prefix,
             htons(ttl)
         )
     sock.send(put)
@@ -292,5 +293,8 @@ if __name__ == '__main__':
             print(send_putbulkrng(sock, int(tail)))
         elif head.lower() == 'count':
             print(send_count(sock, tail))
+        elif head.lower() == 'pput':
+            k, v = tail.split()
+            print(send_put(sock, k, v, None, True))
         else:
             print(send_quit(sock))

@@ -88,7 +88,7 @@ uint32_t read_uint32(Buffer *b) {
 }
 
 
-uint8_t *read_string(Buffer *b, size_t len) {
+uint8_t *read_bytes(Buffer *b, size_t len) {
     if ((b->pos + len) > b->size)
         return NULL;
     uint8_t *str = tmalloc(len + 1);
@@ -196,7 +196,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
 
             // Mandatory fields
             r->kcommand->keysize = read_uint16(b);
-            r->kcommand->key = read_string(b, r->kcommand->keysize);
+            r->kcommand->key = read_bytes(b, r->kcommand->keysize);
 
             // Optional fields
             r->kcommand->is_prefix = read_uint8(b);
@@ -211,8 +211,8 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             // Mandatory fields
             r->kvcommand->keysize = read_uint16(b);
             r->kvcommand->valsize = read_uint32(b);
-            r->kvcommand->key = read_string(b, r->kvcommand->keysize);
-            r->kvcommand->val = read_string(b, r->kvcommand->valsize);
+            r->kvcommand->key = read_bytes(b, r->kvcommand->keysize);
+            r->kvcommand->val = read_bytes(b, r->kvcommand->valsize);
 
             // Optional fields
             r->kvcommand->is_prefix = read_uint8(b);
@@ -232,7 +232,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             for (int i = 0; i < r->klcommand->len; i++) {
                 struct Key *key = tmalloc(sizeof(*key));
                 key->keysize = read_uint16(b);
-                key->key = read_string(b, key->keysize);
+                key->key = read_bytes(b, key->keysize);
                 key->is_prefix = read_uint8(b);
                 r->klcommand->keys[i] = key;
             }

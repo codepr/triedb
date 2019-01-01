@@ -88,7 +88,7 @@ static void strip_spaces(char **str) {
 }
 
 
-static void read_string(char **str, char *dest) {
+static void read_bytes(char **str, char *dest) {
 
     if (!str || !dest) return;
 
@@ -129,7 +129,7 @@ bool config_load(const char *configpath) {
 
         // Read key
         pkey = key;
-        read_string(&pline, pkey);
+        read_bytes(&pline, pkey);
 
         // Remove whitespaces if any after the key and before the value
         strip_spaces(&pline);
@@ -143,7 +143,7 @@ bool config_load(const char *configpath) {
 
         // Read value
         pval = value;
-        read_string(&pline, pval);
+        read_bytes(&pline, pval);
 
         // At this point we have key -> value ready to be ingested on the
         // global configuration object

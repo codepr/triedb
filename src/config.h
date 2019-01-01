@@ -33,7 +33,7 @@
 
 // DEFAULT PARAMETERS
 
-#define VERSION                 "0.3.1"
+#define VERSION                 "0.3.2"
 #define DEFAULT_SOCKET_FAMILY   INET
 #define DEFAULT_LOG_LEVEL       INFO
 #define DEFAULT_LOG_PATH        "/tmp/tritedb.log"

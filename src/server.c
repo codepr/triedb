@@ -213,38 +213,46 @@ static int put_handler(TriteDB *db, Client *c) {
 
     int16_t ttl = p->ttl != 0 ? p->ttl : -NOTTL;
 
-    start = clock();
-    trie_insert(db->data, (const char *) p->key, p->val, ttl);
-    end = clock();
+    // TODO refactor TTL insertion, investigate on bad-malloc_usable_size
+    // issue
+    if (p->is_prefix == 1) {
+        start = clock();
+        trie_prefix_insert(db->data, (const char *) p->key, p->val, ttl);
+        end = clock();
+    } else {
+        start = clock();
+        trie_insert(db->data, (const char *) p->key, p->val, ttl);
+        end = clock();
 
-    time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
+        // Update expiring keys if ttl != -NOTTL and sort it
+        if (ttl != -NOTTL) {
 
-    // Update expiring keys if ttl != -NOTTL and sort it
-    if (ttl != -NOTTL) {
+            // XXX Find step to be removed
+            void *val = NULL;
 
-        // XXX Find step to be removed
-        void *val = NULL;
+            // Check for key presence in the trie structure
+            trie_find(db->data, (const char *) p->key, &val);
 
-        // Check for key presence in the trie structure
-        trie_find(db->data, (const char *) p->key, &val);
+            struct NodeData *nd = val;
+            nd->ttl = p->ttl;
 
-        struct NodeData *nd = val;
-        nd->ttl = p->ttl;
+            // It's a new TTL, so we update creation_time to now in order to
+            // calculate the effective expiration of the key
+            nd->ctime = nd->latime = (uint64_t) time(NULL);
 
-        // It's a new TTL, so we update creation_time to now in order to
-        // calculate the effective expiration of the key
-        nd->ctime = nd->latime = (uint64_t) time(NULL);
+            struct ExpiringKey *ek = tmalloc(sizeof(*ek));
+            ek->nd = nd;
+            ek->key = strdup((const char *) p->key);
+            db->expiring_keys = list_push(db->expiring_keys, ek);
 
-        struct ExpiringKey *ek = tmalloc(sizeof(*ek));
-        ek->nd = nd;
-        ek->key = strdup((const char *) p->key);
-        db->expiring_keys = list_push(db->expiring_keys, ek);
-
-        // Sort in O(nlogn) if there's more than one element in the list
-        db->expiring_keys->head = merge_sort(db->expiring_keys->head);
+            // Sort in O(n) if there's more than one element in the list
+            db->expiring_keys->head = merge_sort(db->expiring_keys->head);
+        }
     }
 
     set_ack_reply(c, OK);
+
+    time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
 
     tdebug("PUT %s -> %s in %f ms (s=%d m=%d)",
             p->key, p->val, time_elapsed, db->data->size, memory_used());
