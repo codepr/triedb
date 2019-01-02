@@ -69,6 +69,7 @@ static int ttl_handler(TriteDB *, Client *);
 static int inc_handler(TriteDB *, Client *);
 static int dec_handler(TriteDB *, Client *);
 static int count_handler(TriteDB *, Client *);
+static int keys_handler(TriteDB *, Client *);
 static int quit_handler(TriteDB *, Client *);
 
 // Fixed size of the header of each packet, consists of essentially the first
@@ -85,6 +86,7 @@ static struct command commands_map[] = {
     {INC, inc_handler},
     {DEC, dec_handler},
     {COUNT, count_handler},
+    {KEYS, keys_handler},
     {QUIT, quit_handler}
 };
 
@@ -205,6 +207,29 @@ static int quit_handler(TriteDB *db, Client *c) {
 }
 
 
+static int keys_handler(TriteDB *db, Client *c) {
+
+    KeyCommand *kc = ((Request *) c->ptr)->kcommand;
+
+    List *keys = trie_prefix_find(db->data, (const char *) kc->key);
+
+    Response *res = make_listcontent_response(keys);
+
+    Buffer *b = buffer_init(res->lcontent->header->size);
+    pack_response(b, res, LIST_CONTENT);
+
+    tdebug("KEYS %d", b->size);
+
+    set_reply(c, b);
+
+    list_free(keys, 1);
+    free_response(res, LIST_CONTENT);
+    free_request(c->ptr, KEY_COMMAND);
+
+    return OK;
+}
+
+
 static int put_handler(TriteDB *db, Client *c) {
 
     KeyValCommand *p = ((Request *) c->ptr)->kvcommand;
@@ -217,7 +242,7 @@ static int put_handler(TriteDB *db, Client *c) {
     // issue
     if (p->is_prefix == 1) {
         start = clock();
-        trie_prefix_insert(db->data, (const char *) p->key, p->val, ttl);
+        trie_prefix_set(db->data, (const char *) p->key, p->val, ttl);
         end = clock();
     } else {
         start = clock();

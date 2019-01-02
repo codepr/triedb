@@ -30,6 +30,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include "list.h"
 
 /* Error codes */
 #define OK                      0x00
@@ -49,7 +50,7 @@
 #define VALUE_CONTENT           0x02
 #define LIST_CONTENT            0x03
 
-#define COMMAND_COUNT           8
+#define COMMAND_COUNT           9
 
 /* Operation codes */
 #define ACK                     0x00
@@ -60,6 +61,7 @@
 #define INC                     0x05
 #define DEC                     0x06
 #define COUNT                   0x07
+#define KEYS                    0x08
 #define QUIT                    0xff
 
 
@@ -78,6 +80,11 @@ typedef struct {
 } Buffer;
 
 
+void htonll(uint8_t *, uint_least64_t);
+
+uint_least64_t ntohll(const uint8_t *);
+
+
 // Buffer constructor, it require a size cause we use a bounded buffer, e.g.
 // no resize over a defined size
 Buffer *buffer_init(size_t);
@@ -91,6 +98,8 @@ uint8_t read_uint8(Buffer *);
 uint16_t read_uint16(Buffer *);
 // bytes -> uint32_t
 uint32_t read_uint32(Buffer *);
+// bytes -> uint64_t
+uint64_t read_uint64(Buffer *);
 // read a defined len of bytes
 uint8_t *read_bytes(Buffer *, size_t);
 
@@ -102,8 +111,10 @@ void write_uint8(Buffer *, uint8_t);
 void write_uint16(Buffer *, uint16_t);
 // append a uint32_t -> bytes into the buffer
 void write_uint32(Buffer *, uint32_t);
+// append a uint64_t -> bytes into the buffer
+void write_uint64(Buffer *, uint64_t);
 // append len bytes into the buffer
-void write_string(Buffer *, uint8_t *);
+void write_bytes(Buffer *, uint8_t *);
 
 
 /* Definition of the common header, for now it simply define the operation
@@ -169,7 +180,7 @@ typedef struct {
 // e.g. DEL .. etc
 typedef struct {
     Header *header;
-    uint16_t len;
+    uint32_t len;
     struct Key **keys;
 } KeyListCommand;
 
@@ -233,6 +244,7 @@ typedef union {
 Response *make_nocontent_response(uint8_t);
 Response *make_datacontent_response(uint8_t *);
 Response *make_valuecontent_response(uint32_t);
+Response *make_listcontent_response(List *);
 
 void pack_response(Buffer *, Response *, int);
 void free_response(Response *, int);

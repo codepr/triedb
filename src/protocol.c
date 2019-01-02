@@ -39,6 +39,30 @@ static void pack_header(Header *, Buffer *);
 static void unpack_header(Buffer *, Header *);
 
 
+/* Host-to-network (native endian to big endian) */
+void htonll(uint8_t *block, uint_least64_t num) {
+    block[0] = num >> 56 & 0xFF;
+    block[1] = num >> 48 & 0xFF;
+    block[2] = num >> 40 & 0xFF;
+    block[3] = num >> 32 & 0xFF;
+    block[4] = num >> 24 & 0xFF;
+    block[5] = num >> 16 & 0xFF;
+    block[6] = num >> 8 & 0xFF;
+    block[7] = num >> 0 & 0xFF;
+}
+
+/* Network-to-host (big endian to native endian) */
+uint_least64_t ntohll(const uint8_t *block) {
+    return (uint_least64_t) block[0] << 56 |
+        (uint_least64_t) block[1] << 48 |
+        (uint_least64_t) block[2] << 40 |
+        (uint_least64_t) block[3] << 32 |
+        (uint_least64_t) block[4] << 24 |
+        (uint_least64_t) block[5] << 16 |
+        (uint_least64_t) block[6] << 8 |
+        (uint_least64_t) block[7] << 0;
+}
+
 /* Init Buffer data structure, to ease byte arrays handling */
 Buffer *buffer_init(size_t len) {
     Buffer *b = tmalloc(sizeof(Buffer));
@@ -88,6 +112,15 @@ uint32_t read_uint32(Buffer *b) {
 }
 
 
+uint64_t read_uint64(Buffer *b) {
+    if ((b->pos + sizeof(uint64_t)) > b->size)
+        return 0;
+    uint64_t val = ntohll(b->data + b->pos);
+    b->pos += sizeof(uint64_t);
+    return val;
+}
+
+
 uint8_t *read_bytes(Buffer *b, size_t len) {
     if ((b->pos + len) > b->size)
         return NULL;
@@ -124,7 +157,15 @@ void write_uint32(Buffer *b, uint32_t val) {
 }
 
 
-void write_string(Buffer *b, uint8_t *str) {
+void write_uint64(Buffer *b, uint64_t val) {
+    if ((b->pos + sizeof(uint64_t)) > b->size)
+        return;
+    htonll(b->data + b->pos, val);
+    b->pos += sizeof(uint64_t);
+}
+
+
+void write_bytes(Buffer *b, uint8_t *str) {
     size_t len = strlen((char *) str);
     if ((b->pos + len) > b->size)
         return;
@@ -159,6 +200,7 @@ int opcode_req_map[COMMAND_COUNT][2] = {
     {INC, KEY_LIST_COMMAND},
     {DEC, KEY_LIST_COMMAND},
     {COUNT, KEY_COMMAND},
+    {KEYS, KEY_COMMAND},
     {QUIT, EMPTY_COMMAND}
 };
 
@@ -225,7 +267,7 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
             r->klcommand->header = header;
 
             // Number of keys, or length of the Key array
-            r->klcommand->len = read_uint16(b);
+            r->klcommand->len = read_uint32(b);
 
             r->klcommand->keys = tcalloc(r->klcommand->len, sizeof(struct Key));
 
@@ -299,7 +341,7 @@ void pack_response(Buffer *b, Response *r, int restype) {
             pack_header(r->dcontent->header, b);
             // Mandatory fields
             write_uint32(b, r->dcontent->datalen);
-            write_string(b, r->dcontent->data);
+            write_bytes(b, r->dcontent->data);
             break;
         case VALUE_CONTENT:
             pack_header(r->vcontent->header, b);
@@ -308,13 +350,12 @@ void pack_response(Buffer *b, Response *r, int restype) {
             break;
         case LIST_CONTENT:
             pack_header(r->lcontent->header, b);
-
-            write_uint16(b, r->lcontent->len);
+            write_uint32(b, r->lcontent->len);
 
             for (int i = 0; i < r->lcontent->len; i++) {
                 write_uint16(b, r->lcontent->keys[i]->keysize);
-                write_string(b, r->lcontent->keys[i]->key);
-                write_uint16(b, r->lcontent->keys[i]->is_prefix);
+                write_bytes(b, r->lcontent->keys[i]->key);
+                write_uint8(b, r->lcontent->keys[i]->is_prefix);
             }
             break;
     }
@@ -391,9 +432,9 @@ Response *make_valuecontent_response(uint32_t value) {
         return NULL;
     }
 
-    response->ncontent->header = tmalloc(sizeof(Header));
-    if (!response->ncontent->header) {
-        tfree(response->ncontent);
+    response->vcontent->header = tmalloc(sizeof(Header));
+    if (!response->vcontent->header) {
+        tfree(response->vcontent);
         tfree(response);
         return NULL;
     }
@@ -402,6 +443,46 @@ Response *make_valuecontent_response(uint32_t value) {
     response->vcontent->header->size = HEADERLEN + sizeof(uint32_t);
 
     response->vcontent->val = value;
+
+    return response;
+}
+
+
+Response *make_listcontent_response(List *content) {
+
+    Response *response = tmalloc(sizeof(*response));
+    if (!response)
+        return NULL;
+
+    response->lcontent = tmalloc(sizeof(ListContent));
+    if (!response->lcontent) {
+        tfree(response);
+        return NULL;
+    }
+
+    response->lcontent->header = tmalloc(sizeof(Header));
+    if (!response->lcontent->header) {
+        tfree(response->lcontent);
+        tfree(response);
+        return NULL;
+    }
+
+    response->lcontent->header->opcode = ACK;
+    response->lcontent->header->size = HEADERLEN + sizeof(uint32_t);
+
+    response->lcontent->len = content->len;
+    response->lcontent->keys = tcalloc(content->len, sizeof(struct Key));
+
+    int i = 0;
+
+    for (ListNode *cur = content->head; cur; cur = cur->next) {
+        struct Key *key = tmalloc(sizeof(*key));
+        key->key = (uint8_t *) tstrdup((const char *) cur->data);
+        key->keysize = strlen((const char *) cur->data);
+        response->lcontent->keys[i] = key;
+        response->lcontent->header->size += key->keysize + sizeof(uint16_t) + sizeof(uint8_t);
+        i++;
+    }
 
     return response;
 }

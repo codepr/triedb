@@ -15,6 +15,7 @@ TTL = 0x04
 INC = 0x05
 DEC = 0x06
 COUNT = 0x07
+KEYS = 0x08
 QUIT = 0xff
 
 
@@ -24,8 +25,35 @@ def send_quit(sock):
     return 'done'
 
 
-def send_putbulkrng(sock, n):
+def send_keys(sock, key):
+    fmt = f'=BIH{len(key)}s'
+    count = struct.pack(
+        fmt,
+        KEYS,
+        htonl(7 + len(key)),
+        htons(len(key)),
+        key.encode()
+    )
+    sock.send(count)
+    header = sock.recv(5)
+    code, total_len = struct.unpack('=BI', header)
+    total_len = ntohl(total_len)
+    key_len = ntohl(struct.unpack('=I', sock.recv(4))[0])
+    keys = []
+    print(key_len)
 
+    for _ in range(key_len):
+        keylen = ntohs(struct.unpack('=H', sock.recv(2))[0])
+        keys.append(struct.unpack(f'={keylen}sB', sock.recv(keylen+1))[0])
+
+    return {
+        'code': code,
+        'total_len': total_len,
+        'payload': keys
+    }
+
+
+def send_putbulkrng(sock, n):
     for i in range(n):
         key, value = f'{"".join(random.choices(string.ascii_letters + string.digits, k=random.randint(6, 30)))}', f'value{i}'
         keylen = len(key)
@@ -123,7 +151,6 @@ def send_get(sock, key):
     header = sock.recv(5)
     code, total_len = struct.unpack('=BI', header)
     total_len = ntohl(total_len)
-    print(code)
     if code == ACK:
         payload = struct.unpack('=B', sock.recv(total_len - 5))
         data = code
@@ -169,21 +196,21 @@ def send_ttl(sock, key, ttl):
 
 def send_del(sock, keys, is_prefix=False):
     totlen = sum(len(k) for k in keys)
-    fmtinit = '=BIH'
+    fmtinit = '=BII'
     if is_prefix:
         fmt = ''.join(f'H{len(key)}sH' for key in keys)
-        totlen += 7 + 4 * len(keys)
+        totlen += 8 + 4 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
     else:
         fmt = ''.join(f'H{len(key)}s' for key in keys)
-        totlen += 7 + 2 * len(keys)
+        totlen += 8 + 2 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     fmt = fmtinit + fmt
     delete = struct.pack(
         fmt,
         DEL,
         htonl(totlen),
-        htons(len(keys)),
+        htonl(len(keys)),
         *keys_to_net
     )
     sock.send(delete)
@@ -293,6 +320,8 @@ if __name__ == '__main__':
             print(send_putbulkrng(sock, int(tail)))
         elif head.lower() == 'count':
             print(send_count(sock, tail))
+        elif head.lower() == 'keys':
+            print(send_keys(sock, tail))
         elif head.lower() == 'pput':
             k, v = tail.split()
             print(send_put(sock, k, v, None, True))

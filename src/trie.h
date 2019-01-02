@@ -99,10 +99,12 @@ void trie_free(Trie *);
 
 void display(TrieNode *, char [], int);
 
-/* Remove all keys matching a given prefix in a less than linear time complexity */
+/* Remove all keys matching a given prefix in a less than linear time
+   complexity */
 void trie_prefix_delete(Trie *, const char *);
 
-/* Count all keys matching a given prefix in a less than linear time complexity */
+/* Count all keys matching a given prefix in a less than linear time
+   complexity */
 int trie_prefix_count(Trie *, const char *);
 
 /* Integer modifying function. Check if a subset of the trie matching a given
@@ -115,8 +117,16 @@ void trie_prefix_inc(Trie *, const char *);
  */
 void trie_prefix_dec(Trie *, const char *);
 
+/* Set value to all keys matching a given prefix in a less than linear time
+   complexity */
+void trie_prefix_set(Trie *, const char *, void *, int16_t);
 
-void trie_prefix_insert(Trie *, const char *, void *, int16_t);
+/* Set TTL to all keys matching a given prefix in a less than linear time
+   complexity */
+void trie_prefix_ttl(Trie *, const char *, int16_t);
+
+/* Search for all keys matching a given prefix */
+List *trie_prefix_find(Trie *, const char *);
 
 
 #endif

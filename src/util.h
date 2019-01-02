@@ -52,6 +52,7 @@ void t_log(const uint8_t, const char *, ...);
 void *tmalloc(size_t);
 void *tcalloc(size_t, size_t);
 void *trealloc(void *, size_t);
+size_t malloc_size(void *);
 void tfree(void *);
 char *tstrdup(const char *);
 

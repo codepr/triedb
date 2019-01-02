@@ -201,6 +201,22 @@ void tfree(void *ptr) {
 }
 
 
+size_t malloc_size(void *ptr) {
+
+    if (!ptr)
+        return 0L;
+
+    void *realptr = (char *) ptr - sizeof(size_t);
+
+    if (!realptr)
+        return 0L;
+
+    size_t ptr_size = *((size_t *) realptr);
+
+    return ptr_size;
+}
+
+
 char *tstrdup(const char *s) {
 
     char *ds = tmalloc(strlen(s) + 1);

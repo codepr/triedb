@@ -459,28 +459,3 @@ void del_epoll(int efd, int fd) {
     if (epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL) < 0)
         perror("epoll_ctl(2): set epollout");
 }
-
-
-/* Host-to-network (native endian to big endian) */
-void htonll(uint8_t *block, uint_least64_t num) {
-    block[0]=num>>56&0xFF;
-    block[1]=num>>48&0xFF;
-    block[2]=num>>40&0xFF;
-    block[3]=num>>32&0xFF;
-    block[4]=num>>24&0xFF;
-    block[5]=num>>16&0xFF;
-    block[6]=num>>8&0xFF;
-    block[7]=num>>0&0xFF;
-}
-
-/* Network-to-host (big endian to native endian) */
-uint_least64_t ntohll(const uint8_t *block) {
-    return (uint_least64_t)block[0]<<56|
-        (uint_least64_t)block[1]<<48|
-        (uint_least64_t)block[2]<<40|
-        (uint_least64_t)block[3]<<32|
-        (uint_least64_t)block[4]<<24|
-        (uint_least64_t)block[5]<<16|
-        (uint_least64_t)block[6]<<8|
-        (uint_least64_t)block[7]<<0;
-}

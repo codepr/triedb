@@ -388,13 +388,13 @@ void trie_prefix_dec(Trie *trie, const char *prefix) {
 }
 
 
-static void trie_node_prefix_insert(TrieNode *node, void *val, int16_t ttl) {
+static void trie_node_prefix_set(TrieNode *node, void *val, int16_t ttl) {
 
     if (!node)
         return;
 
     for (ListNode *cur = node->children->head; cur; cur = cur->next)
-        trie_node_prefix_insert(cur->data, val, ttl);
+        trie_node_prefix_set(cur->data, val, ttl);
 
     // mark last node as leaf
     if (node->ndata && node->ndata->data) {
@@ -406,7 +406,7 @@ static void trie_node_prefix_insert(TrieNode *node, void *val, int16_t ttl) {
 }
 
 
-void trie_prefix_insert(Trie *trie, const char *prefix, void *val, int16_t ttl) {
+void trie_prefix_set(Trie *trie, const char *prefix, void *val, int16_t ttl) {
 
     assert(trie && prefix);
 
@@ -418,7 +418,86 @@ void trie_prefix_insert(Trie *trie, const char *prefix, void *val, int16_t ttl) 
         return;
 
     // Check all possible sub-paths and add to count where there is a leaf
-    trie_node_prefix_insert(node, val, ttl);
+    trie_node_prefix_set(node, val, ttl);
+}
+
+
+static void trie_node_prefix_ttl(TrieNode *node, int16_t ttl) {
+
+    if (!node)
+        return;
+
+    for (ListNode *cur = node->children->head; cur; cur = cur->next)
+        trie_node_prefix_ttl(cur->data, ttl);
+
+    // mark last node as leaf
+    if (node->ndata && node->ndata->data) {
+        node->ndata->ttl = ttl;
+        node->ndata->latime = time(NULL);
+    }
+}
+
+
+void trie_prefix_ttl(Trie *trie, const char *prefix, int16_t ttl) {
+
+    assert(trie && prefix);
+
+    // Walk the trie till the end of the key
+    TrieNode *node = trie_node_find(trie->root, prefix);
+
+    // No complete key found
+    if (!node)
+        return;
+
+    // Check all possible sub-paths and add to count where there is a leaf
+    trie_node_prefix_ttl(node, ttl);
+}
+
+
+static void trie_node_prefix_find(TrieNode *node, char str[], int level, List *keys) {
+
+    // If node is leaf node, it indiicates end
+    // of string, so a null charcter is added
+    // and string is displayed
+    if (node && node->ndata && node->ndata->data) {
+        str[level] = '\0';
+        list_push_back(keys, tstrdup(str));
+    }
+
+    for (ListNode *cur = node->children->head; cur; cur = cur->next) {
+        // if NON NULL child is found
+        // add parent key to str and
+        // call the display function recursively
+        // for child node
+        if (level == malloc_size(str))
+            str = trealloc(str, level * 2);
+        str[level] = ((TrieNode *) cur->data)->chr;
+        trie_node_prefix_find(cur->data, str, level + 1, keys);
+    }
+}
+
+
+List *trie_prefix_find(Trie *trie, const char *prefix) {
+
+    assert(trie && prefix);
+
+    // Walk the trie till the end of the key
+    TrieNode *node = trie_node_find(trie->root, prefix);
+
+    // No complete key found
+    if (!node)
+        return NULL;
+
+    List *keys = list_init();
+
+    // Check all possible sub-paths and add the resulting key to the result
+    char *str = tmalloc(32);
+    size_t plen = strlen(prefix);
+    strcpy(str, prefix);
+    trie_node_prefix_find(node, str, plen, keys);
+    tfree(str);
+
+    return keys;
 }
 
 /* Release memory of a node while updating size of the trie */
