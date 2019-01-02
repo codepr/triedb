@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
 
     // Override default DEBUG mode
     if (debug == 1) config.loglevel = DEBUG;
-    else config.loglevel = INFO;
+    else config.loglevel = INFORMATION;
 
     // Try to load a configuration, if found
     config_load("/tmp/tritedb.conf");

@@ -42,11 +42,12 @@ struct llevel {
     int loglevel;
 };
 
-static const struct llevel lmap[4] = {
+static const struct llevel lmap[5] = {
     {"DEBUG", DEBUG},
     {"WARNING", WARNING},
     {"ERROR", ERROR},
-    {"INFO", INFO}
+    {"INFO", INFORMATION},
+    {"INFORMATION", INFORMATION}
 };
 
 
@@ -136,8 +137,8 @@ bool config_load(const char *configpath) {
 
         // Ignore eventually incomplete configuration, but notify it
         if (line[0] == '\0') {
-            // TODO make warning
-            twarning("Incomplete configuration '%s' at line %d", key, linenr);
+            twarning("WARNING: Incomplete configuration '%s' at line %d. "
+                    "Fallback to default.", key, linenr);
             continue;
         }
 

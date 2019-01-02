@@ -50,7 +50,7 @@
 #define VALUE_CONTENT           0x02
 #define LIST_CONTENT            0x03
 
-#define COMMAND_COUNT           9
+#define COMMAND_COUNT           10
 
 /* Operation codes */
 #define ACK                     0x00
@@ -62,6 +62,7 @@
 #define DEC                     0x06
 #define COUNT                   0x07
 #define KEYS                    0x08
+#define INFO                    0xfe
 #define QUIT                    0xff
 
 

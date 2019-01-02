@@ -102,6 +102,23 @@ struct tritedb {
 };
 
 
+struct informations {
+    /* Number of clients currently connected */
+    int nclients;
+    /* Total number of clients connected since the start */
+    int nconnections;
+    /* Timestamp of the start time */
+    uint64_t start_time;
+    /* Seconds passed since the start */
+    uint64_t uptime;
+    /* Total number of requests served */
+    uint64_t nrequests;
+};
+
+
+extern struct informations info;
+
+
 int start_server(const char *, const char *, int );
 
 

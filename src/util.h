@@ -36,7 +36,7 @@
 #define MAX_LOG_SIZE 99
 
 
-enum { DEBUG, INFO, WARNING, ERROR };
+enum { DEBUG, INFORMATION, WARNING, ERROR };
 
 
 void oom(const char *);
@@ -63,7 +63,7 @@ size_t memory_used(void);
 #define tdebug(...) log(DEBUG, __VA_ARGS__)
 #define twarning(...) log(WARNING, __VA_ARGS__)
 #define terror(...) log(ERROR, __VA_ARGS__)
-#define tinfo(...) log(INFO, __VA_ARGS__)
+#define tinfo(...) log(INFORMATION, __VA_ARGS__)
 
 
 #endif

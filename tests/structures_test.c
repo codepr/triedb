@@ -290,6 +290,7 @@ static char *test_trie_insert(void) {
     struct Trie *root = trie_new();
     const char *key = "hello";
     char *val = "world";
+    printf("Testing ok\n");
     trie_insert(root, key, val, -NOTTL);
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);

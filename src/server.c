@@ -55,6 +55,9 @@
 } while (0)
 
 
+struct informations info;
+
+
 static void free_reply(Reply **);
 static void free_client(Client **);
 static int reply_handler(TriteDB *, Client *);
@@ -70,6 +73,7 @@ static int inc_handler(TriteDB *, Client *);
 static int dec_handler(TriteDB *, Client *);
 static int count_handler(TriteDB *, Client *);
 static int keys_handler(TriteDB *, Client *);
+static int info_handler(TriteDB *, Client *);
 static int quit_handler(TriteDB *, Client *);
 
 // Fixed size of the header of each packet, consists of essentially the first
@@ -78,7 +82,7 @@ static int quit_handler(TriteDB *, Client *);
 static const int HEADLEN = sizeof(uint8_t) + sizeof(uint32_t);
 
 /* Static command map, simple as it seems: OPCODE -> handler func */
-static struct command commands_map[] = {
+static struct command commands_map[COMMAND_COUNT] = {
     {PUT, put_handler},
     {GET, get_handler},
     {DEL, del_handler},
@@ -87,13 +91,9 @@ static struct command commands_map[] = {
     {DEC, dec_handler},
     {COUNT, count_handler},
     {KEYS, keys_handler},
+    {INFO, info_handler},
     {QUIT, quit_handler}
 };
-
-
-static int commands_map_len(void) {
-    return sizeof(commands_map) / sizeof(struct command);
-}
 
 /* Parse header, require at least the first 5 bytes in order to read packet
    type and total length that we need to recv to complete the packet */
@@ -195,15 +195,26 @@ static void free_client(Client **c) {
 
 static int quit_handler(TriteDB *db, Client *c) {
 
-    c->last_action_time = time(NULL);
     tdebug("Closing connection with %s", c->addr);
+    shutdown(c->fd, 0);
     close(c->fd);
+    info.nclients--;
     del_epoll(db->epollfd, c->fd);
 
     free_request(c->ptr, EMPTY_COMMAND);
     // TODO clean up client list
 
     return -1;
+}
+
+
+static int info_handler(TriteDB *db, Client *c) {
+
+    info.uptime = time(NULL) - info.start_time;
+    // TODO make key-val-list response
+    free_request(c->ptr, EMPTY_COMMAND);
+
+    return OK;
 }
 
 
@@ -395,34 +406,40 @@ static int del_handler(TriteDB *db, Client *c) {
     clock_t start, end;
     double time_elapsed;
 
-    for (int i = 0; i < d->len; i++) {
+    // Flush all data in case of no prefixes passed
+    if (d->len == 0) {
+        trie_node_free(db->data->root, &db->data->size);
+    } else {
+        for (int i = 0; i < d->len; i++) {
 
-        // For each key in the keys array, check for presence and try to remove
-        // it, if the `is_prefix` flag is a set the key will be treated as
-        // a prefix wildcard (*) and we'll remove all keys below it in the trie
-        if (d->keys[i]->is_prefix == 1) {
+            // For each key in the keys array, check for presence and try to
+            // remove it, if the `is_prefix` flag is a set the key will be
+            // treated as a prefix wildcard (*) and we'll remove all keys below
+            // it in the trie
+            if (d->keys[i]->is_prefix == 1) {
 
-            start = clock();
+                start = clock();
 
-            // We are dealing with a wildcard, so we apply the deletion to all
-            // keys below the wildcard
-            trie_prefix_delete(db->data, (const char *) d->keys[i]->key);
+                // We are dealing with a wildcard, so we apply the deletion to
+                // all keys below the wildcard
+                trie_prefix_delete(db->data, (const char *) d->keys[i]->key);
 
-            end = clock();
+                end = clock();
 
-            // ms of execution
-            time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
-            tdebug("DEL prefix %s in %d ms (s=%d m=%d)",
-                    d->keys[i]->key, time_elapsed, memory_used());
-        } else {
-            found = trie_delete(db->data, (const char *) d->keys[i]->key);
-            if (found == false) {
-                code = NOK;
-                tdebug("DEL %s failed (s=%d m=%d)",
-                        d->keys[i]->key, db->data->size, memory_used());
+                // ms of execution
+                time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
+                tdebug("DEL prefix %s in %d ms (s=%d m=%d)",
+                        d->keys[i]->key, time_elapsed, memory_used());
             } else {
-                tdebug("DEL %s (s=%d m=%d)",
-                        d->keys[i]->key, db->data->size, memory_used());
+                found = trie_delete(db->data, (const char *) d->keys[i]->key);
+                if (found == false) {
+                    code = NOK;
+                    tdebug("DEL %s failed (s=%d m=%d)",
+                            d->keys[i]->key, db->data->size, memory_used());
+                } else {
+                    tdebug("DEL %s (s=%d m=%d)",
+                            d->keys[i]->key, db->data->size, memory_used());
+                }
             }
         }
     }
@@ -636,12 +653,15 @@ static int request_handler(TriteDB *db, Client *client) {
     int dc = 0;
 
     // Loop through commands_hashmap array to find the correct handler
-    for (int i = 0; i < commands_map_len(); i++) {
+    for (int i = 0; i < COMMAND_COUNT; i++) {
         if (commands_map[i].ctype == opcode) {
             dc = commands_map[i].handler(db, client);
             executed = 1;
         }
     }
+
+    // Record request on the counter
+    info.nrequests++;
 
     // If no handler is found, it must be an error case
     if (executed == 0)
@@ -734,6 +754,10 @@ static int accept_handler(TriteDB *db, Client *server) {
 
     /* Rearm server fd to accept new connections */
     mod_epoll(db->epollfd, fd, EPOLLIN, server);
+
+    /* Record the new client connected */
+    info.nclients++;
+    info.nconnections++;
 
     return 0;
 }
@@ -986,6 +1010,9 @@ int start_server(const char *addr, const char *port, int node_fd) {
         tinfo("Starting server on %s", addr);
     else
         tinfo("Starting server on %s:%s", addr, port);
+
+    // Record start time
+    info.start_time = time(NULL);
 
     run_server(&tritedb);
 

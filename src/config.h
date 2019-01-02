@@ -35,7 +35,7 @@
 
 #define VERSION                 "0.3.4"
 #define DEFAULT_SOCKET_FAMILY   INET
-#define DEFAULT_LOG_LEVEL       INFO
+#define DEFAULT_LOG_LEVEL       INFORMATION
 #define DEFAULT_LOG_PATH        "/tmp/tritedb.log"
 #define DEFAULT_HOSTNAME        "127.0.0.1"
 #define DEFAULT_PORT            "9090"
