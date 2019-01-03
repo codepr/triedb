@@ -198,12 +198,12 @@ def send_del(sock, keys, is_prefix=False):
     totlen = sum(len(k) for k in keys)
     fmtinit = '=BII'
     if is_prefix:
-        fmt = ''.join(f'H{len(key)}sH' for key in keys)
-        totlen += 8 + 4 * len(keys)
+        fmt = ''.join(f'H{len(key)}sB' for key in keys)
+        totlen += 9 + 3 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
     else:
         fmt = ''.join(f'H{len(key)}s' for key in keys)
-        totlen += 8 + 2 * len(keys)
+        totlen += 9 + 2 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     fmt = fmtinit + fmt
     delete = struct.pack(

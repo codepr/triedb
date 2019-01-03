@@ -84,14 +84,14 @@ struct Trie *trie_new(void);
  * - hk: hk-value
  * - hel: hel-value
  */
-void trie_insert(Trie *, const char *, void *, int16_t);
+void trie_insert(Trie *, const char *, const void *, int16_t);
 
 bool trie_delete(Trie *, const char *);
 
 /* Returns true if key presents in trie, else false, the last pointer to
    pointer is used to store the value associated with the searched key, if
    present */
-bool trie_find(Trie *, const char *, void **);
+bool trie_find(const Trie *, const char *, void **);
 
 void trie_node_free(TrieNode *, size_t *);
 
@@ -105,7 +105,7 @@ void trie_prefix_delete(Trie *, const char *);
 
 /* Count all keys matching a given prefix in a less than linear time
    complexity */
-int trie_prefix_count(Trie *, const char *);
+int trie_prefix_count(const Trie *, const char *);
 
 /* Integer modifying function. Check if a subset of the trie matching a given
  * prefix contains integer and increment it by a value
@@ -126,7 +126,7 @@ void trie_prefix_set(Trie *, const char *, void *, int16_t);
 void trie_prefix_ttl(Trie *, const char *, int16_t);
 
 /* Search for all keys matching a given prefix */
-List *trie_prefix_find(Trie *, const char *);
+List *trie_prefix_find(const Trie *, const char *);
 
 
 #endif

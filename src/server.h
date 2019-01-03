@@ -104,15 +104,15 @@ struct tritedb {
 
 struct informations {
     /* Number of clients currently connected */
-    int nclients;
+    uint32_t nclients;
     /* Total number of clients connected since the start */
-    int nconnections;
+    uint32_t nconnections;
     /* Timestamp of the start time */
     uint64_t start_time;
     /* Seconds passed since the start */
     uint64_t uptime;
     /* Total number of requests served */
-    uint64_t nrequests;
+    uint32_t nrequests;
 };
 
 

@@ -247,7 +247,7 @@ int recvall(int sfd, Ringbuffer *ringbuf, ssize_t len) {
 int recvbytes(int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
     int n = 0;
     int total = 0;
-    uint8_t buf[bufsize];
+    uint8_t *buf = tmalloc(bufsize);
     while (total < bufsize) {
         if ((n = recv(sfd, buf, bufsize - total, 0)) < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -266,6 +266,7 @@ int recvbytes(int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
 
         total += n;
     }
+    tfree(buf);
     return total;
 }
 
