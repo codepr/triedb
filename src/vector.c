@@ -110,7 +110,8 @@ static void swap(void *a, void *b, size_t len) {
 }
 
 
-static void quicksort(Vector *v, int left, int right, qsort_func cmp_func, size_t ptrlen) {
+static void quicksort(Vector *v, int left,
+        int right, qsort_func cmp_func, size_t ptrlen) {
 
     if (!v || left >= right)
         return;

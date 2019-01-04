@@ -105,12 +105,10 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
     while (n < HEADLEN) {
         /* Read first 5 bytes to get the total len of the packet */
         n += recvbytes(clientfd, rbuf, read_all, HEADLEN);
-        if (n < 0) {
+        if (n <= 0) {
             shutdown(clientfd, 0);
             close(clientfd);
             // TODO: remove client from config
-            return NULL;
-        } else if (n == 0) {
             return NULL;
         }
     }
@@ -122,18 +120,24 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
     for (uint8_t i = 0; i < HEADLEN; i++)
         ringbuf_pop(rbuf, bytearray++);
 
+    /* Read opcode, the first byte of every packet */
     uint8_t *opc = (uint8_t *) tmp;
+
+    /* If opcode is not known close the connection */
+    bool ok = false;
+    for (int i = 0; i < COMMAND_COUNT; i++)
+        if (*opc == commands_map[i].ctype)
+            ok = true;
+
+    if (!ok)
+        goto errrecv;
+
     uint32_t tlen = ntohl(*((uint32_t *) (tmp + sizeof(uint8_t))));
 
     /* Read remaining bytes to complete the packet */
-    while (ringbuf_size(rbuf) < tlen - HEADLEN) {
-        if ((n = recvbytes(clientfd, rbuf, read_all, tlen - HEADLEN)) < 0) {
-            shutdown(clientfd, 0);
-            close(clientfd);
-            // TODO: remove client from config
-            return NULL;
-        }
-    }
+    while (ringbuf_size(rbuf) < tlen - HEADLEN)
+        if ((n = recvbytes(clientfd, rbuf, read_all, tlen - HEADLEN)) < 0)
+            goto errrecv;
 
     /* Allocate a buffer to fit the entire packet */
     Buffer *b = buffer_init(tlen);
@@ -153,6 +157,12 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
     *opcode = *opc;
 
     return b;
+
+errrecv:
+
+    shutdown(clientfd, 0);
+    close(clientfd);
+    return NULL;
 }
 
 /* Build a reply object and link it to the Client pointer */
@@ -241,6 +251,21 @@ static int keys_handler(TriteDB *db, Client *c) {
 }
 
 
+static bool compare_ttl(void *arg1, void *arg2) {
+
+    uint64_t now = time(NULL);
+
+    /* cast to cluster_node */
+    struct NodeData *n1 = ((struct ExpiringKey *) arg1)->nd;
+    struct NodeData *n2 = ((struct ExpiringKey *) arg2)->nd;
+
+    uint64_t delta_l1 = (n1->ctime + n1->ttl) - now;
+    uint64_t delta_l2 = (n2->ctime + n2->ttl) - now;
+
+    return delta_l1 <= delta_l2;
+}
+
+
 static int put_handler(TriteDB *db, Client *c) {
 
     KeyValCommand *p = ((Request *) c->ptr)->kvcommand;
@@ -279,10 +304,10 @@ static int put_handler(TriteDB *db, Client *c) {
             struct ExpiringKey *ek = tmalloc(sizeof(*ek));
             ek->nd = nd;
             ek->key = tstrdup((const char *) p->key);
-            db->expiring_keys = list_push(db->expiring_keys, ek);
+            vector_append(db->expiring_keys, ek);
 
-            // Sort in O(n) if there's more than one element in the list
-            db->expiring_keys->head = merge_sort(db->expiring_keys->head);
+            // Quicksort in O(nlogn) if there's more than one element in the vector
+            vector_qsort(db->expiring_keys, compare_ttl, sizeof(struct ExpiringKey));
         }
     }
 
@@ -351,6 +376,7 @@ static int get_handler(TriteDB *db, Client *c) {
             free_response(put, DATA_CONTENT);
         }
     }
+
     free_request(c->ptr, KEY_COMMAND);
 
     return OK;
@@ -384,8 +410,8 @@ static int ttl_handler(TriteDB *db, Client *c) {
         // this way we have a mostly updated list of expiring keys at each
         // insert, making it simpler and more efficient to cycle through them
         // and remove it later.
-        db->expiring_keys = list_push(db->expiring_keys, ek);
-        db->expiring_keys->head = merge_sort(db->expiring_keys->head);
+        vector_append(db->expiring_keys, ek);
+        vector_qsort(db->expiring_keys, compare_ttl, sizeof(struct ExpiringKey));
 
         set_ack_reply(c, NOK);
         tdebug("TTL %s -> %s set %d (s=%d m=%d)",
@@ -763,45 +789,28 @@ static int accept_handler(TriteDB *db, Client *server) {
 }
 
 
-static int compare_node(void *arg1, void *arg2) {
-
-    struct ExpiringKey *ek1 = ((ListNode *) arg1)->data;
-    struct ExpiringKey *ek2 = ((ListNode *) arg2)->data;
-
-    if (strcmp(ek1->key, ek2->key) == 0)
-        return 0;
-    return -1;
-}
-
-
-static void free_expiring_keys(List *ekeys) {
+static void free_expiring_keys(Vector *ekeys) {
 
     if (!ekeys)
         return;
 
     struct ExpiringKey *ek = NULL;
 
-    ListNode *h = ekeys->head;
-    ListNode *tmp;
+    for (int i = 0; i < ekeys->size; i++) {
 
-    // free all nodes
-    while (ekeys->len--) {
+        ek = vector_get(ekeys, i);
 
-        tmp = h->next;
+        if (!ek)
+            continue;
 
-        if (h) {
-            if (h->data) {
-                ek = h->data;
-                if (ek->key) tfree((char *) ek->key);
-                tfree(ek);
-            }
-            tfree(h);
-        }
+        if (ek->key)
+            tfree((char *) ek->key);
 
-        h = tmp;
+        tfree(ek);
     }
 
-    // free List structure pointer
+    // free vector structure pointer
+    tfree(ekeys->items);
     tfree(ekeys);
 }
 
@@ -809,37 +818,23 @@ static void free_expiring_keys(List *ekeys) {
    elegible */
 static void expire_keys(TriteDB *db) {
 
-    if (db->expiring_keys->len <= 0)
+    if (db->expiring_keys->size <= 0)
         return;
 
     int64_t now = (int64_t) time(NULL);
     int64_t delta = 0LL;
     struct ExpiringKey *ek = NULL;
 
-    for (ListNode *n = db->expiring_keys->head; n != NULL
-            && db->expiring_keys->len > 0; n = n->next) {
-
-        ek = n->data;
-
-        // Calculate deltaT between creation time + TTL and now
+    for (int i = 0; i < db->expiring_keys->size; i++) {
+        ek = vector_get(db->expiring_keys, i);
         delta = (ek->nd->ctime + ek->nd->ttl) - now;
 
-        // We can exit the loop at the fist unexpired key as they are
-        // already ordered by remaining expiration seconds
         if (delta > 0)
             break;
 
-        // Expired keys must be removed
         trie_delete(db->data, ek->key);
-        ListNode delnode = { ek, NULL };
 
-        // Updating expiring keys list
-        if (n == db->expiring_keys->head) {
-            list_remove(db->expiring_keys, &delnode, compare_node);
-            n = db->expiring_keys->head;
-        } else {
-            list_remove(db->expiring_keys, &delnode, compare_node);
-        }
+        vector_delete(db->expiring_keys, i);
 
         tdebug("EXPIRING %s (s=%d m=%d)",
                 ek->key, db->data->size, memory_used());
@@ -847,13 +842,7 @@ static void expire_keys(TriteDB *db) {
         tfree((char *) ek->key);
         tfree(ek);
         ek = NULL;
-
-        if (!db->expiring_keys->head || !db->expiring_keys->head->next)
-            break;
     }
-
-    // Re-sort remaining keys, if any
-    db->expiring_keys->head = merge_sort(db->expiring_keys->head);
 }
 
 /* Main worker function, his responsibility is to wait on events on a shared
@@ -968,7 +957,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
     tritedb.data = trie_new();
     tritedb.clients = list_init();
     tritedb.peers = list_init();
-    tritedb.expiring_keys = list_init();
+    tritedb.expiring_keys = vector_init();
 
     /* Initialize epollfd for server component */
     int epollfd = epoll_create1(0);

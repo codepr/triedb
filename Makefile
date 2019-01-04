@@ -166,6 +166,36 @@ src/config.c.s:
 	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/config.c.s
 .PHONY : src/config.c.s
 
+src/hashtable.o: src/hashtable.c.o
+
+.PHONY : src/hashtable.o
+
+# target to build an object file
+src/hashtable.c.o:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/hashtable.c.o
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/hashtable.c.o
+.PHONY : src/hashtable.c.o
+
+src/hashtable.i: src/hashtable.c.i
+
+.PHONY : src/hashtable.i
+
+# target to preprocess a source file
+src/hashtable.c.i:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/hashtable.c.i
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/hashtable.c.i
+.PHONY : src/hashtable.c.i
+
+src/hashtable.s: src/hashtable.c.s
+
+.PHONY : src/hashtable.s
+
+# target to generate assembly for a file
+src/hashtable.c.s:
+	$(MAKE) -f CMakeFiles/tritedb_test.dir/build.make CMakeFiles/tritedb_test.dir/src/hashtable.c.s
+	$(MAKE) -f CMakeFiles/tritedb.dir/build.make CMakeFiles/tritedb.dir/src/hashtable.c.s
+.PHONY : src/hashtable.c.s
+
 src/list.o: src/list.c.o
 
 .PHONY : src/list.o
@@ -500,6 +530,9 @@ help:
 	@echo "... src/config.o"
 	@echo "... src/config.i"
 	@echo "... src/config.s"
+	@echo "... src/hashtable.o"
+	@echo "... src/hashtable.i"
+	@echo "... src/hashtable.s"
 	@echo "... src/list.o"
 	@echo "... src/list.i"
 	@echo "... src/list.s"

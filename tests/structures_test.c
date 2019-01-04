@@ -34,6 +34,7 @@
 #include "../src/list.h"
 #include "../src/ringbuf.h"
 #include "../src/vector.h"
+#include "../src/hashtable.h"
 
 /*
  * Tests the creation of a ringbuffer
@@ -259,7 +260,6 @@ static char *test_list_remove_node(void) {
     return 0;
 }
 
-
 /*
  * Tests the creation of a ringbuffer
  */
@@ -290,7 +290,6 @@ static char *test_trie_insert(void) {
     struct Trie *root = trie_new();
     const char *key = "hello";
     char *val = "world";
-    printf("Testing ok\n");
     trie_insert(root, key, val, -NOTTL);
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);
@@ -413,6 +412,76 @@ static char *test_vector_qsort(void) {
     return 0;
 }
 
+/*
+ * Tests the creation of a hashtable
+ */
+static char *test_hashtable_create(void) {
+    HashTable *m = hashtable_create();
+    ASSERT("[! create]: hashtable not created", m != NULL);
+    hashtable_release(m);
+    return 0;
+}
+
+
+/*
+ * Tests the release of a hashtable
+ */
+static char *test_hashtable_release(void) {
+    HashTable *m = hashtable_create();
+    hashtable_release(m);
+    ASSERT("[! release]: hashtable not released", m == NULL);
+    return 0;
+}
+
+
+/*
+ * Tests the insertion function of the hashtable
+ */
+static char *test_hashtable_put(void) {
+    HashTable *m = hashtable_create();
+    char *key = "hello";
+    char *val = "world";
+    int status = hashtable_put(m, tstrdup(key), tstrdup(val));
+    ASSERT("[! put]: hashtable size = 0", m->size == 1);
+    ASSERT("[! put]: put didn't work as expected", status == HASHTABLE_OK);
+    char *val1 = "WORLD";
+    hashtable_put(m, tstrdup(key), tstrdup(val1));
+    void *ret = hashtable_get(m, key);
+    ASSERT("[! put]: put didn't update the value", strcmp(val1, ret) == 0);
+    hashtable_release(m);
+    return 0;
+}
+
+
+/*
+ * Tests lookup function of the hashtable
+ */
+static char *test_hashtable_get(void) {
+    HashTable *m = hashtable_create();
+    char *key = "hello";
+    char *val = "world";
+    hashtable_put(m, tstrdup(key), tstrdup(val));
+    char *ret = (char *) hashtable_get(m, key);
+    ASSERT("[! get]: get didn't work as expected", strcmp(ret, val) == 0);
+    hashtable_release(m);
+    return 0;
+}
+
+
+/*
+ * Tests the deletion function of the hashtable
+ */
+static char *test_hashtable_del(void) {
+    HashTable *m = hashtable_create();
+    char *key = "hello";
+    char *val = "world";
+    hashtable_put(m, tstrdup(key), tstrdup(val));
+    int status = hashtable_del(m, key);
+    ASSERT("[! del]: hashtable size = 1", m->size == 0);
+    ASSERT("[! del]: del didn't work as expected", status == HASHTABLE_OK);
+    hashtable_release(m);
+    return 0;
+}
 
 /*
  * All datastructure tests
@@ -440,6 +509,11 @@ char *structures_test() {
     RUN_TEST(test_trie_delete);
     RUN_TEST(test_trie_prefix_delete);
     RUN_TEST(test_vector_qsort);
+    RUN_TEST(test_hashtable_create);
+    RUN_TEST(test_hashtable_release);
+    RUN_TEST(test_hashtable_put);
+    RUN_TEST(test_hashtable_get);
+    RUN_TEST(test_hashtable_del);
 
     return 0;
 }

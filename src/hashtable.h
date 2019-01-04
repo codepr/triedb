@@ -26,70 +26,56 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef NETWORK_H
-#define NETWORK_H
-
-#include "list.h"
-#include "ringbuf.h"
+#ifndef HASHTABLE_H
+#define HASHTABLE_H
 
 
-#define ONEMB   1048576
-
-// Socket families
-#define UNIX    0
-#define INET    1
+#include <stdint.h>
+#include <stdbool.h>
 
 
+#define HASHTABLE_OK   0
+#define HASHTABLE_ERR  1
+#define HASHTABLE_OOM  2
+#define HASHTABLE_FULL 3
+
+#define CRC32(c, x) crc32(c, x)
+
+
+/* We need to keep keys and values */
 typedef struct {
-    int epollfd;
-    int max_events;
-    int timeout;
-    int status;
-    struct epoll_event *events;
-} EpollLoop;
+    const void *key;
+    void *val;
+    bool taken;
+} HashTableEntry;
 
-
-typedef void cb_func(EpollLoop *, void *);
-
-typedef struct {
-    int fd;
-    void *args;
-    cb_func *callback;
-} Callback;
-
-
-/* Set non-blocking socket */
-int set_nonblocking(int);
-
-/* Auxiliary function for creating epoll server */
-int create_and_bind(const char *, const char *, int);
 
 /*
- * Create a non-blocking socket and make it listen on the specfied address and
- * port
+ * An HashTable has some maximum size and current size, as well as the data to
+ * hold.
  */
-int make_listen(const char *, const char *, int);
+typedef struct {
+    uint64_t table_size;
+    uint64_t size;
+    HashTableEntry *entries;
+} HashTable;
 
-/* Accept a connection and add it to the right epollfd */
-int accept_connection(int);
 
-/* Epoll management functions */
-EpollLoop *epoll_loop_init(int, int);
-void epoll_loop_free(EpollLoop *);
-int epoll_loop_wait(EpollLoop *);
-void epoll_register_callback(EpollLoop *, Callback *);
-void epoll_register_periodic_task(EpollLoop *, int, Callback *);
-void epoll_delete_callback(EpollLoop *, int);
-int add_epoll(int, int, void *);
-int mod_epoll(int, int, int, void *);
-int del_epoll(int, int);
+/* HashTable API */
+HashTable *hashtable_create(void);
 
-/* I/O management functions */
-int sendall(int, uint8_t *, ssize_t, ssize_t *);
-int recvall(int, Ringbuffer *, ssize_t);
-int recvbytes(int, Ringbuffer *, ssize_t, size_t);
+void hashtable_release(HashTable *);
 
-void htonll(uint8_t *, uint_least64_t );
-uint_least64_t ntohll(const uint8_t *);
+int hashtable_put(HashTable *, const void *, void *);
+
+void *hashtable_get(HashTable *, const void *);
+
+int hashtable_del(HashTable *, const void *);
+
+int hashtable_iterate(HashTable *, int (*func)(void *));
+
+void hashtable_custom_release(HashTable *, int (*func)(void *));
+
+uint64_t crc32(const uint8_t *, const uint32_t);
 
 #endif

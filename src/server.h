@@ -30,6 +30,7 @@
 
 #include "trie.h"
 #include "list.h"
+#include "vector.h"
 #include "protocol.h"
 
 
@@ -98,7 +99,7 @@ struct tritedb {
     /* Peers connected */
     List *peers;
     /* Expiring keys */
-    List *expiring_keys;
+    Vector *expiring_keys;
 };
 
 

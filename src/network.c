@@ -249,40 +249,49 @@ int recvbytes(int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
     int total = 0;
     uint8_t *buf = tmalloc(bufsize);
     while (total < bufsize) {
+
         if ((n = recv(sfd, buf, bufsize - total, 0)) < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             } else {
                 perror("recv(2): error reading data\n");
+                tfree(buf);
                 return -1;
             }
         }
+
         if (n == 0) {
+            tfree(buf);
             return 0;
         }
+
         /* Insert all read bytes in the ring buffer */
         // FIXME check the full ring buffer scenario
         ringbuf_bulk_push(ringbuf, buf, n);
 
         total += n;
     }
+
     tfree(buf);
+
     return total;
 }
 
 
-EpollLoop *epoll_loop_init(int max_events) {
+/******************************
+ *         EPOLL APIS         *
+ ******************************/
+
+
+EpollLoop *epoll_loop_init(int max_events, int timeout) {
 
     EpollLoop *loop = tmalloc(sizeof(*loop));
 
     loop->max_events = max_events;
     loop->events = tmalloc(sizeof(struct epoll_event) * max_events);
-    loop->epollfd = epoll_create1(1024);
-    loop->tasks = list_init();
-
-    // Optional
-    loop->default_args = NULL;
-    loop->default_task = NULL;
+    loop->epollfd = epoll_create1(1);
+    loop->timeout = timeout;
+    loop->status = 0;
 
     return loop;
 }
@@ -290,28 +299,17 @@ EpollLoop *epoll_loop_init(int max_events) {
 
 void epoll_loop_free(EpollLoop *loop) {
     tfree(loop->events);
-    list_free(loop->tasks, 0);
     tfree(loop);
 }
 
 
-void epoll_create_task(EpollLoop *loop,
-        int fd, void (*task)(void *ptr), void *args) {
-
-    Task *t = tmalloc(sizeof(*t));
-    t->fd = fd;
-    t->type = TASK;
-    t->args = args;
-    t->task = task;
-
-    loop->tasks = list_push(loop->tasks, t);
-
-    add_epoll(loop->epollfd, t->fd, NULL);
+void epoll_register_callback(EpollLoop *loop, Callback *cb) {
+    if (add_epoll(loop->epollfd, cb->fd, cb) < 0)
+        perror("Epoll register callback: ");
 }
 
 
-void epoll_create_periodic_task(EpollLoop *loop,
-        int ns, void (*task)(void *ptr), void *args) {
+void epoll_register_periodic_task(EpollLoop *loop, int ns, Callback *cb) {
 
     struct itimerspec timervalue;
 
@@ -338,91 +336,64 @@ void epoll_create_periodic_task(EpollLoop *loop,
         return;
     }
 
-    Task *t = tmalloc(sizeof(*t));
-    t->fd = timerfd;
-    t->type = PERIODIC;
-    t->args = args;
-    t->task = task;
-
-    loop->tasks = list_push(loop->tasks, t);
+    epoll_register_callback(loop, cb);
 
 }
 
 
-void epoll_loop_wait(EpollLoop *el) {
+int epoll_loop_wait(EpollLoop *el) {
 
+    int rc = 0;
     int events = 0;
-    ListNode *cursor = NULL;
-    Task *t = NULL;
-    bool executed = false;
+    Callback *cb = NULL;
 
-    while ((events = epoll_wait(el->epollfd,
-                    el->events, el->max_events, -1)) > -1) {
+    while (1) {
+
+        events = epoll_wait(el->epollfd,
+                el->events, el->max_events, el->timeout);
+
+        if (events < 0) {
+
+            /* Signals to all threads. Ignore it for now */
+            if (errno == EINTR)
+                continue;
+
+            /* Error occured, break the loop */
+            rc = -1;
+            el->status = errno;
+            break;
+        }
 
         for (int i = 0; i < events; i++) {
 
-            executed = false;
-
+            /* Check for errors */
             if ((el->events[i].events & EPOLLERR) ||
                     (el->events[i].events & EPOLLHUP) ||
                     (!(el->events[i].events & EPOLLIN) &&
                      !(el->events[i].events & EPOLLOUT))) {
 
                 /* An error has occured on this fd, or the socket is not
-                   ready for reading */
+                   ready for reading, closing connection */
                 perror ("epoll_wait(2)");
+                shutdown(el->events[i].data.fd, 0);
                 close(el->events[i].data.fd);
                 continue;
             }
 
-            if (el->events[i].data.fd == config.run) {
-
-                /* And quit event after that */
-                eventfd_t val;
-                eventfd_read(config.run, &val);
-
-                tdebug("Stopping epoll el.");
-
-                break;
-            }
-
-            // Check for a task ready to be executed
-            while (cursor) {
-                t = cursor->data;
-                if (el->events[i].data.fd == t->fd) {
-                    t->task(t->args);
-                    executed = true;
-                }
-                cursor = cursor->next;
-            }
-
-            // If no tasks were found, run the default one
-            if (executed == false)
-                el->default_task(el->events[i].data.ptr, el->default_args);
+            /* No error events, proeed to run callback */
+            cb = (Callback *) el->events[i].data.ptr;
+            cb->callback(el, cb->args);
         }
     }
 
     // FIXME free resources here
     epoll_loop_free(el);
+
+    return rc;
 }
 
 
-void epoll_add_fd(EpollLoop *el, int fd, void *ptr) {
-    add_epoll(el->epollfd, fd, ptr);
-}
-
-
-void epoll_mod_fd(EpollLoop *el, int fd, int evs, void *ptr) {
-    mod_epoll(el->epollfd, fd, evs, ptr);
-}
-
-
-void epoll_del_fd(EpollLoop *el, int fd) {
-    del_epoll(el->epollfd, fd);
-}
-
-
-void add_epoll(int efd, int fd, void *data) {
+int add_epoll(int efd, int fd, void *data) {
 
     struct epoll_event ev;
     ev.data.fd = fd;
@@ -433,13 +404,11 @@ void add_epoll(int efd, int fd, void *data) {
 
     ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 
-    if (epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev) < 0) {
-        perror("epoll_ctl(2): add epollin");
-    }
+    return epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev);
 }
 
 
-void mod_epoll(int efd, int fd, int evs, void *data) {
+int mod_epoll(int efd, int fd, int evs, void *data) {
 
     struct epoll_event ev;
     ev.data.fd = fd;
@@ -450,13 +419,10 @@ void mod_epoll(int efd, int fd, int evs, void *data) {
 
     ev.events = evs | EPOLLET | EPOLLONESHOT;
 
-    if (epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev) < 0) {
-        perror("epoll_ctl(2): set epollout");
-    }
+    return epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev);
 }
 
 
-void del_epoll(int efd, int fd) {
-    if (epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL) < 0)
-        perror("epoll_ctl(2): set epollout");
+int del_epoll(int efd, int fd) {
+    return epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL);
 }
