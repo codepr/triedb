@@ -66,4 +66,7 @@ size_t memory_used(void);
 #define tinfo(...) log(INFORMATION, __VA_ARGS__)
 
 
+#define STREQ(s1, s2, len) strncasecmp(s1, s2, len) == 0 ? true : false
+
+
 #endif

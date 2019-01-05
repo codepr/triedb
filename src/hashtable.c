@@ -35,12 +35,11 @@
 #include "hashtable.h"
 
 
-#define STR_EQ(s1, s2, len) strncmp(s1, s2, len) == 0 ? true : false
-
-
 const unsigned int INITIAL_SIZE = 4;
 
 const unsigned int MAX_CHAIN_LENGTH = 8;
+
+const unsigned long KNUTH_PRIME = 2654435761;
 
 /*
  * Hashing function for a string
@@ -49,7 +48,7 @@ static uint32_t hashtable_hash_int(HashTable *m, const uint8_t *keystr) {
 
     assert(m && keystr);
 
-    uint64_t key = CRC32(keystr, strlen((const char *) keystr));
+    uint64_t key = crc32(keystr, strlen((const char *) keystr));
 
     /* Robert Jenkins' 32 bit Mix Function */
     key += (key << 12);
@@ -62,7 +61,7 @@ static uint32_t hashtable_hash_int(HashTable *m, const uint8_t *keystr) {
     key ^= (key >> 12);
 
     /* Knuth's Multiplicative Method */
-    key = (key >> 3) * 2654435761;
+    key = (key >> 3) * KNUTH_PRIME;
 
     return key % m->table_size;
 }
@@ -72,30 +71,31 @@ static uint32_t hashtable_hash_int(HashTable *m, const uint8_t *keystr) {
  * Return the integer of the location in entries to store the point to the item,
  * or -HASHTABLE_FULL.
  */
-static int hashtable_hash(HashTable *in, const uint8_t *key) {
+static int hashtable_hash(HashTable *table, const uint8_t *key) {
 
-    assert(in);
-    assert(key);
+    assert(table && key);
 
     /* If full, return immediately */
-    if (in->size >= (in->table_size / 2))
+    if (table->size >= (table->table_size / 2))
         return -HASHTABLE_FULL;
 
     /* Find the best index */
-    int curr = hashtable_hash_int(in, key);
+    uint32_t curr = hashtable_hash_int(table, key);
     char *k, *currk;
 
     /* Linear probing */
     for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {
-        if (in->entries[curr].taken == false)
-            return curr;
-        k = (char *) in->entries[curr].key;
-        currk = (char *) key;
-        if (in->entries[curr].taken == true &&
-                STR_EQ(k, currk, strlen(k)) == true)
+
+        if (table->entries[curr].taken == false)
             return curr;
 
-        curr = (curr + 1) % in->table_size;
+        k = (char *) table->entries[curr].key;
+        currk = (char *) key;
+        if (table->entries[curr].taken == true &&
+                STREQ(k, currk, strlen(k)) == true)
+            return curr;
+
+        curr = (curr + 1) % table->table_size;
     }
 
     return -HASHTABLE_FULL;
@@ -105,35 +105,35 @@ static int hashtable_hash(HashTable *in, const uint8_t *key) {
 /*
  * Doubles the size of the hashtable, and rehashes all the elements
  */
-static int hashtable_rehash(HashTable *m) {
+static int hashtable_rehash(HashTable *table) {
 
-    assert(m);
+    assert(table);
 
-    unsigned long old_size;
+    size_t old_size;
     HashTableEntry *curr;
 
     /* Setup the new elements */
-    HashTableEntry *temp = tcalloc(2 * m->table_size, sizeof(*temp));
+    HashTableEntry *temp = tcalloc(2 * table->table_size, sizeof(*temp));
     if (!temp)
         return -HASHTABLE_ERR;
 
     /* Update the array */
-    curr = m->entries;
-    m->entries = temp;
+    curr = table->entries;
+    table->entries = temp;
 
     /* Update the size */
-    old_size = m->table_size;
-    m->table_size = 2 * m->table_size;
-    m->size = 0;
+    old_size = table->table_size;
+    table->table_size = 2 * table->table_size;
+    table->size = 0;
 
     /* Rehash the elements */
-    for(unsigned long i = 0; i < old_size; i++) {
+    for(size_t i = 0; i < old_size; i++) {
         int status;
 
         if (curr[i].taken == false)
             continue;
 
-        status = hashtable_put(m, curr[i].key, curr[i].val);
+        status = hashtable_put(table, curr[i].key, curr[i].val);
         if (status != HASHTABLE_OK)
             return status;
     }
@@ -150,47 +150,50 @@ static int hashtable_rehash(HashTable *m) {
  */
 HashTable *hashtable_create(void) {
 
-    HashTable *m = tmalloc(sizeof(HashTable));
-    if(!m) return NULL;
+    HashTable *table = tmalloc(sizeof(HashTable));
+    if(!table)
+        return NULL;
 
-    m->entries = (HashTableEntry *) tcalloc(INITIAL_SIZE, sizeof(HashTableEntry));
-    if(!m->entries) {
-        if (m) hashtable_release(m);
+    table->entries = tcalloc(INITIAL_SIZE, sizeof(HashTableEntry));
+    if(!table->entries) {
+        if (table)
+            hashtable_release(table);
         return NULL;
     }
 
-    m->table_size = INITIAL_SIZE;
-    m->size = 0;
+    table->table_size = INITIAL_SIZE;
+    table->size = 0;
 
-    return m;
+    return table;
 }
 
 
 /*
  * Add a pointer to the hashtable with some key
  */
-int hashtable_put(HashTable *m, const void *key, void *val) {
+int hashtable_put(HashTable *table, const char *key, void *val) {
 
-    assert(m);
-    assert(key);
-    assert(val);
+    assert(table && key);
 
     /* Find a place to put our value */
-    int index = hashtable_hash(m, key);
+    int index = hashtable_hash(table, (const uint8_t *) key);
 
     while (index == -HASHTABLE_FULL){
 
-        if (hashtable_rehash(m) == -HASHTABLE_ERR)
+        if (hashtable_rehash(table) == -HASHTABLE_ERR)
             return -HASHTABLE_ERR;
 
-        index = hashtable_hash(m, key);
+        index = hashtable_hash(table, (const uint8_t *) key);
     }
+
     /* Set the entries */
-    m->entries[index].val = val;
-    m->entries[index].key = key;
-    if (m->entries[index].taken == false) {
-        m->entries[index].taken = true;
-        m->size++;
+    table->entries[index].val = val;
+    table->entries[index].key = key;
+
+    /* Update taken flag, if it was false, update the size also */
+    if (table->entries[index].taken == false) {
+        table->entries[index].taken = true;
+        table->size++;
     }
 
     return HASHTABLE_OK;
@@ -200,21 +203,20 @@ int hashtable_put(HashTable *m, const void *key, void *val) {
 /*
  * Get your pointer out of the hashtable with a key
  */
-void *hashtable_get(HashTable *m, const void *key) {
+void *hashtable_get(HashTable *table, const char *key) {
 
-    assert(m && key);
+    assert(table && key);
 
     /* Find data location */
-    int curr = hashtable_hash_int(m, key);
+    uint32_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
     for (int i = 0; i < MAX_CHAIN_LENGTH; i++){
-        if (m->entries[curr].taken == true) {
-            if (STR_EQ((const char *) m->entries[curr].key, (const char *) key,
-                        strlen((const char *) key)) == true)
-                return (m->entries[curr].val);
+        if (table->entries[curr].taken == true) {
+            if (STREQ(table->entries[curr].key, key, strlen(key)) == true)
+                return table->entries[curr].val;
         }
-        curr = (curr + 1) % m->table_size;
+        curr = (curr + 1) % table->table_size;
     }
 
     /* Not found */
@@ -225,24 +227,23 @@ void *hashtable_get(HashTable *m, const void *key) {
 /*
  * Return the key-value pair represented by a key in the hashtable
  */
-HashTableEntry *hashtable_get_entry(HashTable *m, const void *key) {
+HashTableEntry *hashtable_get_entry(HashTable *table, const char *key) {
 
-    assert(m);
-    assert(key);
+    assert(table && key);
 
     /* Find data location */
-    int curr = hashtable_hash_int(m, key);
+    uint32_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
     for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {
-        if (m->entries[curr].taken == true) {
-            if (STR_EQ((const char *) m->entries[curr].key, (const char *) key,
-                        strlen((const char *) key)) == true)
-                return &m->entries[curr];
+        if (table->entries[curr].taken == true) {
+            if (STREQ(table->entries[curr].key, key, strlen(key)) == true)
+                return &table->entries[curr];
         }
 
-        curr = (curr + 1) % m->table_size;
+        curr = (curr + 1) % table->table_size;
     }
+
     /* Not found */
     return NULL;
 }
@@ -251,27 +252,31 @@ HashTableEntry *hashtable_get_entry(HashTable *m, const void *key) {
 /*
  * Remove an element with that key from the hashtable
  */
-int hashtable_del(HashTable *m, const void *key) {
+int hashtable_del(HashTable *table, const char *key) {
 
-    assert(m && key);
+    assert(table && key);
 
     /* Find key */
-    int curr = hashtable_hash_int(m, key);
+    uint32_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
     for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {
+
         // check wether the position in array is in use
-        if (m->entries[curr].taken == true) {
-            if (STR_EQ((const char *) m->entries[curr].key, (const char *) key,
-                        strlen((const char *) key)) == true) {
+        if (table->entries[curr].taken == true) {
+            if (STREQ(table->entries[curr].key, key, strlen(key)) == true) {
+
                 /* Blank out the fields */
-                m->entries[curr].taken = false;
+                table->entries[curr].taken = false;
+
                 /* Reduce the size */
-                m->size--;
+                table->size--;
+
                 return HASHTABLE_OK;
             }
         }
-        curr = (curr + 1) % m->table_size;
+
+        curr = (curr + 1) % table->table_size;
     }
 
     /* Data not found */
@@ -279,72 +284,125 @@ int hashtable_del(HashTable *m, const void *key) {
 }
 
 /*
- * Iterate the function parameter over each element in the hashmap.  The
- * additional any_t argument is passed to the function as its first
- * argument and the pair is the second.
+ * Iterate the function parameter over each element in the hashmap. The unique
+ * void * argument is passed to the function as its first argument,
+ * representing the key-value pair structure.
  */
-int hashtable_iterate(HashTable *m, int (*func)(void *arg)) {
+int hashtable_iterate(HashTable *table, int (*func)(HashTableEntry *)) {
 
-    assert(m);
+    assert(table);
 
     /* On empty hashmap, return immediately */
-    if (m->size <= 0)
+    if (table->size <= 0)
         return -HASHTABLE_ERR;
 
     /* Linear probing */
-    for (int i = 0; i < m->table_size; i++) {
-        if (m->entries[i].taken == true) {
-            HashTableEntry data = m->entries[i];
+    for (size_t i = 0; i < table->table_size; i++) {
+
+        if (table->entries[i].taken == true) {
+
+            /* Apply function to the key-value entry */
+            HashTableEntry data = table->entries[i];
             int status = func(&data);
+
             if (status != HASHTABLE_OK)
                 return status;
+
         }
     }
+
     return HASHTABLE_OK;
 }
 
 /* callback function used with iterate to clean up the hashtable */
-static int destroy(void *t1) {
+static int destroy(HashTableEntry *entry) {
 
-    assert(t1);
-
-    HashTableEntry *entry = (HashTableEntry *) t1;
-
-    if (entry) {
-        // free key field
-        if (entry->key)
-            tfree((void *) entry->key);
-        // free value field
-        if (entry->val)
-            tfree(entry->val);
-    } else
+    if (!entry)
         return -HASHTABLE_ERR;
+
+    // free key field
+    if (entry->key)
+        tfree((void *) entry->key);
+
+    // free value field
+    if (entry->val)
+        tfree(entry->val);
 
     return HASHTABLE_OK;
 }
 
 /* Deallocate the hashtable */
-void hashtable_release(HashTable *m){
-    assert(m);
-    hashtable_iterate(m, destroy);
-    if (!m || !m->entries)
+void hashtable_release(HashTable *table){
+
+    assert(table);
+
+    hashtable_iterate(table, destroy);
+
+    if (!table || !table->entries)
         return;
-    tfree(m->entries);
-    tfree(m);
-    m = NULL;
+
+    tfree(table->entries);
+    tfree(table);
 }
 
 /* Dellacation with custom callback, for complex data type values, this way it
  * is possible to pass free_function crafted for the complex data stored. */
-void hashtable_custom_release(HashTable *m, int (*func)(void *arg)) {
-    assert(m);
-    hashtable_iterate(m, func);
-    if (!m || !m->entries)
+void hashtable_custom_release(HashTable *table, int (*func)(HashTableEntry *)) {
+
+    assert(table);
+
+    hashtable_iterate(table, func);
+
+    if (!table || !table->entries)
         return;
-    tfree(m->entries);
-    tfree(m);
+
+    tfree(table->entries);
+    tfree(table);
 }
 
+/* The implementation here was originally done by Gary S. Brown. Slighltly
+ * modified by Pete Warden, without any imposition on the reuse of the code.
+ */
+
+/* ============================================================= */
+/*  COPYRIGHT (C) 1986 Gary S. Brown.  You may use this program, or       */
+/*  code or tables extracted from it, as desired without restriction.     */
+/*                                                                        */
+/*  First, the polynomial itself and its table of feedback terms.  The    */
+/*  polynomial is                                                         */
+/*  X^32+X^26+X^23+X^22+X^16+X^12+X^11+X^10+X^8+X^7+X^5+X^4+X^2+X^1+X^0   */
+/*                                                                        */
+/*  Note that we take it "backwards" and put the highest-order term in    */
+/*  the lowest-order bit.  The X^32 term is "implied"; the LSB is the     */
+/*  X^31 term, etc.  The X^0 term (usually shown as "+1") results in      */
+/*  the MSB being 1.                                                      */
+/*                                                                        */
+/*  Note that the usual hardware shift register implementation, which     */
+/*  is what we're using (we're merely optimizing it by doing eight-bit    */
+/*  chunks at a time) shifts bits into the lowest-order term.  In our     */
+/*  implementation, that means shifting towards the right.  Why do we     */
+/*  do it this way?  Because the calculated CRC must be transmitted in    */
+/*  order from highest-order term to lowest-order term.  UARTs transmit   */
+/*  characters in order from LSB to MSB.  By storing the CRC this way,    */
+/*  we hand it to the UART in the order low-byte to high-byte; the UART   */
+/*  sends each low-bit to hight-bit; and the result is transmission bit   */
+/*  by bit from highest- to lowest-order term without requiring any bit   */
+/*  shuffling on our part.  Reception works similarly.                    */
+/*                                                                        */
+/*  The feedback terms table consists of 256, 32-bit entries.  Notes:     */
+/*                                                                        */
+/*      The table can be generated at runtime if desired; code to do so   */
+/*      is shown later.  It might not be obvious, but the feedback        */
+/*      terms simply represent the results of eight shift/xor opera-      */
+/*      tions for all combinations of data and CRC register values.       */
+/*                                                                        */
+/*      The values must be right-shifted by eight bits by the "updcrc"    */
+/*      logic; the shift must be unsigned (bring in zeroes).  On some     */
+/*      hardware you could probably optimize the shift in assembler by    */
+/*      using byte-swap instructions.                                     */
+/*      polynomial $edb88320                                              */
+/*                                                                        */
+/*  --------------------------------------------------------------------  */
 
 static unsigned long crc32_tab[] = {
     0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL, 0x076dc419L,

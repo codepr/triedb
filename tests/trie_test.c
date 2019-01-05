@@ -33,12 +33,15 @@ int tests_run = 0;
 
 
 int main(int argc, char **argv) {
+    printf("\n STRUCTURES TESTS \n");
+    printf(" ----------------\n\n");
     char *result = structures_test();
     if (result != 0)
         printf(" %s\n", result);
     else
         printf("\n [*] ALL TESTS PASSED\n");
-    printf(" [*] Tests run: %d\n\n", tests_run);
+    printf("\n ----------------\n");
+    printf("\n [*] Tests run: %d\n\n", tests_run);
 
     return result != 0;
 }

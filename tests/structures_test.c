@@ -44,6 +44,7 @@ static char *test_ringbuf_init(void) {
     Ringbuffer *r = ringbuf_init(buf, 10);
     ASSERT("[! ringbuf_init]: ringbuf not created", r != NULL);
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_init]: OK\n");
     return 0;
 }
 
@@ -56,6 +57,7 @@ static char *test_ringbuf_free(void) {
     Ringbuffer *r = ringbuf_init(buf, 10);
     ringbuf_free(r);
     ASSERT("[! ringbuf_free]: ringbuf not released", r != NULL);
+    printf(" [ringbuf::ringbuf_free]: OK\n");
     return 0;
 }
 
@@ -72,6 +74,7 @@ static char *test_ringbuf_full(void) {
     ASSERT("[! ringbuf_full]: ringbuf size %d", ringbuf_size(r));
     ASSERT("[! ringbuf_full]: ringbuf_full doesn't work as expected, state ringbuffer is not full while being full", ringbuf_full(r) == 1);
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_full]: OK\n");
     return 0;
 }
 
@@ -87,6 +90,7 @@ static char *test_ringbuf_empty(void) {
     ASSERT("[! ringbuf_empty]: ringbuf size %d", ringbuf_size(r));
     ASSERT("[! ringbuf_empty]: ringbuf_empty doesn't work as expected, state ringbuffer is empty while having an item", ringbuf_empty(r) != 1);
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_empty]: OK\n");
     return 0;
 }
 
@@ -99,6 +103,7 @@ static char *test_ringbuf_capacity(void) {
     Ringbuffer *r = ringbuf_init(buf, 2);
     ASSERT("[! ringbuf_capcacity]: ringbuf_capacity doesn't work as expected", ringbuf_capacity(r) == 2);
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_capacity]: OK\n");
     return 0;
 }
 
@@ -113,6 +118,7 @@ static char *test_ringbuf_size(void) {
     ringbuf_push(r, 'a');
     ASSERT("[! ringbuf_size]: ringbuf_size doesn't work as expected", ringbuf_size(r) == 1);
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_size]: OK\n");
     return 0;
 }
 
@@ -130,6 +136,7 @@ static char *test_ringbuf_push(void) {
     ringbuf_pop(r, &x);
     ASSERT("[! ringbuf_push]: ringbuf_push doesn't work as expected", x == 'a');
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_push]: OK\n");
     return 0;
 }
 
@@ -150,6 +157,7 @@ static char *test_ringbuf_pop(void) {
     ringbuf_pop(r, &y);
     ASSERT("[! ringbuf_pop]: ringbuf_pop doesn't work as expected", y == 'b');
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_pop]: OK\n");
     return 0;
 }
 
@@ -160,13 +168,14 @@ static char *test_ringbuf_pop(void) {
 static char *test_ringbuf_bulk_push(void) {
     uint8_t buf[3];
     Ringbuffer *r = ringbuf_init(buf, 3);
-    ASSERT("[! ringbuf_push]: ringbuf_push doesn't work as expected", ringbuf_size(r) == 0);
+    ASSERT("[! ringbuf_bulk_push]: ringbuf_bulk_push doesn't work as expected", ringbuf_size(r) == 0);
     ringbuf_bulk_push(r, (uint8_t *) "abc", 3);
-    ASSERT("[! ringbuf_push]: ringbuf_push doesn't work as expected", ringbuf_size(r) == 3);
+    ASSERT("[! ringbuf_bulk_push]: ringbuf_bulk_push doesn't work as expected", ringbuf_size(r) == 3);
     uint8_t x;
     ringbuf_pop(r, &x);
-    ASSERT("[! ringbuf_push]: ringbuf_push doesn't work as expected", x == 'a');
+    ASSERT("[! ringbuf_bulk_push]: ringbuf_bulk_push doesn't work as expected", x == 'a');
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_bulk_push]: OK\n");
     return 0;
 }
 
@@ -184,6 +193,7 @@ static char *test_ringbuf_bulk_pop(void) {
     ringbuf_bulk_pop(r, x, 3);
     ASSERT("[! ringbuf_bulk_pop]: ringbuf_bulk_pop doesn't work as expected", strncmp((const char *) x, "abc", 3) == 0);
     ringbuf_free(r);
+    printf(" [ringbuf::ringbuf_bulk_pop]: OK\n");
     return 0;
 }
 
@@ -195,6 +205,7 @@ static char *test_list_init(void) {
     List *l = list_init();
     ASSERT("[! list_init]: list not created", l != NULL);
     list_free(l, 0);
+    printf(" [list::list_init]: OK\n");
     return 0;
 }
 
@@ -206,6 +217,7 @@ static char *test_list_free(void) {
     List *l = list_init();
     ASSERT("[! list_free]: list not created", l != NULL);
     list_free(l, 0);
+    printf(" [list::list_free]: OK\n");
     return 0;
 }
 
@@ -219,6 +231,7 @@ static char *test_list_push(void) {
     list_push(l, x);
     ASSERT("[! list_push]: item not pushed in", l->len == 1);
     list_free(l, 0);
+    printf(" [list::list_push]: OK\n");
     return 0;
 }
 
@@ -232,6 +245,7 @@ static char *test_list_push_back(void) {
     list_push_back(l, x);
     ASSERT("[! list_push_back]: item not pushed in", l->len == 1);
     list_free(l, 0);
+    printf(" [list::list_push_back]: OK\n");
     return 0;
 }
 
@@ -257,6 +271,7 @@ static char *test_list_remove_node(void) {
     ASSERT("[! list_remove_node]: item not removed", strcmp(node->data, x) == 0);
     tfree(node);
     list_free(l, 0);
+    printf(" [list::list_remove_node]: OK\n");
     return 0;
 }
 
@@ -267,6 +282,7 @@ static char *test_trie_new(void) {
     struct Trie *trie = trie_new();
     ASSERT("[! trie_new]: Trie not created", trie != NULL);
     trie_free(trie);
+    printf(" [trie::trie_new]: OK\n");
     return 0;
 }
 
@@ -279,6 +295,7 @@ static char *test_trie_new_node(void) {
     size_t size = 0;
     ASSERT("[! trie_new_node]: TrieNode not created", node != NULL);
     trie_node_free(node, &size);
+    printf(" [trie::trie_new_node]: OK\n");
     return 0;
 }
 
@@ -295,6 +312,7 @@ static char *test_trie_insert(void) {
     bool found = trie_find(root, key, &payload);
     ASSERT("[! trie_insert]: Trie insertion failed", (found == true && payload != NULL));
     trie_free(root);
+    printf(" [trie::trie_insert]: OK\n");
     return 0;
 }
 
@@ -311,6 +329,7 @@ static char *test_trie_find(void) {
     bool found = trie_find(root, key, &payload);
     ASSERT("[! trie_find]: Trie search failed", (found == true && payload != NULL));
     trie_free(root);
+    printf(" [trie::trie_find]: OK\n");
     return 0;
 }
 
@@ -340,6 +359,7 @@ static char *test_trie_delete(void) {
     found = trie_find(root, key3, &payload);
     ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
     trie_free(root);
+    printf(" [trie::trie_delete]: OK\n");
     return 0;
 }
 
@@ -375,6 +395,7 @@ static char *test_trie_prefix_delete(void) {
     ASSERT("[! trie_prefix_delete]: Trie prefix delete key4 success",
             (found == true || payload != NULL));
     trie_free(root);
+    printf(" [trie::trie_prefix_delete]: OK\n");
     return 0;
 }
 
@@ -408,6 +429,7 @@ static char *test_vector_qsort(void) {
             *((int *) v->items[0]) == 0 && *((int *) v->items[1]) == 3 && *((int *) v->items[2]) == 4);
 
     vector_free(v);
+    printf(" [vector::vector_qsort]: OK\n");
 
     return 0;
 }
@@ -417,8 +439,9 @@ static char *test_vector_qsort(void) {
  */
 static char *test_hashtable_create(void) {
     HashTable *m = hashtable_create();
-    ASSERT("[! create]: hashtable not created", m != NULL);
+    ASSERT("[! hashtable_create]: hashtable not created", m != NULL);
     hashtable_release(m);
+    printf(" [hashtable::hashtable_create]: OK\n");
     return 0;
 }
 
@@ -429,7 +452,8 @@ static char *test_hashtable_create(void) {
 static char *test_hashtable_release(void) {
     HashTable *m = hashtable_create();
     hashtable_release(m);
-    ASSERT("[! release]: hashtable not released", m == NULL);
+    ASSERT("[! hashtable_release]: hashtable not released", m == NULL);
+    printf(" [hashtable::hashtable_release]: OK\n");
     return 0;
 }
 
@@ -441,14 +465,15 @@ static char *test_hashtable_put(void) {
     HashTable *m = hashtable_create();
     char *key = "hello";
     char *val = "world";
-    int status = hashtable_put(m, tstrdup(key), tstrdup(val));
-    ASSERT("[! put]: hashtable size = 0", m->size == 1);
-    ASSERT("[! put]: put didn't work as expected", status == HASHTABLE_OK);
+    int status = hashtable_put(m, key, val);
+    ASSERT("[! hashtable_put]: hashtable size = 0", m->size == 1);
+    ASSERT("[! hashtable_put]: hashtable_put didn't work as expected", status == HASHTABLE_OK);
     char *val1 = "WORLD";
     hashtable_put(m, tstrdup(key), tstrdup(val1));
     void *ret = hashtable_get(m, key);
-    ASSERT("[! put]: put didn't update the value", strcmp(val1, ret) == 0);
+    ASSERT("[! hashtable_put]: hashtable_put didn't update the value", strcmp(val1, ret) == 0);
     hashtable_release(m);
+    printf(" [hashtable::hashtable_put]: OK\n");
     return 0;
 }
 
@@ -462,8 +487,9 @@ static char *test_hashtable_get(void) {
     char *val = "world";
     hashtable_put(m, tstrdup(key), tstrdup(val));
     char *ret = (char *) hashtable_get(m, key);
-    ASSERT("[! get]: get didn't work as expected", strcmp(ret, val) == 0);
+    ASSERT("[! hashtable_get]: hashtable_get didn't work as expected", strcmp(ret, val) == 0);
     hashtable_release(m);
+    printf(" [hashtable::hashtable_get]: OK\n");
     return 0;
 }
 
@@ -475,11 +501,12 @@ static char *test_hashtable_del(void) {
     HashTable *m = hashtable_create();
     char *key = "hello";
     char *val = "world";
-    hashtable_put(m, tstrdup(key), tstrdup(val));
+    hashtable_put(m, key, val);
     int status = hashtable_del(m, key);
-    ASSERT("[! del]: hashtable size = 1", m->size == 0);
-    ASSERT("[! del]: del didn't work as expected", status == HASHTABLE_OK);
+    ASSERT("[! hashtbale_del]: hashtable size = 1", m->size == 0);
+    ASSERT("[! hashtbale_del]: hashtbale_del didn't work as expected", status == HASHTABLE_OK);
     hashtable_release(m);
+    printf(" [hashtable::hashtable_del]: OK\n");
     return 0;
 }
 
@@ -510,10 +537,10 @@ char *structures_test() {
     RUN_TEST(test_trie_prefix_delete);
     RUN_TEST(test_vector_qsort);
     RUN_TEST(test_hashtable_create);
-    RUN_TEST(test_hashtable_release);
     RUN_TEST(test_hashtable_put);
     RUN_TEST(test_hashtable_get);
     RUN_TEST(test_hashtable_del);
+    RUN_TEST(test_hashtable_release);
 
     return 0;
 }

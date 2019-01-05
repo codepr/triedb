@@ -30,6 +30,7 @@
 #define HASHTABLE_H
 
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -39,12 +40,10 @@
 #define HASHTABLE_OOM  2
 #define HASHTABLE_FULL 3
 
-#define CRC32(c, x) crc32(c, x)
-
 
 /* We need to keep keys and values */
 typedef struct {
-    const void *key;
+    const char *key;
     void *val;
     bool taken;
 } HashTableEntry;
@@ -55,8 +54,8 @@ typedef struct {
  * hold.
  */
 typedef struct {
-    uint64_t table_size;
-    uint64_t size;
+    size_t table_size;
+    size_t size;
     HashTableEntry *entries;
 } HashTable;
 
@@ -66,15 +65,15 @@ HashTable *hashtable_create(void);
 
 void hashtable_release(HashTable *);
 
-int hashtable_put(HashTable *, const void *, void *);
+int hashtable_put(HashTable *, const char *, void *);
 
-void *hashtable_get(HashTable *, const void *);
+void *hashtable_get(HashTable *, const char *);
 
-int hashtable_del(HashTable *, const void *);
+int hashtable_del(HashTable *, const char *);
 
-int hashtable_iterate(HashTable *, int (*func)(void *));
+int hashtable_iterate(HashTable *, int (*func)(HashTableEntry *));
 
-void hashtable_custom_release(HashTable *, int (*func)(void *));
+void hashtable_custom_release(HashTable *, int (*func)(HashTableEntry *));
 
 uint64_t crc32(const uint8_t *, const uint32_t);
 

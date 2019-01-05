@@ -34,9 +34,6 @@
 #include "network.h"
 
 
-#define STREQ(s1, s2, len) strncasecmp(s1, s2, len) == 0 ? true : false
-
-
 struct llevel {
     const char *lname;
     int loglevel;
