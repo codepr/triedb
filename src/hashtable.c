@@ -66,7 +66,6 @@ static uint32_t hashtable_hash_int(HashTable *m, const uint8_t *keystr) {
     return key % m->table_size;
 }
 
-
 /*
  * Return the integer of the location in entries to store the point to the item,
  * or -HASHTABLE_FULL.
@@ -91,6 +90,7 @@ static int hashtable_hash(HashTable *table, const uint8_t *key) {
 
         k = (char *) table->entries[curr].key;
         currk = (char *) key;
+
         if (table->entries[curr].taken == true &&
                 STREQ(k, currk, strlen(k)) == true)
             return curr;
@@ -100,7 +100,6 @@ static int hashtable_hash(HashTable *table, const uint8_t *key) {
 
     return -HASHTABLE_FULL;
 }
-
 
 /*
  * Doubles the size of the hashtable, and rehashes all the elements
@@ -126,19 +125,37 @@ static int hashtable_rehash(HashTable *table) {
     table->table_size = 2 * table->table_size;
     table->size = 0;
 
+    int status;
+
     /* Rehash the elements */
-    for(size_t i = 0; i < old_size; i++) {
-        int status;
+    for (size_t i = 0; i < old_size; i++) {
 
         if (curr[i].taken == false)
             continue;
 
-        status = hashtable_put(table, curr[i].key, curr[i].val);
-        if (status != HASHTABLE_OK)
+        if ((status = hashtable_put(table,
+                        curr[i].key, curr[i].val)) != HASHTABLE_OK)
             return status;
     }
 
     tfree(curr);
+
+    return HASHTABLE_OK;
+}
+
+/* callback function used with iterate to clean up the hashtable */
+static int destroy_entry(HashTableEntry *entry) {
+
+    if (!entry)
+        return -HASHTABLE_ERR;
+
+    // free key field
+    if (entry->key)
+        tfree((void *) entry->key);
+
+    // free value field
+    if (entry->val)
+        tfree(entry->val);
 
     return HASHTABLE_OK;
 }
@@ -148,7 +165,7 @@ static int hashtable_rehash(HashTable *table) {
  * Return an empty hashtable, or NULL on failure. The newly create HashTable is
  * dynamically allocated on the heap memory, so it must be released manually.
  */
-HashTable *hashtable_create(void) {
+HashTable *hashtable_create(int (*destructor)(HashTableEntry *)) {
 
     HashTable *table = tmalloc(sizeof(HashTable));
     if(!table)
@@ -156,10 +173,11 @@ HashTable *hashtable_create(void) {
 
     table->entries = tcalloc(INITIAL_SIZE, sizeof(HashTableEntry));
     if(!table->entries) {
-        if (table)
-            hashtable_release(table);
+        hashtable_release(table);
         return NULL;
     }
+
+    table->destructor = destructor ? destructor : destroy_entry;
 
     table->table_size = INITIAL_SIZE;
     table->size = 0;
@@ -168,9 +186,8 @@ HashTable *hashtable_create(void) {
 }
 
 
-/*
- * Add a pointer to the hashtable with some key
- */
+/* Add a new key-value pair into the hashtable entries array, use chaining in
+   case of collision. */
 int hashtable_put(HashTable *table, const char *key, void *val) {
 
     assert(table && key);
@@ -201,7 +218,7 @@ int hashtable_put(HashTable *table, const char *key, void *val) {
 
 
 /*
- * Get your pointer out of the hashtable with a key
+ * Get the value void pointer out of the hashtable associated to a key
  */
 void *hashtable_get(HashTable *table, const char *key) {
 
@@ -272,6 +289,9 @@ int hashtable_del(HashTable *table, const char *key) {
                 /* Reduce the size */
                 table->size--;
 
+                /* Destroy the entry */
+                table->destructor(&table->entries[curr]);
+
                 return HASHTABLE_OK;
             }
         }
@@ -288,12 +308,12 @@ int hashtable_del(HashTable *table, const char *key) {
  * void * argument is passed to the function as its first argument,
  * representing the key-value pair structure.
  */
-int hashtable_iterate(HashTable *table, int (*func)(HashTableEntry *)) {
+int hashtable_map(HashTable *table, int (*func)(HashTableEntry *)) {
 
-    assert(table);
+    assert(func);
 
     /* On empty hashmap, return immediately */
-    if (table->size <= 0)
+    if (!table || table->size <= 0)
         return -HASHTABLE_ERR;
 
     /* Linear probing */
@@ -314,44 +334,14 @@ int hashtable_iterate(HashTable *table, int (*func)(HashTableEntry *)) {
     return HASHTABLE_OK;
 }
 
-/* callback function used with iterate to clean up the hashtable */
-static int destroy(HashTableEntry *entry) {
-
-    if (!entry)
-        return -HASHTABLE_ERR;
-
-    // free key field
-    if (entry->key)
-        tfree((void *) entry->key);
-
-    // free value field
-    if (entry->val)
-        tfree(entry->val);
-
-    return HASHTABLE_OK;
-}
-
-/* Deallocate the hashtable */
+/* Deallocate the hashtable using the defined destructor, if the destructor is
+   NULL it call normal free on key-value pairs. */
 void hashtable_release(HashTable *table){
 
-    assert(table);
-
-    hashtable_iterate(table, destroy);
-
-    if (!table || !table->entries)
+    if (!table)
         return;
 
-    tfree(table->entries);
-    tfree(table);
-}
-
-/* Dellacation with custom callback, for complex data type values, this way it
- * is possible to pass free_function crafted for the complex data stored. */
-void hashtable_custom_release(HashTable *table, int (*func)(HashTableEntry *)) {
-
-    assert(table);
-
-    hashtable_iterate(table, func);
+    hashtable_map(table, table->destructor);
 
     if (!table || !table->entries)
         return;

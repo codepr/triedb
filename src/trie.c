@@ -56,15 +56,13 @@ static bool trie_is_free_node(const TrieNode *node) {
 
 static TrieNode *trie_node_find(const TrieNode *node, const char *prefix) {
 
-    const char *k = prefix;
-
     TrieNode *retnode = (TrieNode *) node;
 
     // Move to the end of the prefix first
-    for (char c = *k; c != '\0'; c = *(++k)) {
+    for (; *prefix; prefix++) {
 
         // O(n), the best we can have
-        ListNode *child = linear_search(retnode->children, c);
+        ListNode *child = linear_search(retnode->children, *prefix);
 
         // No key with the full prefix in the trie
         if (!child)
@@ -79,14 +77,17 @@ static TrieNode *trie_node_find(const TrieNode *node, const char *prefix) {
 
 static int trie_node_count(const TrieNode *node) {
 
-    if (trie_is_free_node(node))
+    /* Count only if it is a leaf with a value */
+    if (trie_is_free_node(node) && node->ndata && node->ndata->data)
         return 1;
 
     int count = 0;
 
+    /* Recurse through all the children */
     for (ListNode *cur = node->children->head; cur; cur = cur->next)
         count += trie_node_count(cur->data);
 
+    /* Add count if the node has a value */
     if (node->ndata)
         count++;
 
@@ -126,14 +127,13 @@ static int trie_node_insert(TrieNode *root,
         const char *key, const void *data, int16_t ttl) {
 
     int rc = 0;
-    const char *k = key;
 
     TrieNode *cursor = root;
     TrieNode *cur_node = NULL;
     ListNode *tmp = NULL;
 
     // Iterate through the key char by char
-    for (char x = *k; x != '\0'; x = *(++k)) {
+    for (; *key; key++) {
 
         /* We can use a linear search as on a linked list O(n) is the best find
          * algorithm we can use, as binary search would have the same if not
@@ -149,11 +149,11 @@ static int trie_node_insert(TrieNode *root,
          * avg and worst while maintaining O(n) space complexity, but it really
          * depends also on the size of the alphabet.
          */
-        tmp = linear_search(cursor->children, x);
+        tmp = linear_search(cursor->children, *key);
 
         // No match, we add a new node and sort the list with the new added link
         if (!tmp) {
-            cur_node = trie_new_node(x);
+            cur_node = trie_new_node(*key);
             cursor->children = list_push(cursor->children, cur_node);
             cursor->children->head = merge_sort_tnode(cursor->children->head);
         } else {
@@ -205,6 +205,8 @@ static bool trie_node_recursive_delete(TrieNode *node,
             }
             tfree(node->ndata);
             node->ndata = NULL;
+            if (*size > 0)
+                (*size)--;
 
             // If empty, node to be deleted
             return trie_is_free_node(node);
@@ -247,12 +249,8 @@ static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
 
     *ret = (cursor && cursor->ndata) ? cursor->ndata : NULL;
 
-    // No complete key found
-    if (!*ret)
-        return false;
-
-    return true;
-
+    // Return false if no complete key found, true otherwise
+    return !*ret ? false : true;
 }
 
 /* Insert a new key-value pair in the Trie structure */
@@ -495,7 +493,10 @@ List *trie_prefix_find(const Trie *trie, const char *prefix) {
     char *str = tmalloc(32);
     size_t plen = strlen(prefix);
     strcpy(str, prefix);
+
+    // Recursive function call
     trie_node_prefix_find(node, str, plen, keys);
+
     tfree(str);
 
     return keys;
@@ -519,10 +520,12 @@ void trie_node_free(TrieNode *node, size_t *size) {
     if (node->ndata && node->ndata->data) {
         tfree(node->ndata->data);
         tfree(node->ndata);
-        (*size)--;
+        if (*size > 0)
+            (*size)--;
     } else if (node->ndata) {
         tfree(node->ndata);
-        (*size)--;
+        if (*size > 0)
+            (*size)--;
     }
 
     // Release the node itself
@@ -531,8 +534,11 @@ void trie_node_free(TrieNode *node, size_t *size) {
 
 
 void trie_free(Trie *trie) {
+
     if (!trie)
         return;
+
     trie_node_free(trie->root, &(trie->size));
+
     tfree(trie);
 }

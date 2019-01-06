@@ -37,6 +37,7 @@
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/eventfd.h>
+#include <uuid/uuid.h>
 #include "list.h"
 #include "util.h"
 #include "server.h"
@@ -59,7 +60,7 @@ struct informations info;
 
 
 static void free_reply(Reply **);
-static void free_client(Client **);
+static void _client_free(Client *);
 static int reply_handler(TriteDB *, Client *);
 static int accept_handler(TriteDB *, Client *);
 static int request_handler(TriteDB *, Client *);
@@ -187,20 +188,35 @@ static void free_reply(Reply **r) {
 }
 
 
-static void free_client(Client **c) {
-    if (!*c)
+static void _client_free(Client *c) {
+
+    if (!c)
         return;
-    if ((*c)->addr) {
-        tfree((char *) (*c)->addr);
-        (*c)->addr = NULL;
-    }
-    if ((*c)->reply) {
-        free_reply(&(*c)->reply);
-        (*c)->reply = NULL;
-    }
-    tfree(*c);
-    *c = NULL;
+
+    if (c->addr)
+        tfree((char *) c->addr);
+
+    if (c->reply)
+        free_reply(&c->reply);
+
+    tfree(c);
 }
+
+/* Hashtable destructor function */
+static int client_free(HashTableEntry *entry) {
+
+    if (!entry)
+        return -HASHTABLE_ERR;
+
+    _client_free(entry->val);
+
+    return HASHTABLE_OK;
+}
+
+
+/********************************/
+/*      COMMAND HANDLERS        */
+/********************************/
 
 
 static int quit_handler(TriteDB *db, Client *c) {
@@ -624,6 +640,11 @@ static int count_handler(TriteDB *db, Client *c) {
 }
 
 
+/**************************************/
+/*          SERVER_HANDLERS           */
+/**************************************/
+
+
 /* Handle incoming requests, after being accepted or after a reply */
 static int request_handler(TriteDB *db, Client *client) {
 
@@ -637,37 +658,35 @@ static int request_handler(TriteDB *db, Client *client) {
        overlapping as well */
     Ringbuffer *rbuf = ringbuf_init(buffer, ONEMB * 2);
 
-    /* Read all data to form a packet flag */
-    int read_all = -1;
-
     /* Placeholders structures, at this point we still don't know if we got a
        request or a response */
     uint8_t opcode = 0;
 
     /* We must read all incoming bytes till an entire packet is received. This
        is achieved by using a standardized protocol, which send the size of the
-       complete packet as the first 4 bytes. By knowing it we know if the packet is
-       ready to be deserialized and used.*/
+       complete packet as the first 4 bytes. By knowing it we know if the
+       packet is ready to be deserialized and used. */
     Buffer *b = recv_packet(clientfd, rbuf, &opcode);
 
-    if (!b) {
-        client->ctx_handler = request_handler;
-        mod_epoll(db->epollfd, clientfd, EPOLLIN, client);
-        ringbuf_free(rbuf);
-        return 0;
-    }
+    /* If not correct packet received, we must free ringbuffer and reset the
+       handler to the request again, setting EPOLL to EPOLLIN */
+    if (!b)
+        goto freebuf;
 
+    /* Currently we have a stream of bytes, we want to unpack them into a
+       Request structure */
     Request *pkt = unpack_request(opcode, b);
 
-    if (!pkt) read_all = 1;
-
+    /* No more need of the byte buffer from now on */
     buffer_destroy(b);
 
     /* Free ring buffer as we alredy have all needed informations in memory */
     ringbuf_free(rbuf);
 
-    if (read_all == 1)
-        return -1;
+    /* If the packet couldn't be unpacket (e.g. we're OOM) we close the
+       connection and release the client */
+    if (!pkt)
+        goto errclient;
 
     client->last_action_time = (uint64_t) time(NULL);
 
@@ -691,10 +710,12 @@ static int request_handler(TriteDB *db, Client *client) {
 
     // If no handler is found, it must be an error case
     if (executed == 0)
-        terror("Unknown command");
+        goto reset;
 
+    /* A disconnection happened, we close the handler, the file descriptor
+       have been already removed from the event loop */
     if (dc == -1)
-        return 0;
+        goto exit;
 
     // Set reply handler as the current context handler
     client->ctx_handler = reply_handler;
@@ -702,7 +723,26 @@ static int request_handler(TriteDB *db, Client *client) {
     // Set up epoll events
     mod_epoll(db->epollfd, clientfd, EPOLLOUT, client);
 
+exit:
+
     return 0;
+
+freebuf:
+
+    ringbuf_free(rbuf);
+
+reset:
+
+    client->ctx_handler = request_handler;
+    mod_epoll(db->epollfd, clientfd, EPOLLIN, client);
+    return 0;
+
+errclient:
+
+    shutdown(client->fd, 0);
+    close(client->fd);
+    hashtable_del(db->clients, client->uuid);
+    return -1;
 }
 
 
@@ -760,10 +800,17 @@ static int accept_handler(TriteDB *db, Client *server) {
     if (getsockname(fd, (struct sockaddr *) &sin, &sinlen) < 0)
         return -1;
 
-    /* Create a server structure to handle his context connection */
+    /* Create a client structure to handle his context connection */
     Client *client = tmalloc(sizeof(Client));
-    if (!client) oom("creating client during accept");
+    if (!client)
+        oom("creating client during accept");
 
+    /* Generate random uuid */
+    uuid_t binuuid;
+    uuid_generate_random(binuuid);
+    uuid_unparse(binuuid, (char *) client->uuid);
+
+    /* Populate client structure */
     client->addr = tstrdup(ip_buff);
     client->fd = clientsock;
     client->ctx_handler = request_handler;
@@ -773,7 +820,7 @@ static int accept_handler(TriteDB *db, Client *server) {
     client->reply = NULL;
 
     /* Add it to the db instance */
-    db->clients = list_push(db->clients, client);
+    hashtable_put(db->clients, client->uuid, client);
 
     /* Add it to the epoll loop */
     add_epoll(db->epollfd, clientsock, client);
@@ -955,7 +1002,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
 
     /* Initialize SizigyDB server object */
     tritedb.data = trie_new();
-    tritedb.clients = list_init();
+    tritedb.clients = hashtable_create(client_free);
     tritedb.peers = list_init();
     tritedb.expiring_keys = vector_init();
 
@@ -1011,12 +1058,13 @@ cleanup:
     list_free(tritedb.peers, 1);
     trie_free(tritedb.data);
 
-    for (ListNode *cursor = tritedb.clients->head; cursor; cursor = cursor->next) {
-        Client *c = (Client *) cursor->data;
-        free_client(&c);
-    }
+    /* for (ListNode *cursor = tritedb.clients->head; cursor; cursor = cursor->next) { */
+    /*     Client *c = (Client *) cursor->data; */
+    /*     free_client(&c); */
+    /* } */
 
-    list_free(tritedb.clients, 0);
+    /* list_free(tritedb.clients, 0); */
+    hashtable_release(tritedb.clients);
     free_expiring_keys(tritedb.expiring_keys);
 
     t_log_close();

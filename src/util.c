@@ -195,7 +195,10 @@ void tfree(void *ptr) {
 
     size_t ptr_size = *((size_t *) realptr);
 
-    memory -= ptr_size + sizeof(size_t);
+    if (memory - ptr_size + sizeof(size_t) < 0)
+        memory = 0;
+    else
+        memory -= ptr_size + sizeof(size_t);
 
     free(realptr);
 }

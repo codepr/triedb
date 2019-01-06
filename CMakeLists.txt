@@ -6,10 +6,10 @@ OPTION(DEBUG "add debug flags" OFF)
 
 if (DEBUG)
     message(STATUS "Configuring build for debug")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wunused -Werror -std=c11 -lpthread -O3 -pedantic -D_DEFAULT_SOURCE -ggdb -fsanitize=address -fno-omit-frame-pointer -pg")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wunused -Werror -std=c11 -lpthread -O3 -pedantic -D_DEFAULT_SOURCE -luuid -ggdb -fsanitize=address -fno-omit-frame-pointer -pg")
 else (DEBUG)
     message(STATUS "Configuring build for production")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wunused -Werror -std=c11 -lpthread -O3 -pedantic -D_DEFAULT_SOURCE")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wunused -Werror -std=c11 -lpthread -O3 -pedantic -D_DEFAULT_SOURCE -luuid")
 endif (DEBUG)
 
 set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)

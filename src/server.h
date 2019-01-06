@@ -32,6 +32,7 @@
 #include "list.h"
 #include "vector.h"
 #include "protocol.h"
+#include "hashtable.h"
 
 
 #define MAX_EVENTS	        128
@@ -64,6 +65,7 @@ typedef struct tritedb TriteDB;
 struct client {
     uint64_t last_action_time;
     const char *addr;
+    const char uuid[37];
     int fd;
     int (*ctx_handler)(TriteDB *, Client *);
     Reply *reply;
@@ -95,7 +97,7 @@ struct tritedb {
     /* Main object map */
     Trie *data;
     /* Connected clients */
-    List *clients;
+    HashTable *clients;
     /* Peers connected */
     List *peers;
     /* Expiring keys */

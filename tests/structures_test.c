@@ -438,7 +438,7 @@ static char *test_vector_qsort(void) {
  * Tests the creation of a hashtable
  */
 static char *test_hashtable_create(void) {
-    HashTable *m = hashtable_create();
+    HashTable *m = hashtable_create(NULL);
     ASSERT("[! hashtable_create]: hashtable not created", m != NULL);
     hashtable_release(m);
     printf(" [hashtable::hashtable_create]: OK\n");
@@ -450,9 +450,8 @@ static char *test_hashtable_create(void) {
  * Tests the release of a hashtable
  */
 static char *test_hashtable_release(void) {
-    HashTable *m = hashtable_create();
+    HashTable *m = hashtable_create(NULL);
     hashtable_release(m);
-    ASSERT("[! hashtable_release]: hashtable not released", m == NULL);
     printf(" [hashtable::hashtable_release]: OK\n");
     return 0;
 }
@@ -462,7 +461,7 @@ static char *test_hashtable_release(void) {
  * Tests the insertion function of the hashtable
  */
 static char *test_hashtable_put(void) {
-    HashTable *m = hashtable_create();
+    HashTable *m = hashtable_create(NULL);
     char *key = "hello";
     char *val = "world";
     int status = hashtable_put(m, key, val);
@@ -482,7 +481,7 @@ static char *test_hashtable_put(void) {
  * Tests lookup function of the hashtable
  */
 static char *test_hashtable_get(void) {
-    HashTable *m = hashtable_create();
+    HashTable *m = hashtable_create(NULL);
     char *key = "hello";
     char *val = "world";
     hashtable_put(m, tstrdup(key), tstrdup(val));
@@ -498,10 +497,10 @@ static char *test_hashtable_get(void) {
  * Tests the deletion function of the hashtable
  */
 static char *test_hashtable_del(void) {
-    HashTable *m = hashtable_create();
+    HashTable *m = hashtable_create(NULL);
     char *key = "hello";
     char *val = "world";
-    hashtable_put(m, key, val);
+    hashtable_put(m, tstrdup(key), tstrdup(val));
     int status = hashtable_del(m, key);
     ASSERT("[! hashtbale_del]: hashtable size = 1", m->size == 0);
     ASSERT("[! hashtbale_del]: hashtbale_del didn't work as expected", status == HASHTABLE_OK);
