@@ -25,5 +25,12 @@ set(LICENSE "BSD2 license")
 add_executable(tritedb_test ${TEST})
 add_executable(tritedb ${SOURCES})
 
+add_custom_command(
+    TARGET tritedb_test
+    POST_BUILD
+    COMMAND ${CMAKE_BINARY_DIR}/tritedb_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "\n Running tests")
+
 # Tests
 add_test(tritedb_test bin/tritedb_test)

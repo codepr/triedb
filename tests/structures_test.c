@@ -364,7 +364,7 @@ static char *test_trie_delete(void) {
 }
 
 /*
- * Tests the delete on the trie
+ * Tests the prefix delete on the trie
  */
 static char *test_trie_prefix_delete(void) {
     struct Trie *root = trie_new();
@@ -396,6 +396,114 @@ static char *test_trie_prefix_delete(void) {
             (found == true || payload != NULL));
     trie_free(root);
     printf(" [trie::trie_prefix_delete]: OK\n");
+    return 0;
+}
+
+/*
+ * Tests the prefix count on the trie
+ */
+static char *test_trie_prefix_count(void) {
+    struct Trie *root = trie_new();
+    const char *key1 = "hello";
+    const char *key2 = "helloworld";
+    const char *key3 = "hellot";
+    const char *key4 = "hel";
+    char *val1 = "world";
+    char *val2 = "world";
+    char *val3 = "world";
+    char *val4 = "world";
+    trie_insert(root, key1, val1, -NOTTL);
+    trie_insert(root, key2, val2, -NOTTL);
+    trie_insert(root, key3, val3, -NOTTL);
+    trie_insert(root, key4, val4, -NOTTL);
+    int count = trie_prefix_count(root, "hel");
+    ASSERT("[! trie_prefix_count]: Trie prefix count on prefix \"hel\" failed",
+            count == 4);
+    count = trie_prefix_count(root, "helloworld!");
+    ASSERT("[! trie_prefix_count]: Trie prefix count on prefix \"helloworld!\" failed",
+            count == 0);
+    trie_free(root);
+    printf(" [trie::trie_prefix_count]: OK\n");
+    return 0;
+}
+
+/*
+ * Tests the prefix inc on the trie
+ */
+static char *test_trie_prefix_inc(void) {
+    struct Trie *root = trie_new();
+    const char *key1 = "key1";
+    const char *key2 = "key2";
+    const char *key3 = "key3";
+    const char *key4 = "key4";
+
+    void *retval1 = NULL, *retval2 = NULL, *retval3 = NULL, *retval4 = NULL;
+
+    char *val1 = "0";
+    char *val2 = "1";
+    char *val3 = "2";
+    char *val4 = "9";
+
+    trie_insert(root, key1, val1, -NOTTL);
+    trie_insert(root, key2, val2, -NOTTL);
+    trie_insert(root, key3, val3, -NOTTL);
+    trie_insert(root, key4, val4, -NOTTL);
+
+    // Inc prefix call
+    trie_prefix_inc(root, "key");
+
+    // read data
+    trie_find(root, key1, &retval1);
+    trie_find(root, key2, &retval2);
+    trie_find(root, key3, &retval3);
+    trie_find(root, key4, &retval4);
+
+    ASSERT("[! trie_prefix_inc]: Trie prefix inc on prefix \"key\" failed",
+            strcmp(((struct NodeData *) retval1)->data, "1") == 0 &&
+            strcmp(((struct NodeData *) retval2)->data, "2") == 0 &&
+            strcmp(((struct NodeData *) retval3)->data, "3") == 0 &&
+            strcmp(((struct NodeData *) retval4)->data, "10") == 0);
+
+    trie_free(root);
+    printf(" [trie::trie_prefix_inc]: OK\n");
+    return 0;
+}
+
+/*
+ * Tests the prefix dec on the trie
+ */
+static char *test_trie_prefix_dec(void) {
+    struct Trie *root = trie_new();
+    const char *key1 = "key1";
+    const char *key2 = "key2";
+    const char *key3 = "key3";
+    const char *key4 = "key4";
+    void *retval1 = NULL, *retval2 = NULL, *retval3 = NULL, *retval4 = NULL;
+    char *val1 = "0";
+    char *val2 = "1";
+    char *val3 = "2";
+    char *val4 = "10";
+    trie_insert(root, key1, val1, -NOTTL);
+    trie_insert(root, key2, val2, -NOTTL);
+    trie_insert(root, key3, val3, -NOTTL);
+    trie_insert(root, key4, val4, -NOTTL);
+
+    trie_prefix_dec(root, "key");
+
+    // read data
+    trie_find(root, key1, &retval1);
+    trie_find(root, key2, &retval2);
+    trie_find(root, key3, &retval3);
+    trie_find(root, key4, &retval4);
+
+    ASSERT("[! trie_prefix_dec]: Trie prefix dec on prefix \"key\" failed",
+            strcmp(((struct NodeData *) retval1)->data, "-1") == 0 &&
+            strcmp(((struct NodeData *) retval2)->data, "0") == 0 &&
+            strcmp(((struct NodeData *) retval3)->data, "1") == 0 &&
+            strcmp(((struct NodeData *) retval4)->data, "9") == 0);
+
+    trie_free(root);
+    printf(" [trie::trie_prefix_dec]: OK\n");
     return 0;
 }
 
@@ -534,6 +642,9 @@ char *structures_test() {
     RUN_TEST(test_trie_find);
     RUN_TEST(test_trie_delete);
     RUN_TEST(test_trie_prefix_delete);
+    RUN_TEST(test_trie_prefix_count);
+    RUN_TEST(test_trie_prefix_inc);
+    RUN_TEST(test_trie_prefix_dec);
     RUN_TEST(test_vector_qsort);
     RUN_TEST(test_hashtable_create);
     RUN_TEST(test_hashtable_put);

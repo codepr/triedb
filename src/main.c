@@ -49,6 +49,7 @@ int main(int argc, char **argv) {
 
     char *addr = DEFAULT_HOSTNAME;
     char *port = DEFAULT_PORT;
+    char *conf = DEFAULT_CONF_PATH;
     int debug = 0;
     int fd = -1;
     int opt;
@@ -56,11 +57,14 @@ int main(int argc, char **argv) {
     // Set default configuration
     config_set_default();
 
-    while ((opt = getopt(argc, argv, "a:p:vn:")) != -1) {
+    while ((opt = getopt(argc, argv, "a:c:p:vn:")) != -1) {
         switch (opt) {
             case 'a':
                 addr = optarg;
                 strcpy(config.hostname, addr);
+                break;
+            case 'c':
+                conf = optarg;
                 break;
             case 'p':
                 port = optarg;
@@ -80,7 +84,7 @@ int main(int argc, char **argv) {
     else config.loglevel = INFORMATION;
 
     // Try to load a configuration, if found
-    config_load("/tmp/tritedb.conf");
+    config_load(conf);
 
     // Initialize logging
     t_log_init(config.logpath);

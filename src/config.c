@@ -68,14 +68,11 @@ static void add_config_value(const char *key, const char *value) {
     } else if (STREQ("unix_socket", key, klen) == true) {
         config.socket_family = UNIX;
         strcpy(config.hostname, value);
-    } else if (STREQ("unix_socket", key, klen) == true) {
     } else if (STREQ("ip_address", key, klen) == true) {
         config.socket_family = INET;
         strcpy(config.hostname, value);
-    } else if (STREQ("unix_socket", key, klen) == true) {
     } else if (STREQ("ip_port", key, klen) == true) {
         strcpy(config.port, value);
-    } else if (STREQ("unix_socket", key, klen) == true) {
     }
 }
 
@@ -105,14 +102,14 @@ bool config_load(const char *configpath) {
         return false;
     }
 
-    char line[256], key[256], value[256];
+    char line[0xff], key[0xff], value[0xff];
     int linenr = 0;
     char *pline, *pkey, *pval;
 
-    while (fgets(line, 256, fh) != NULL) {
+    while (fgets(line, 0xff, fh) != NULL) {
 
-        memset(key, 0x00, 256);
-        memset(value, 0x00, 256);
+        memset(key, 0x00, 0xff);
+        memset(value, 0x00, 0xff);
 
         linenr++;
 
