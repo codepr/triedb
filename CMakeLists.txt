@@ -18,12 +18,15 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 file(GLOB SOURCES src/*.c)
 file(GLOB TEST src/hashtable.c src/vector.c src/config.c src/list.c src/trie.c src/util.c src/server.c src/network.c src/protocol.c src/ringbuf.c tests/*.c)
 
+list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/tritedbcli.c)
+
 set(AUTHOR "Andrea Giacomo Baldan")
 set(LICENSE "BSD2 license")
 
 # Executable
 add_executable(tritedb_test ${TEST})
 add_executable(tritedb ${SOURCES})
+add_executable(tritedbcli src/config.c src/util.c src/tritedbcli.c)
 
 add_custom_command(
     TARGET tritedb_test

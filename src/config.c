@@ -53,6 +53,54 @@ static const struct llevel lmap[5] = {
 struct config config;
 
 
+static size_t read_memory_with_mul(const char *memory) {
+
+    /* Extract digit part */
+    size_t num = parse_int(memory);
+    int mul = 1;
+
+    /* Move the pointer forward till the first non-digit char */
+    while (isdigit(*memory)) memory++;
+
+    /* Set multiplier */
+    if (STREQ(memory, "kb", 2))
+        mul = 1024;
+    else if (STREQ(memory, "mb", 2))
+        mul = 1024 * 1024;
+    else if (STREQ(memory, "gb", 2))
+        mul = 1024 * 1024 * 1024;
+
+    return num * mul;
+}
+
+
+static size_t read_time_with_mul(const char *time) {
+
+    /* Extract digit part */
+    size_t num = parse_int(time);
+    int mul = 1;
+
+    /* Move the pointer forward till the first non-digit char */
+    while (isdigit(*time)) time++;
+
+    /* Set multiplier */
+    switch (*time) {
+        case 'm':
+            mul = 60;
+            break;
+        case 'd':
+            mul = 60 * 60 * 24;
+            break;
+        default:
+            mul = 1;
+            break;
+    }
+
+    return num * mul;
+
+}
+
+
 static void add_config_value(const char *key, const char *value) {
 
     size_t klen = strlen(key);
@@ -73,6 +121,10 @@ static void add_config_value(const char *key, const char *value) {
         strcpy(config.hostname, value);
     } else if (STREQ("ip_port", key, klen) == true) {
         strcpy(config.port, value);
+    } else if (STREQ("max_memory", key, klen) == true) {
+        config.max_memory = read_memory_with_mul(value);
+    } else if (STREQ("mem_reclaim_time", key, klen) == true) {
+        config.mem_reclaim_time = read_time_with_mul(value);
     }
 }
 
@@ -158,6 +210,8 @@ void config_set_default(void) {
     strcpy(config.port, DEFAULT_PORT);
     config.epoll_timeout = -1;
     config.run = eventfd(0, EFD_NONBLOCK);
+    config.max_memory = read_memory_with_mul(DEFAULT_MAX_MEMORY);
+    config.mem_reclaim_time = read_time_with_mul(DEFAULT_MEM_RECLAIM_TIME);
 }
 
 
@@ -179,5 +233,7 @@ void config_print(void) {
         tinfo("Logging:");
         tinfo("\tlevel: %s", llevel);
         tinfo("\tlogpath: %s", config.logpath);
+        tinfo("Max memory: %ld", config.max_memory);
+        tinfo("Memory reclaim time: %ld", config.mem_reclaim_time);
     }
 }

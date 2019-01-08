@@ -33,13 +33,15 @@
 
 // DEFAULT PARAMETERS
 
-#define VERSION                 "0.3.5"
-#define DEFAULT_SOCKET_FAMILY   INET
-#define DEFAULT_LOG_LEVEL       INFORMATION
-#define DEFAULT_LOG_PATH        "/tmp/tritedb.log"
-#define DEFAULT_CONF_PATH       "/etc/tritedb/tritedb.conf"
-#define DEFAULT_HOSTNAME        "127.0.0.1"
-#define DEFAULT_PORT            "9090"
+#define VERSION                     "0.3.6"
+#define DEFAULT_SOCKET_FAMILY       INET
+#define DEFAULT_LOG_LEVEL           INFORMATION
+#define DEFAULT_LOG_PATH            "/tmp/tritedb.log"
+#define DEFAULT_CONF_PATH           "/etc/tritedb/tritedb.conf"
+#define DEFAULT_HOSTNAME            "127.0.0.1"
+#define DEFAULT_PORT                "9090"
+#define DEFAULT_MAX_MEMORY          "2GB"
+#define DEFAULT_MEM_RECLAIM_TIME    "1d"
 
 
 struct config {
@@ -61,6 +63,12 @@ struct config {
     /* Port to open while listening, only if socket_family is INET,
      * otherwise it's ignored */
     char port[0xFF];
+    /* Max memory to be used, after which the system starts to reclaim back by
+     * freeing older items stored */
+    size_t max_memory;
+    /* Memory reclaim threshold, when reclaiming memory if max_memory limit has
+     * been reached, the system starts to reclaim items older than this value */
+    size_t mem_reclaim_time;
 };
 
 extern struct config config;

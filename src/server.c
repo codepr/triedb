@@ -133,6 +133,7 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
     if (!ok)
         goto errrecv;
 
+    /* Read the total length of the packet */
     uint32_t tlen = ntohl(*((uint32_t *) (tmp + sizeof(uint8_t))));
 
     /* Read remaining bytes to complete the packet */
@@ -915,9 +916,8 @@ static void *run_server(TriteDB *db) {
     timervalue.it_interval.tv_sec = 0;
     timervalue.it_interval.tv_nsec = TTL_CHECK_INTERVAL;
 
-    if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0) {
+    if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0)
         perror("timerfd_settime");
-    }
 
     // Add the timer to the event loop
     struct epoll_event ev;
@@ -1022,9 +1022,8 @@ int start_server(const char *addr, const char *port, int node_fd) {
     ev.data.fd = config.run;
     ev.events = EPOLLIN;
 
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, config.run, &ev) < 0) {
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, config.run, &ev) < 0)
         perror("epoll_ctl(2): add epollin");
-    }
 
     /* Client structure for the server component */
     Client server = {
@@ -1057,13 +1056,6 @@ cleanup:
     /* Free all resources allocated */
     list_free(tritedb.peers, 1);
     trie_free(tritedb.data);
-
-    /* for (ListNode *cursor = tritedb.clients->head; cursor; cursor = cursor->next) { */
-    /*     Client *c = (Client *) cursor->data; */
-    /*     free_client(&c); */
-    /* } */
-
-    /* list_free(tritedb.clients, 0); */
     hashtable_release(tritedb.clients);
     free_expiring_keys(tritedb.expiring_keys);
 
