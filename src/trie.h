@@ -128,5 +128,8 @@ void trie_prefix_ttl(Trie *, const char *, int16_t);
 /* Search for all keys matching a given prefix */
 List *trie_prefix_find(const Trie *, const char *);
 
+/* Apply a given function to all nodes which keys match a given prefix */
+void trie_prefix_map(Trie *, const char *, void (*mapfunc)(TrieNode *));
+
 
 #endif

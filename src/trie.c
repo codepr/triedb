@@ -502,6 +502,45 @@ List *trie_prefix_find(const Trie *trie, const char *prefix) {
     return keys;
 }
 
+/* Iterate through children of each node starting from a given node, applying
+   a defined function which take a TrieNode as argument */
+static void trie_prefix_map_func(TrieNode *node, void (*mapfunc)(TrieNode *)) {
+
+    if (trie_is_free_node(node)) {
+        mapfunc(node);
+        return;
+    }
+
+    for (ListNode *child = node->children->head; child; child = child->next)
+        trie_prefix_map_func(child->data, mapfunc);
+
+    mapfunc(node);
+
+}
+
+/* Apply a function to every key below a given prefix, if prefix is null the
+   function will be applied to all the trie */
+void trie_prefix_map(Trie *trie,
+        const char *prefix, void (*mapfunc)(TrieNode *)) {
+
+    assert(trie);
+
+    if (!prefix) {
+        trie_prefix_map_func(trie->root, mapfunc);
+    } else {
+
+        // Walk the trie till the end of the key
+        TrieNode *node = trie_node_find(trie->root, prefix);
+
+        // No complete key found
+        if (!node)
+            return;
+
+        // Check all possible sub-paths and add to count where there is a leaf
+        trie_prefix_map_func(node, mapfunc);
+    }
+}
+
 /* Release memory of a node while updating size of the trie */
 void trie_node_free(TrieNode *node, size_t *size) {
 
