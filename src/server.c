@@ -287,8 +287,8 @@ static bool compare_ttl(void *arg1, void *arg2) {
     uint64_t now = time(NULL);
 
     /* cast to cluster_node */
-    struct NodeData *n1 = ((struct ExpiringKey *) arg1)->nd;
-    struct NodeData *n2 = ((struct ExpiringKey *) arg2)->nd;
+    const struct NodeData *n1 = ((struct ExpiringKey *) arg1)->nd;
+    const struct NodeData *n2 = ((struct ExpiringKey *) arg2)->nd;
 
     uint64_t delta_l1 = (n1->ctime + n1->ttl) - now;
     uint64_t delta_l2 = (n2->ctime + n2->ttl) - now;

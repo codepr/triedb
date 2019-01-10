@@ -54,38 +54,38 @@ static const struct llevel lmap[5] = {
 struct config config;
 
 
-static size_t read_memory_with_mul(const char *memory) {
+static size_t read_memory_with_mul(const char *memory_string) {
 
     /* Extract digit part */
-    size_t num = parse_int(memory);
+    size_t num = parse_int(memory_string);
     int mul = 1;
 
     /* Move the pointer forward till the first non-digit char */
-    while (isdigit(*memory)) memory++;
+    while (isdigit(*memory_string)) memory_string++;
 
     /* Set multiplier */
-    if (STREQ(memory, "kb", 2))
+    if (STREQ(memory_string, "kb", 2))
         mul = 1024;
-    else if (STREQ(memory, "mb", 2))
+    else if (STREQ(memory_string, "mb", 2))
         mul = 1024 * 1024;
-    else if (STREQ(memory, "gb", 2))
+    else if (STREQ(memory_string, "gb", 2))
         mul = 1024 * 1024 * 1024;
 
     return num * mul;
 }
 
 
-static size_t read_time_with_mul(const char *time) {
+static size_t read_time_with_mul(const char *time_string) {
 
     /* Extract digit part */
-    size_t num = parse_int(time);
+    size_t num = parse_int(time_string);
     int mul = 1;
 
     /* Move the pointer forward till the first non-digit char */
-    while (isdigit(*time)) time++;
+    while (isdigit(*time_string)) time_string++;
 
     /* Set multiplier */
-    switch (*time) {
+    switch (*time_string) {
         case 'm':
             mul = 60;
             break;
@@ -98,7 +98,6 @@ static size_t read_time_with_mul(const char *time) {
     }
 
     return num * mul;
-
 }
 
 /* Format a memory in bytes to a more human-readable form, e.g. 64b or 18Kb

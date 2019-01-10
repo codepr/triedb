@@ -289,8 +289,8 @@ static ListNode *merge_list(ListNode *list1, ListNode *list2) {
     while (list1 && list2) {
 
         /* cast to cluster_node */
-        struct NodeData *n1 = ((struct ExpiringKey *) list1->data)->nd;
-        struct NodeData *n2 = ((struct ExpiringKey *) list2->data)->nd;
+        const struct NodeData *n1 = ((struct ExpiringKey *) list1->data)->nd;
+        const struct NodeData *n2 = ((struct ExpiringKey *) list2->data)->nd;
 
         delta_l1 = (n1->ctime + n1->ttl) - now;
         delta_l2 = (n2->ctime + n2->ttl) - now;

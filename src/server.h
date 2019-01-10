@@ -91,7 +91,7 @@ struct command {
 
 
 struct ExpiringKey {
-    struct NodeData *nd;
+    const struct NodeData *nd;
     const char *key;
 };
 
