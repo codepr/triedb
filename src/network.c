@@ -193,7 +193,7 @@ int accept_connection(int serversock) {
 
 
 
-int sendall(int sfd, uint8_t *buf, ssize_t len, ssize_t *sent) {
+int sendall(int sfd, const uint8_t *buf, ssize_t len, ssize_t *sent) {
     int total = 0;
     ssize_t bytesleft = len;
     int n = 0;

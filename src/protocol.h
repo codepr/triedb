@@ -243,11 +243,11 @@ typedef union {
 
 
 Response *make_nocontent_response(uint8_t);
-Response *make_datacontent_response(uint8_t *);
+Response *make_datacontent_response(const uint8_t *);
 Response *make_valuecontent_response(uint32_t);
-Response *make_listcontent_response(List *);
+Response *make_listcontent_response(const List *);
 
-void pack_response(Buffer *, Response *, int);
+void pack_response(Buffer *, const Response *, int);
 void free_response(Response *, int);
 
 

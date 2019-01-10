@@ -35,7 +35,7 @@
 #include "protocol.h"
 
 
-static void pack_header(Header *, Buffer *);
+static void pack_header(const Header *, Buffer *);
 static void unpack_header(Buffer *, Header *);
 
 
@@ -174,7 +174,7 @@ void write_bytes(Buffer *b, uint8_t *str) {
 }
 
 
-static void pack_header(Header *h, Buffer *b) {
+static void pack_header(const Header *h, Buffer *b) {
 
     assert(b && h);
 
@@ -192,7 +192,7 @@ static void unpack_header(Buffer *b, Header *h) {
 }
 
 // Refactoring
-int opcode_req_map[COMMAND_COUNT][2] = {
+static const int opcode_req_map[COMMAND_COUNT][2] = {
     {PUT, KEY_VAL_COMMAND},
     {GET, KEY_COMMAND},
     {DEL, KEY_LIST_COMMAND},
@@ -329,7 +329,7 @@ void free_request(Request *request, uint8_t reqtype) {
 }
 
 
-void pack_response(Buffer *b, Response *r, int restype) {
+void pack_response(Buffer *b, const Response *r, int restype) {
 
     assert(b && r);
 
@@ -391,7 +391,7 @@ Response *make_nocontent_response(uint8_t code) {
 }
 
 
-Response *make_datacontent_response(uint8_t *data) {
+Response *make_datacontent_response(const uint8_t *data) {
 
     Response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -449,7 +449,7 @@ Response *make_valuecontent_response(uint32_t value) {
 }
 
 
-Response *make_listcontent_response(List *content) {
+Response *make_listcontent_response(const List *content) {
 
     Response *response = tmalloc(sizeof(*response));
     if (!response)

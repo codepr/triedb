@@ -242,7 +242,8 @@ static bool trie_node_recursive_delete(TrieNode *node,
 
 /* Returns true if key is present in trie, else false. Also for lookup the
    big-O runtime is guaranteed O(m) with `m` as length of the key. */
-static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
+static bool trie_node_search(const TrieNode *root,
+        const char *key, void **ret) {
 
     // Walk the trie till the end of the key
     TrieNode *cursor = trie_node_find(root, key);
@@ -388,7 +389,8 @@ void trie_prefix_dec(Trie *trie, const char *prefix) {
 }
 
 
-static void trie_node_prefix_set(TrieNode *node, void *val, int16_t ttl) {
+static void trie_node_prefix_set(TrieNode *node,
+        const void *val, int16_t ttl) {
 
     if (!node)
         return;
@@ -406,7 +408,8 @@ static void trie_node_prefix_set(TrieNode *node, void *val, int16_t ttl) {
 }
 
 
-void trie_prefix_set(Trie *trie, const char *prefix, void *val, int16_t ttl) {
+void trie_prefix_set(Trie *trie,
+        const char *prefix, const void *val, int16_t ttl) {
 
     assert(trie && prefix);
 
@@ -454,7 +457,8 @@ void trie_prefix_ttl(Trie *trie, const char *prefix, int16_t ttl) {
 }
 
 
-static void trie_node_prefix_find(TrieNode *node, char str[], int level, List *keys) {
+static void trie_node_prefix_find(const TrieNode *node,
+        char str[], int level, List *keys) {
 
     // If node is leaf node, it indicates end of string, so a null charcter is
     // added and string is added to the keys list

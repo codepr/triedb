@@ -119,7 +119,7 @@ void trie_prefix_dec(Trie *, const char *);
 
 /* Set value to all keys matching a given prefix in a less than linear time
    complexity */
-void trie_prefix_set(Trie *, const char *, void *, int16_t);
+void trie_prefix_set(Trie *, const char *, const void *, int16_t);
 
 /* Set TTL to all keys matching a given prefix in a less than linear time
    complexity */
