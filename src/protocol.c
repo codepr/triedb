@@ -180,6 +180,7 @@ static void pack_header(Header *h, Buffer *b) {
 
     write_uint8(b, h->opcode);
     write_uint32(b, b->size);
+    write_uint8(b, h->is_bulk);
 }
 
 
@@ -189,6 +190,7 @@ static void unpack_header(Buffer *b, Header *h) {
 
     h->opcode = read_uint8(b);
     h->size = read_uint32(b);
+    h->is_bulk = read_uint8(b);
 }
 
 // Refactoring
@@ -205,19 +207,69 @@ int opcode_req_map[COMMAND_COUNT][2] = {
     {QUIT, EMPTY_COMMAND}
 };
 
-/* Main unpacking function, to translates bytes received from clients to a
-   packet structure, based on the opcode */
-Request *unpack_request(uint8_t opcode, Buffer *b) {
+
+Request2 *unpack_request2(Buffer *b) {
 
     assert(b);
 
-    Request *r = tmalloc(sizeof(*r));
-    if (!r)
+    Request2 *request = tmalloc(sizeof(*request));
+    if (!request)
         return NULL;
 
     Header *header = tmalloc(sizeof(*header));
     if (!header)
+        goto errnomem2;
+
+    unpack_header(b, header);
+
+    switch (header->is_bulk) {
+        case 1:
+            /* It's a single request, just unpack it into the request pointer */
+            request->request = unpack_request(b);
+            break;
+        case 2:
+            /* Unpack the BulkRequest format */
+            request->bulk_request = tmalloc(sizeof(BulkRequest));
+            if (!request->bulk_request)
+                goto errnomem1;
+
+            uint64_t nrequests = read_uint64(b);
+            request->bulk_request->nrequests = nrequests;
+            request->bulk_request->requests =
+                tmalloc(nrequests * sizeof(Request));
+
+            /* Unpack each single packet into the array of requests */
+            for (unsigned long i = 0; i < nrequests; i++)
+                request->bulk_request->requests[i] = unpack_request(b);
+
+            break;
+    }
+
+    return request;
+
+errnomem1:
+
+    tfree(header);
+
+errnomem2:
+
+    tfree(request);
+    return NULL;
+}
+
+/* Main unpacking function, to translates bytes received from clients to a
+   packet structure, based on the opcode */
+Request *unpack_request(Buffer *b) {
+
+    assert(b);
+
+    Request *request = tmalloc(sizeof(*request));
+    if (!request)
         return NULL;
+
+    Header *header = tmalloc(sizeof(*header));
+    if (!header)
+        goto errnomem4;
 
     unpack_header(b, header);
 
@@ -225,71 +277,130 @@ Request *unpack_request(uint8_t opcode, Buffer *b) {
     int code = 0;
 
     for (int i = 0; i < COMMAND_COUNT; i++)
-        if (opcode_req_map[i][0] == opcode)
+        if (opcode_req_map[i][0] == header->opcode)
             code = opcode_req_map[i][1];
 
     switch (code) {
         case EMPTY_COMMAND:
-            r->ecommand = tmalloc(sizeof(EmptyCommand));
-            r->ecommand->header = header;
+            request->ecommand = tmalloc(sizeof(EmptyCommand));
+            if (!request->ecommand)
+                goto errnomem3;
+
+            request->ecommand->header = header;
             break;
         case KEY_COMMAND:
-            r->kcommand = tmalloc(sizeof(KeyCommand));
-            r->kcommand->header = header;
+            request->kcommand = tmalloc(sizeof(KeyCommand));
+            if (!request->kcommand)
+                goto errnomem3;
+
+            request->kcommand->header = header;
 
             // Mandatory fields
-            r->kcommand->keysize = read_uint16(b);
-            r->kcommand->key = read_bytes(b, r->kcommand->keysize);
+            request->kcommand->keysize = read_uint16(b);
+            request->kcommand->key = read_bytes(b, request->kcommand->keysize);
 
             // Optional fields
-            r->kcommand->is_prefix = read_uint8(b);
-            r->kcommand->ttl = read_uint16(b);
+            request->kcommand->is_prefix = read_uint8(b);
+            request->kcommand->ttl = read_uint16(b);
 
             break;
 
         case KEY_VAL_COMMAND:
-            r->kvcommand = tmalloc(sizeof(KeyValCommand));
-            r->kvcommand->header = header;
+            request->kvcommand = tmalloc(sizeof(KeyValCommand));
+            if (!request->kvcommand)
+                goto errnomem3;
+
+            request->kvcommand->header = header;
 
             // Mandatory fields
-            r->kvcommand->keysize = read_uint16(b);
-            r->kvcommand->valsize = read_uint32(b);
-            r->kvcommand->key = read_bytes(b, r->kvcommand->keysize);
-            r->kvcommand->val = read_bytes(b, r->kvcommand->valsize);
+            request->kvcommand->keysize = read_uint16(b);
+            request->kvcommand->valsize = read_uint32(b);
+            request->kvcommand->key =
+                read_bytes(b, request->kvcommand->keysize);
+            request->kvcommand->val =
+                read_bytes(b, request->kvcommand->valsize);
 
             // Optional fields
-            r->kvcommand->is_prefix = read_uint8(b);
-            r->kvcommand->ttl = read_uint16(b);
+            request->kvcommand->is_prefix = read_uint8(b);
+            request->kvcommand->ttl = read_uint16(b);
 
             break;
 
         case KEY_LIST_COMMAND:
-            r->klcommand = tmalloc(sizeof(KeyListCommand));
-            r->klcommand->header = header;
+            request->klcommand = tmalloc(sizeof(KeyListCommand));
+            if (!request->klcommand)
+                goto errnomem3;
+
+            request->klcommand->header = header;
 
             // Number of keys, or length of the Key array
-            r->klcommand->len = read_uint32(b);
+            request->klcommand->len = read_uint32(b);
 
-            r->klcommand->keys = tcalloc(r->klcommand->len, sizeof(struct Key));
+            request->klcommand->keys =
+                tcalloc(request->klcommand->len, sizeof(struct Key));
 
-            for (int i = 0; i < r->klcommand->len; i++) {
+            if (!request->klcommand->keys)
+                goto errnomem2;
+
+            for (int i = 0; i < request->klcommand->len; i++) {
+
                 struct Key *key = tmalloc(sizeof(*key));
+                if (!key)
+                    goto errnomem1;
+
                 key->keysize = read_uint16(b);
                 key->key = read_bytes(b, key->keysize);
                 key->is_prefix = read_uint8(b);
-                r->klcommand->keys[i] = key;
+                request->klcommand->keys[i] = key;
             }
 
             break;
 
         default:
             tfree(header);
-            tfree(r);
-            r = NULL;
+            tfree(request);
+            request = NULL;
             break;
     };
 
-    return r;
+    return request;
+
+errnomem1:
+
+    tfree(request->klcommand->keys);
+
+errnomem2:
+
+    tfree(request->klcommand);
+
+errnomem3:
+
+    tfree(header);
+
+errnomem4:
+
+    tfree(request);
+    return NULL;
+}
+
+
+void free_request2(Request2 *request, uint8_t reqtype) {
+
+    if (!request)
+        return;
+
+    if (reqtype == 0) {
+        free_request(request->reqtype);
+    } else {
+
+        for (unsigned long i = 0; i < request->bulk_request->nrequests; i++)
+            free_request(request->bulk_request->requests[i],
+                    request->bulk_request->requests[1]->reqtype);
+
+        tfree(request->bulk_request);
+        tfree(request);
+    }
+
 }
 
 

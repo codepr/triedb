@@ -68,7 +68,7 @@
 
 /* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
    of the packet */
-#define HEADERLEN sizeof(uint8_t) + sizeof(uint32_t)
+#define HEADERLEN (2 * sizeof(uint8_t)) + sizeof(uint32_t)
 
 
 /* Buffer structure, provides a convenient way of handling byte string data.
@@ -124,6 +124,7 @@ void write_bytes(Buffer *, uint8_t *);
 typedef struct {
     uint8_t opcode;
     uint32_t size;
+    uint8_t is_bulk;
 } Header;
 
 /* Definition of a single key, with `is_prefix` defining if the key must be
@@ -194,6 +195,8 @@ typedef struct {
 
 // Define a request, can be either a `KeyCommand`, a `KeyValCommand` or a
 // `KeyListCommand`
+// TODO add type, transform this union into a struct with type and the union
+// itself as field
 typedef union {
     EmptyCommand *ecommand;
     KeyCommand *kcommand;
@@ -201,8 +204,26 @@ typedef union {
     KeyListCommand *klcommand;
 } Request;
 
+/***************************
+ *      BULK STRUCTS
+ ***************************/
 
-Request *unpack_request(uint8_t, Buffer *);
+// List of commands, used to handle bulk requests
+typedef struct {
+    size_t nrequests;
+    Request **requests;
+} BulkRequest;
+
+
+typedef union {
+    Request *request;
+    BulkRequest *bulk_request;
+} Request2;
+
+
+Request *unpack_request(Buffer *);
+
+void free_request2(Request2 *, uint8_t);
 
 void free_request(Request *, uint8_t);
 
