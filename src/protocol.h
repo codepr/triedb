@@ -228,7 +228,7 @@ typedef union {
 Request *unpack_request(Buffer *);
 
 /* Unpack a command from network byteorder to a Command struct */
-Command *unpack_command(Buffer *);
+Command *unpack_command(Buffer *, Header *);
 
 /* Cleanup functions */
 void free_request(Request *, uint8_t);

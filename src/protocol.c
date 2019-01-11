@@ -225,7 +225,7 @@ Request *unpack_request(Buffer *b) {
     switch (header->is_bulk) {
         case 0:
             /* It's a single request, just unpack it into the request pointer */
-            request->command = unpack_command(b);
+            request->command = unpack_command(b, header);
             break;
         case 1:
             /* Unpack the BulkRequest format */
@@ -240,7 +240,7 @@ Request *unpack_request(Buffer *b) {
 
             /* Unpack each single packet into the array of requests */
             for (unsigned long i = 0; i < ncommands; i++)
-                request->bulk_command->commands[i] = unpack_command(b);
+                request->bulk_command->commands[i] = unpack_command(b, header);
 
             break;
     }
@@ -259,19 +259,13 @@ errnomem2:
 
 /* Main unpacking function, to translates bytes received from clients to a
    packet structure, based on the opcode */
-Command *unpack_command(Buffer *b) {
+Command *unpack_command(Buffer *b, Header *header) {
 
-    assert(b);
+    assert(b && header);
 
     Command *command = tmalloc(sizeof(*command));
     if (!command)
         return NULL;
-
-    Header *header = tmalloc(sizeof(*header));
-    if (!header)
-        goto errnomem4;
-
-    unpack_header(b, header);
 
     // TODO write a more efficient solution for this hack
     int code = 0;
@@ -376,10 +370,6 @@ errnomem2:
     tfree(command->klcommand);
 
 errnomem3:
-
-    tfree(header);
-
-errnomem4:
 
     tfree(command);
     return NULL;
