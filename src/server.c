@@ -234,8 +234,10 @@ static int quit_handler(TriteDB *db, Client *c) {
     close(c->fd);
     info.nclients--;
 
-    free_command(c->ptr);
-    // TODO clean up client list
+    free_request(c->ptr, 0);
+
+    // Remove client from the clients map
+    hashtable_del(db->clients, c->uuid);
 
     return -1;
 }
@@ -245,7 +247,7 @@ static int info_handler(TriteDB *db, Client *c) {
 
     info.uptime = time(NULL) - info.start_time;
     // TODO make key-val-list response
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -253,7 +255,7 @@ static int info_handler(TriteDB *db, Client *c) {
 
 static int keys_handler(TriteDB *db, Client *c) {
 
-    KeyCommand *cmd = ((Command *) c->ptr)->kcommand;
+    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
 
     List *keys = trie_prefix_find(db->data, (const char *) cmd->key);
 
@@ -268,7 +270,7 @@ static int keys_handler(TriteDB *db, Client *c) {
 
     list_free(keys, 1);
     free_response(response, LIST_CONTENT);
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -291,7 +293,7 @@ static bool compare_ttl(void *arg1, void *arg2) {
 
 static int put_handler(TriteDB *db, Client *c) {
 
-    KeyValCommand *cmd = ((Command *) c->ptr)->kvcommand;
+    KeyValCommand *cmd = ((Request *) c->ptr)->command->kvcommand;
     clock_t start, end;
     double time_elapsed;
 
@@ -344,7 +346,7 @@ static int put_handler(TriteDB *db, Client *c) {
     tdebug("PUT %s -> %s in %f ms (s=%d m=%d)",
             cmd->key, cmd->val, time_elapsed, db->data->size, memory_used());
 
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -352,7 +354,7 @@ static int put_handler(TriteDB *db, Client *c) {
 
 static int get_handler(TriteDB *db, Client *c) {
 
-    KeyCommand *cmd = ((Command *) c->ptr)->kcommand;
+    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
     void *val = NULL;
 
     clock_t start, end;
@@ -403,7 +405,7 @@ static int get_handler(TriteDB *db, Client *c) {
         }
     }
 
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -411,7 +413,7 @@ static int get_handler(TriteDB *db, Client *c) {
 
 static int ttl_handler(TriteDB *db, Client *c) {
 
-    KeyCommand *cmd = ((Command *) c->ptr)->kcommand;
+    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
     void *val = NULL;
 
     // Check for key presence in the trie structure
@@ -444,7 +446,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
                 cmd->key, nd->data, cmd->ttl, db->data->size, memory_used());
     }
 
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -453,7 +455,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
 static int del_handler(TriteDB *db, Client *c) {
 
     int code = OK;
-    KeyListCommand *cmd = ((Command *) c->ptr)->klcommand;
+    KeyListCommand *cmd = ((Request *) c->ptr)->command->klcommand;
     bool found = false;
     clock_t start, end;
     double time_elapsed;
@@ -497,7 +499,7 @@ static int del_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -509,7 +511,7 @@ static int del_handler(TriteDB *db, Client *c) {
 static int inc_handler(TriteDB *db, Client *c) {
 
     int code = OK, n = 0;
-    KeyListCommand *inc = ((Command *) c->ptr)->klcommand;
+    KeyListCommand *inc = ((Request *) c->ptr)->command->klcommand;
     bool found = false;
     void *val = NULL;
 
@@ -550,7 +552,7 @@ static int inc_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -562,7 +564,7 @@ static int inc_handler(TriteDB *db, Client *c) {
 static int dec_handler(TriteDB *db, Client *c) {
 
     int code = OK, n = 0;
-    KeyListCommand *dec = ((Command *) c->ptr)->klcommand;
+    KeyListCommand *dec = ((Request *) c->ptr)->command->klcommand;
     bool found = false;
     void *val = NULL;
 
@@ -604,7 +606,7 @@ static int dec_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -613,7 +615,7 @@ static int dec_handler(TriteDB *db, Client *c) {
 static int count_handler(TriteDB *db, Client *c) {
 
     int count = 0;
-    KeyCommand *cnt = ((Command *) c->ptr)->kcommand;
+    KeyCommand *cnt = ((Request *) c->ptr)->command->kcommand;
     clock_t start, end;
     double time_elapsed;
 
@@ -644,7 +646,7 @@ static int count_handler(TriteDB *db, Client *c) {
     set_reply(c, b);
     free_response(res, VALUE_CONTENT);
 
-    free_command(c->ptr);
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -702,7 +704,7 @@ static int request_handler(TriteDB *db, Client *client) {
 
     /* Link the correct structure to the client, according to the packet type
        received */
-    client->ptr = pkt->command;
+    client->ptr = pkt;
 
     int executed = 0;
     int dc = 0;
@@ -730,7 +732,8 @@ static int request_handler(TriteDB *db, Client *client) {
     // Set reply handler as the current context handler
     client->ctx_handler = reply_handler;
 
-    // Set up epoll events
+    /* Reset handler to request_handler in order to read new incoming data and
+       EPOLL event for read fds */
     mod_epoll(db->epollfd, clientfd, EPOLLOUT, client);
 
 exit:
@@ -795,6 +798,7 @@ static int accept_handler(TriteDB *db, Client *server) {
     if (clientsock == -1)
         return -1;
 
+    /* Just some informations retrieval of the new accepted client connection */
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
 
@@ -826,6 +830,7 @@ static int accept_handler(TriteDB *db, Client *server) {
     client->fd = clientsock;
     client->ctx_handler = request_handler;
 
+    /* Record last action as of now */
     client->last_action_time = (uint64_t) time(NULL);
 
     client->reply = NULL;
@@ -1071,8 +1076,6 @@ cleanup:
     trie_free(tritedb.data);
     hashtable_release(tritedb.clients);
     free_expiring_keys(tritedb.expiring_keys);
-
-    t_log_close();
 
     tdebug("Bye\n");
     return 0;

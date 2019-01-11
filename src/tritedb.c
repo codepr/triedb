@@ -80,8 +80,7 @@ int main(int argc, char **argv) {
     }
 
     // Override default DEBUG mode
-    if (debug == 1) config.loglevel = DEBUG;
-    else config.loglevel = INFORMATION;
+    config.loglevel = debug == 1 ? DEBUG : INFORMATION;
 
     // Try to load a configuration, if found
     config_load(conf);
@@ -93,6 +92,9 @@ int main(int argc, char **argv) {
 
     // Start
     start_server(config.hostname, config.port, fd);
+
+    // Close logger
+    t_log_close();
 
     return 0;
 }

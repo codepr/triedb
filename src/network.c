@@ -191,8 +191,7 @@ int accept_connection(int serversock) {
     return clientsock;
 }
 
-
-
+/* Send all bytes contained in buf, updating sent bytes counter */
 int sendall(int sfd, uint8_t *buf, ssize_t len, ssize_t *sent) {
     int total = 0;
     ssize_t bytesleft = len;
@@ -214,7 +213,8 @@ int sendall(int sfd, uint8_t *buf, ssize_t len, ssize_t *sent) {
     return n == -1 ? -1 : 0;
 }
 
-
+/* Receive all incoming bytes in the kernel buffer for the sfd descriptor,
+   storing them into a Ringbuffer instance of max size two Mb */
 int recvall(int sfd, Ringbuffer *ringbuf, ssize_t len) {
     int n = 0;
     int total = 0;
@@ -243,7 +243,8 @@ int recvall(int sfd, Ringbuffer *ringbuf, ssize_t len) {
     return total;
 }
 
-
+/* Receive a given number of bytes on the descriptor sfd, storing the stream of
+   data into a 2 Mb capped ringbuffer */
 int recvbytes(int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
     int n = 0;
     int total = 0;

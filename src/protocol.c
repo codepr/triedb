@@ -389,9 +389,9 @@ void free_request(Request *request, uint8_t cmdtype) {
             free_command(request->bulk_command->commands[i]);
 
         tfree(request->bulk_command);
-        tfree(request);
     }
 
+    tfree(request);
 }
 
 

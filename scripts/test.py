@@ -6,6 +6,7 @@ import random
 import argparse
 from socket import socket, htons, htonl, ntohs, ntohl, AF_UNIX
 
+
 NORMAL = 0
 BULK = 1
 
@@ -23,7 +24,7 @@ QUIT = 0xff
 
 
 def send_quit(sock):
-    quit = struct.pack('=BIB', QUIT, htonl(5), NORMAL)
+    quit = struct.pack('=BIB', QUIT, htonl(6), NORMAL)
     sock.send(quit);
     return 'done'
 

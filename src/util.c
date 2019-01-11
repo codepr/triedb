@@ -71,7 +71,7 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
 
-    /* Truncate message too long */
+    /* Truncate message too long and copy 3 bytes to make space for 3 dots */
     memcpy(msg + MAX_LOG_SIZE, "...", 3);
     msg[MAX_LOG_SIZE + 3] = '\0';
 
@@ -82,7 +82,8 @@ void t_log(const uint8_t level, const char *fmt, ...) {
     // persistent log file
     FILE *fp = stdout;
 
-    if (!fp) return;
+    if (!fp)
+        return;
 
     fprintf(fp, "%lu %c %s\n", (unsigned long) time(NULL), mark[level], msg);
     if (fh)
@@ -93,22 +94,22 @@ void t_log(const uint8_t level, const char *fmt, ...) {
         fflush(fh);
 }
 
-/* auxiliary function to check wether a string is an integer */
-bool is_integer(const char *s) {
-    const char *k = s;
-    for (char c = *k; c != '\0'; c = *(++k))
-        if (!isdigit(c))
+/* Auxiliary function to check wether a string is an integer */
+bool is_integer(const char *string) {
+    for (; *string; ++string)
+        if (!isdigit(*string))
             return false;
     return true;
 }
 
-
-int parse_int(const char *str) {
+/* Parse the integer part of a string, by effectively iterate through it and
+   converting the numbers found */
+int parse_int(const char *string) {
     int n = 0;
-    const char *s = str;
-    while (*s != '\0' && isdigit(*s)) {
-        n = (n * 10) + (*s - '0');
-        s++;
+
+    while (*string && isdigit(*string)) {
+        n = (n * 10) + (*string - '0');
+        string++;
     }
     return n;
 }
@@ -120,7 +121,11 @@ void oom(const char *msg) {
     exit(EXIT_FAILURE);
 }
 
-
+/* Custom malloc function, allocate a defined size of bytes plus 8, the size
+   of an unsigned long long, and append the length choosen at the beginning of
+   the memory chunk as an unsigned long long, returning the memory chunk
+   allocated just 8 bytes after the start; this way it is possible to track
+   the memory usage at every allocation */
 void *tmalloc(size_t size) {
 
     assert(size > 0);
@@ -137,7 +142,8 @@ void *tmalloc(size_t size) {
     return (char *) ptr + sizeof(size_t);
 }
 
-
+/* Same as tmalloc, but with calloc, creating chunk o zero'ed memory.
+   TODO: still a suboptimal solution */
 void *tcalloc(size_t len, size_t size) {
 
     assert(len > 0 && size > 0);
@@ -154,7 +160,8 @@ void *tcalloc(size_t len, size_t size) {
     return (char *) ptr + sizeof(size_t);
 }
 
-
+/* Same of tmalloc but with realloc, resize a chunk of memory pointed by a
+   given pointer, again appends the new size in front of the byte array */
 void *trealloc(void *ptr, size_t size) {
 
     assert(size > 0);
@@ -182,7 +189,10 @@ void *trealloc(void *ptr, size_t size) {
 
 }
 
-
+/* Custom free function, must be used on memory chunks allocated with t*
+   functions, it move the pointer 8 position backward by the starting address
+   of memory pointed by `ptr`, this way it knows how many bytes will be
+   free'ed by the call */
 void tfree(void *ptr) {
 
     if (!ptr)
@@ -203,7 +213,9 @@ void tfree(void *ptr) {
     free(realptr);
 }
 
-
+/* Retrieve the bytes allocated by t* functions by backwarding the pointer of
+   8 positions, the size of an unsigned long long in order to read the number
+   of allcated bytes */
 size_t malloc_size(void *ptr) {
 
     if (!ptr)
@@ -219,7 +231,9 @@ size_t malloc_size(void *ptr) {
     return ptr_size;
 }
 
-
+/* As strdup but using tmalloc instead of malloc, to track the number of bytes
+   allocated and to enable use of tfree on duplicated strings without having to
+   care when to use a normal free or a tfree */
 char *tstrdup(const char *s) {
 
     char *ds = tmalloc(strlen(s) + 1);
@@ -227,6 +241,7 @@ char *tstrdup(const char *s) {
     if (!ds)
         return NULL;
 
+    // TODO: Bugged, change to snprintf
     strcpy(ds, s);
 
     return ds;
