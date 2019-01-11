@@ -78,9 +78,10 @@ static int info_handler(TriteDB *, Client *);
 static int quit_handler(TriteDB *, Client *);
 
 // Fixed size of the header of each packet, consists of essentially the first
-// 5 bytes containing respectively the type of packet (PUT, GET, DEL etc ...)
-// and the total length in bytes of the packet
-/* static const int HEADLEN = (2 * sizeof(uint8_t) + sizeof(uint32_t); */
+// 6 bytes containing respectively the type of packet (PUT, GET, DEL etc ...)
+// the total length in bytes of the packet and the is_bulk flag which tell if
+// the packet contains a stream of commands or a single one
+static const int HEADLEN = (2 * sizeof(uint8_t)) + sizeof(uint32_t);
 
 /* Static command map, simple as it seems: OPCODE -> handler func */
 static struct command commands_map[COMMAND_COUNT] = {
@@ -103,9 +104,9 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
     size_t n = 0;
     uint8_t read_all = 0;
 
-    while (n < HEADERLEN) {
-        /* Read first 5 bytes to get the total len of the packet */
-        n += recvbytes(clientfd, rbuf, read_all, HEADERLEN);
+    while (n < HEADLEN) {
+        /* Read first 6 bytes to get the total len of the packet */
+        n += recvbytes(clientfd, rbuf, read_all, HEADLEN);
         if (n <= 0) {
             shutdown(clientfd, 0);
             close(clientfd);
@@ -118,7 +119,7 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
     uint8_t *bytearray = tmp;
 
     /* Try to read at least length of the packet */
-    for (uint8_t i = 0; i < HEADERLEN; i++)
+    for (uint8_t i = 0; i < HEADLEN; i++)
         ringbuf_pop(rbuf, bytearray++);
 
     /* Read opcode, the first byte of every packet */
@@ -137,21 +138,21 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
     uint32_t tlen = ntohl(*((uint32_t *) (tmp + sizeof(uint8_t))));
 
     /* Read remaining bytes to complete the packet */
-    while (ringbuf_size(rbuf) < tlen - HEADERLEN)
-        if ((n = recvbytes(clientfd, rbuf, read_all, tlen - HEADERLEN)) < 0)
+    while (ringbuf_size(rbuf) < tlen - HEADLEN)
+        if ((n = recvbytes(clientfd, rbuf, read_all, tlen - HEADLEN)) < 0)
             goto errrecv;
 
     /* Allocate a buffer to fit the entire packet */
     Buffer *b = buffer_init(tlen);
 
-    /* Copy previous read part of the header (first 5 bytes) */
-    memcpy(b->data, tmp, HEADERLEN);
+    /* Copy previous read part of the header (first 6 bytes) */
+    memcpy(b->data, tmp, HEADLEN);
 
-    /* Move forward pointer after HEADERLEN bytes */
-    bytearray = b->data + HEADERLEN;
+    /* Move forward pointer after HEADLEN bytes */
+    bytearray = b->data + HEADLEN;
 
     /* Empty the rest of the ring buffer */
-    while ((tlen - HEADERLEN) > 0) {
+    while ((tlen - HEADLEN) > 0) {
         ringbuf_pop(rbuf, bytearray++);
         --tlen;
     }
@@ -233,7 +234,7 @@ static int quit_handler(TriteDB *db, Client *c) {
     close(c->fd);
     info.nclients--;
 
-    free_request(c->ptr, EMPTY_COMMAND);
+    free_command(c->ptr);
     // TODO clean up client list
 
     return -1;
@@ -244,7 +245,7 @@ static int info_handler(TriteDB *db, Client *c) {
 
     info.uptime = time(NULL) - info.start_time;
     // TODO make key-val-list response
-    free_request(c->ptr, EMPTY_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -252,7 +253,7 @@ static int info_handler(TriteDB *db, Client *c) {
 
 static int keys_handler(TriteDB *db, Client *c) {
 
-    KeyCommand *cmd = ((Request *) c->ptr)->kcommand;
+    KeyCommand *cmd = ((Command *) c->ptr)->kcommand;
 
     List *keys = trie_prefix_find(db->data, (const char *) cmd->key);
 
@@ -267,7 +268,7 @@ static int keys_handler(TriteDB *db, Client *c) {
 
     list_free(keys, 1);
     free_response(response, LIST_CONTENT);
-    free_request(c->ptr, KEY_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -290,11 +291,13 @@ static bool compare_ttl(void *arg1, void *arg2) {
 
 static int put_handler(TriteDB *db, Client *c) {
 
-    KeyValCommand *cmd = ((Request *) c->ptr)->kvcommand;
+    KeyValCommand *cmd = ((Command *) c->ptr)->kvcommand;
     clock_t start, end;
     double time_elapsed;
 
     int16_t ttl = cmd->ttl != 0 ? cmd->ttl : -NOTTL;
+
+    tdebug("PUT");
 
     // TODO refactor TTL insertion, investigate on bad-malloc_usable_size
     // issue
@@ -341,7 +344,7 @@ static int put_handler(TriteDB *db, Client *c) {
     tdebug("PUT %s -> %s in %f ms (s=%d m=%d)",
             cmd->key, cmd->val, time_elapsed, db->data->size, memory_used());
 
-    free_request(c->ptr, KEY_VAL_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -349,7 +352,7 @@ static int put_handler(TriteDB *db, Client *c) {
 
 static int get_handler(TriteDB *db, Client *c) {
 
-    KeyCommand *cmd = ((Request *) c->ptr)->kcommand;
+    KeyCommand *cmd = ((Command *) c->ptr)->kcommand;
     void *val = NULL;
 
     clock_t start, end;
@@ -400,7 +403,7 @@ static int get_handler(TriteDB *db, Client *c) {
         }
     }
 
-    free_request(c->ptr, KEY_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -408,7 +411,7 @@ static int get_handler(TriteDB *db, Client *c) {
 
 static int ttl_handler(TriteDB *db, Client *c) {
 
-    KeyCommand *cmd = ((Request *) c->ptr)->kcommand;
+    KeyCommand *cmd = ((Command *) c->ptr)->kcommand;
     void *val = NULL;
 
     // Check for key presence in the trie structure
@@ -441,7 +444,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
                 cmd->key, nd->data, cmd->ttl, db->data->size, memory_used());
     }
 
-    free_request(c->ptr, KEY_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -450,7 +453,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
 static int del_handler(TriteDB *db, Client *c) {
 
     int code = OK;
-    KeyListCommand *cmd = ((Request *) c->ptr)->klcommand;
+    KeyListCommand *cmd = ((Command *) c->ptr)->klcommand;
     bool found = false;
     clock_t start, end;
     double time_elapsed;
@@ -494,7 +497,7 @@ static int del_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, KEY_LIST_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -506,7 +509,7 @@ static int del_handler(TriteDB *db, Client *c) {
 static int inc_handler(TriteDB *db, Client *c) {
 
     int code = OK, n = 0;
-    KeyListCommand *inc = ((Request *) c->ptr)->klcommand;
+    KeyListCommand *inc = ((Command *) c->ptr)->klcommand;
     bool found = false;
     void *val = NULL;
 
@@ -547,7 +550,7 @@ static int inc_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, KEY_LIST_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -559,7 +562,7 @@ static int inc_handler(TriteDB *db, Client *c) {
 static int dec_handler(TriteDB *db, Client *c) {
 
     int code = OK, n = 0;
-    KeyListCommand *dec = ((Request *) c->ptr)->klcommand;
+    KeyListCommand *dec = ((Command *) c->ptr)->klcommand;
     bool found = false;
     void *val = NULL;
 
@@ -601,7 +604,7 @@ static int dec_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, KEY_LIST_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -610,7 +613,7 @@ static int dec_handler(TriteDB *db, Client *c) {
 static int count_handler(TriteDB *db, Client *c) {
 
     int count = 0;
-    KeyCommand *cnt = ((Request *) c->ptr)->kcommand;
+    KeyCommand *cnt = ((Command *) c->ptr)->kcommand;
     clock_t start, end;
     double time_elapsed;
 
@@ -641,7 +644,7 @@ static int count_handler(TriteDB *db, Client *c) {
     set_reply(c, b);
     free_response(res, VALUE_CONTENT);
 
-    free_request(c->ptr, KEY_COMMAND);
+    free_command(c->ptr);
 
     return OK;
 }
@@ -699,7 +702,7 @@ static int request_handler(TriteDB *db, Client *client) {
 
     /* Link the correct structure to the client, according to the packet type
        received */
-    client->ptr = pkt;
+    client->ptr = pkt->command;
 
     int executed = 0;
     int dc = 0;

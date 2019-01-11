@@ -6,6 +6,9 @@ import random
 import argparse
 from socket import socket, htons, htonl, ntohs, ntohl, AF_UNIX
 
+NORMAL = 0
+BULK = 1
+
 
 ACK = 0x00
 PUT = 0x01
@@ -20,27 +23,27 @@ QUIT = 0xff
 
 
 def send_quit(sock):
-    quit = struct.pack('=BI', QUIT, htonl(5))
+    quit = struct.pack('=BIB', QUIT, htonl(5), NORMAL)
     sock.send(quit);
     return 'done'
 
 
 def send_keys(sock, key):
-    fmt = f'=BIH{len(key)}s'
+    fmt = f'=BIBH{len(key)}s'
     count = struct.pack(
         fmt,
         KEYS,
-        htonl(7 + len(key)),
+        htonl(8 + len(key)),
+        NORMAL,
         htons(len(key)),
         key.encode()
     )
     sock.send(count)
-    header = sock.recv(5)
-    code, total_len = struct.unpack('=BI', header)
+    header = sock.recv(6)
+    code, total_len, _ = struct.unpack('=BIB', header)
     total_len = ntohl(total_len)
     key_len = ntohl(struct.unpack('=I', sock.recv(4))[0])
     keys = []
-    print(key_len)
 
     for _ in range(key_len):
         keylen = ntohs(struct.unpack('=H', sock.recv(2))[0])
@@ -59,17 +62,18 @@ def send_putbulkrng(sock, n):
         keylen = len(key)
         vallen = len(value)
         put = struct.pack(
-            f'=BIHI{keylen}s{vallen}s',
+            f'=BIBHI{keylen}s{vallen}s',
             PUT,
-            htonl(11 + keylen + vallen),
+            htonl(12 + keylen + vallen),
+            NORMAL,
             htons(keylen),
             htonl(vallen),
             key.encode(),
             value.encode()
         )
         sock.send(put)
-        header = sock.recv(5)
-        code, total_len = struct.unpack('=BI', header)
+        header = sock.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
         total_len = ntohl(total_len)
         payload = struct.unpack('=B', sock.recv(total_len - 5))
 
@@ -82,17 +86,18 @@ def send_putbulk(sock, n):
         keylen = len(key)
         vallen = len(value)
         put = struct.pack(
-            f'=BIHI{keylen}s{vallen}s',
+            f'=BIBHI{keylen}s{vallen}s',
             PUT,
-            htonl(11 + keylen + vallen),
+            htonl(12 + keylen + vallen),
+            NORMAL,
             htons(keylen),
             htonl(vallen),
             key.encode(),
             value.encode()
         )
         sock.send(put)
-        header = sock.recv(5)
-        code, total_len = struct.unpack('=BI', header)
+        header = sock.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
         total_len = ntohl(total_len)
         payload = struct.unpack('=B', sock.recv(total_len - 5))
 
@@ -104,9 +109,10 @@ def send_put(sock, key, value, ttl=None, prefix=False):
     vallen = len(value)
     if not ttl:
         put = struct.pack(
-            f'=BIHI{keylen}s{vallen}sB',
+            f'=BIBHI{keylen}s{vallen}sB',
             PUT,
-            htonl(12 + keylen + vallen),
+            htonl(13 + keylen + vallen),
+            NORMAL,
             htons(keylen),
             htonl(vallen),
             key.encode(),
@@ -115,9 +121,10 @@ def send_put(sock, key, value, ttl=None, prefix=False):
         )
     else:
         put = struct.pack(
-            f'=BIHI{keylen}s{vallen}sBH',
+            f'=BIBHI{keylen}s{vallen}sBH',
             PUT,
-            htonl(14 + keylen + vallen),
+            htonl(15 + keylen + vallen),
+            NORMAL,
             htons(keylen),
             htonl(vallen),
             key.encode(),
@@ -126,10 +133,10 @@ def send_put(sock, key, value, ttl=None, prefix=False):
             htons(ttl)
         )
     sock.send(put)
-    header = sock.recv(5)
-    code, total_len = struct.unpack('=BI', header)
+    header = sock.recv(6)
+    code, total_len, _ = struct.unpack('=BIB', header)
     total_len = ntohl(total_len)
-    payload = struct.unpack('=B', sock.recv(total_len - 5))
+    payload = struct.unpack('=B', sock.recv(total_len - 6))
 
     return {
         'code': code,
@@ -141,18 +148,19 @@ def send_put(sock, key, value, ttl=None, prefix=False):
 def send_get(sock, key):
     keylen = len(key)
     get = struct.pack(
-        f'=BIH{keylen}s',
+        f'=BIBH{keylen}s',
         GET,
-        htonl(7 + keylen),
+        htonl(8 + keylen),
+        NORMAL,
         htons(keylen),
         key.encode()
     )
     sock.send(get)
-    header = sock.recv(5)
-    code, total_len = struct.unpack('=BI', header)
+    header = sock.recv(6)
+    code, total_len, _ = struct.unpack('=BIB', header)
     total_len = ntohl(total_len)
     if code == ACK:
-        payload = struct.unpack('=B', sock.recv(total_len - 5))
+        payload = struct.unpack('=B', sock.recv(total_len - 6))
         data = code
     else:
         datalen = ntohl(struct.unpack('=I', sock.recv(4))[0])
@@ -168,20 +176,21 @@ def send_get(sock, key):
 def send_ttl(sock, key, ttl):
     keylen = len(key)
     ttl = struct.pack(
-        f'=BIH{keylen}sBH',
+        f'=BIBH{keylen}sBH',
         TTL,
-        htonl(10 + keylen),
+        htonl(11 + keylen),
+        NORMAL,
         htons(keylen),
         key.encode(),
         0,
         htons(ttl)
     )
     sock.send(ttl)
-    header = sock.recv(5)
-    code, total_len = struct.unpack('=BI', header)
+    header = sock.recv(6)
+    code, total_len, _ = struct.unpack('=BIB', header)
     total_len = ntohl(total_len)
     if code == ACK:
-        payload = struct.unpack('=B', sock.recv(total_len - 5))
+        payload = struct.unpack('=B', sock.recv(total_len - 6))
     else:
         klen, vlen = struct.unpack('=HI', sock.recv(6))
         klen, vlen = ntohs(klen), ntohl(vlen)
@@ -196,28 +205,29 @@ def send_ttl(sock, key, ttl):
 
 def send_del(sock, keys, is_prefix=False):
     totlen = sum(len(k) for k in keys)
-    fmtinit = '=BII'
+    fmtinit = '=BIBI'
     if is_prefix:
         fmt = ''.join(f'H{len(key)}sB' for key in keys)
-        totlen += 9 + 3 * len(keys)
+        totlen += 10 + 3 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
     else:
         fmt = ''.join(f'H{len(key)}s' for key in keys)
-        totlen += 9 + 2 * len(keys)
+        totlen += 10 + 2 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     fmt = fmtinit + fmt
     delete = struct.pack(
         fmt,
         DEL,
         htonl(totlen),
+        NORMAL,
         htonl(len(keys)),
         *keys_to_net
     )
     sock.send(delete)
-    header = sock.recv(5)
-    code, total_len = struct.unpack('=BI', header)
+    header = sock.recv(6)
+    code, total_len, _ = struct.unpack('=BIB', header)
     total_len = ntohl(total_len)
-    payload = struct.unpack('=B', sock.recv(total_len - 5))
+    payload = struct.unpack('=B', sock.recv(total_len - 6))
 
     return {
         'code': code,
@@ -229,28 +239,29 @@ def send_del(sock, keys, is_prefix=False):
 def send_inc(sock, keys, inc=True, is_prefix=False):
     opcode = INC if inc else DEC
     totlen = sum(len(k) for k in keys)
-    fmtinit = '=BIH'
+    fmtinit = '=BIBH'
     if is_prefix:
         fmt = ''.join(f'H{len(key)}sH' for key in keys)
-        totlen += 7 + 4 * len(keys)
+        totlen += 8 + 4 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
     else:
         fmt = ''.join(f'H{len(key)}s' for key in keys)
-        totlen += 7 + 2 * len(keys)
+        totlen += 8 + 2 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
     fmt = fmtinit + fmt
     inc = struct.pack(
         fmt,
         opcode,
         htonl(totlen),
+        NORMAL,
         htons(len(keys)),
         *keys_to_net
     )
     sock.send(inc)
-    header = sock.recv(5)
-    code, total_len = struct.unpack('=BI', header)
+    header = sock.recv(6)
+    code, total_len, _ = struct.unpack('=BIB', header)
     total_len = ntohl(total_len)
-    payload = struct.unpack('=B', sock.recv(total_len - 5))
+    payload = struct.unpack('=B', sock.recv(total_len - 6))
 
     return {
         'code': code,
@@ -260,19 +271,20 @@ def send_inc(sock, keys, inc=True, is_prefix=False):
 
 
 def send_count(sock, key):
-    fmt = f'=BIH{len(key)}s'
+    fmt = f'=BIBH{len(key)}s'
     count = struct.pack(
         fmt,
         COUNT,
-        htonl(7 + len(key)),
+        htonl(8 + len(key)),
+        NORMAL,
         htons(len(key)),
         key.encode()
     )
     sock.send(count)
-    header = sock.recv(5)
-    code, total_len = struct.unpack('=BI', header)
+    header = sock.recv(6)
+    code, total_len, _ = struct.unpack('=BIB', header)
     total_len = ntohl(total_len)
-    payload = ntohl(struct.unpack('=I', sock.recv(total_len - 5))[0])
+    payload = ntohl(struct.unpack('=I', sock.recv(total_len - 6))[0])
 
     return {
         'code': code,

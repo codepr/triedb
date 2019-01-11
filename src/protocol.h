@@ -66,8 +66,8 @@
 #define QUIT                    0xff
 
 
-/* 5 bytes to store the operation code (PUT, GET etc ...) and the total length
-   of the packet */
+/* 6 bytes to store the operation code (PUT, GET etc ...) the total length of
+   the packet and if it is a single command or a stream of sequential commands */
 #define HEADERLEN (2 * sizeof(uint8_t)) + sizeof(uint32_t)
 
 
@@ -80,15 +80,18 @@ typedef struct {
     uint8_t *data;
 } Buffer;
 
-
+/* Host to network byteorder for unsigned long long values, it is achieved by
+   treating a single u64 as two u32 numbers */
 void htonll(uint8_t *, uint_least64_t);
 
+/* Network to host byteorder for unsigned long long values, it is achieved by
+   treating a single u64 as two u32 numbers */
 uint_least64_t ntohll(const uint8_t *);
-
 
 // Buffer constructor, it require a size cause we use a bounded buffer, e.g.
 // no resize over a defined size
 Buffer *buffer_init(size_t);
+
 void buffer_destroy(Buffer *);
 
 
@@ -119,7 +122,8 @@ void write_bytes(Buffer *, uint8_t *);
 
 
 /* Definition of the common header, for now it simply define the operation
- * code and the total size of the packet, including the body
+ * code, the total size of the packet including the body and if it carry a
+ * single command or a stream of sequential commands.
  */
 typedef struct {
     uint8_t opcode;
@@ -193,39 +197,43 @@ typedef struct {
     struct KeyValue **pairs;
 } KeyValListCommand;
 
-// Define a request, can be either a `KeyCommand`, a `KeyValCommand` or a
-// `KeyListCommand`
-// TODO add type, transform this union into a struct with type and the union
-// itself as field
+// Define a request, can be either an `EmptyCommand`, a `KeyCommand`, a
+// `KeyValCommand` or a `KeyListCommand`
+// TODO move header outside of each single command
+typedef struct {
+    uint8_t cmdtype;
+    union {
+        EmptyCommand *ecommand;
+        KeyCommand *kcommand;
+        KeyValCommand *kvcommand;
+        KeyListCommand *klcommand;
+    };
+} Command;
+
+/* List of commands, used to handle bulk requests, a stream of sequential
+   commands to be executed in a single TCP request. */
+typedef struct {
+    size_t ncommands;
+    Command **commands;
+} BulkCommand;
+
+/* A complete request, can be either a single command or a bulk one */
 typedef union {
-    EmptyCommand *ecommand;
-    KeyCommand *kcommand;
-    KeyValCommand *kvcommand;
-    KeyListCommand *klcommand;
+    Command *command;
+    BulkCommand *bulk_command;
 } Request;
 
-/***************************
- *      BULK STRUCTS
- ***************************/
-
-// List of commands, used to handle bulk requests
-typedef struct {
-    size_t nrequests;
-    Request **requests;
-} BulkRequest;
-
-
-typedef union {
-    Request *request;
-    BulkRequest *bulk_request;
-} Request2;
-
-
+/* Unpack a request from network byteorder (a big-endian) bytestream into a
+   Request struct */
 Request *unpack_request(Buffer *);
 
-void free_request2(Request2 *, uint8_t);
+/* Unpack a command from network byteorder to a Command struct */
+Command *unpack_command(Buffer *);
 
+/* Cleanup functions */
 void free_request(Request *, uint8_t);
+
+void free_command(Command *);
 
 
 // Response structure without body, like ACK etc.
