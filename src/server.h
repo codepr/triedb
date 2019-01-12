@@ -35,8 +35,9 @@
 #include "hashtable.h"
 
 
-#define MAX_EVENTS	        128
-#define TTL_CHECK_INTERVAL  50 * 1024 * 1024
+#define MAX_EVENTS	            128
+#define TTL_CHECK_INTERVAL      50 * 1024 * 1024
+#define STATS_PRINT_INTERVAL    15
 
 
 typedef struct client Client;

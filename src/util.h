@@ -42,6 +42,7 @@ enum { DEBUG, INFORMATION, WARNING, ERROR };
 void oom(const char *);
 bool is_integer(const char *);
 int parse_int(const char *);
+int number_len(size_t);
 
 /* Logging */
 void t_log_init(const char *);

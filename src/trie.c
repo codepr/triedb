@@ -119,14 +119,13 @@ Trie *trie_new(void) {
 }
 
 /* If not present, inserts key into trie, if the key is prefix of trie node,
-   just marks leaf node.
+   just marks leaf node by assigning the new data pointer. Returns a pointer
+   to the new inserted data.
 
    Being a Trie, it should guarantees O(m) performance for insertion on the
    worst case, where `m` is the length of the key. */
-static int trie_node_insert(TrieNode *root,
-        const char *key, const void *data, int16_t ttl) {
-
-    int rc = 0;
+static struct NodeData *trie_node_insert(TrieNode *root,
+        const char *key, const void *data, size_t *size) {
 
     TrieNode *cursor = root;
     TrieNode *cur_node = NULL;
@@ -170,16 +169,16 @@ static int trie_node_insert(TrieNode *root,
     if (cursor->ndata) {
         tfree(cursor->ndata->data);
     } else {
-        rc = 1;
+        (*size)++;
         cursor->ndata = tmalloc(sizeof(struct NodeData));
     }
 
     // mark last node as leaf
     cursor->ndata->data = tstrdup(data);
-    cursor->ndata->ttl = ttl;
+    cursor->ndata->ttl = -NOTTL;
     cursor->ndata->ctime = cursor->ndata->latime = time(NULL);
 
-    return rc;
+    return cursor->ndata;
 }
 
 /* Private function, iterate recursively through the trie structure starting
@@ -253,13 +252,14 @@ static bool trie_node_search(TrieNode *root, const char *key, void **ret) {
     return !*ret ? false : true;
 }
 
-/* Insert a new key-value pair in the Trie structure */
-void trie_insert(Trie *trie, const char *key, const void *data, int16_t ttl) {
+/* Insert a new key-value pair in the Trie structure, returning a pointer to
+   the new inserted data in order to simplify some operations as the addition
+   of expiring keys with a set TTL. */
+struct NodeData *trie_insert(Trie *trie, const char *key, const void *data) {
 
     assert(trie && key);
 
-    if (trie_node_insert(trie->root, key, data, ttl) == 1)
-        trie->size++;
+    return trie_node_insert(trie->root, key, data, &trie->size);
 }
 
 

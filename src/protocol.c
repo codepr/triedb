@@ -225,10 +225,12 @@ Request *unpack_request(Buffer *b) {
     switch (header->is_bulk) {
         case 0:
             /* It's a single request, just unpack it into the request pointer */
+            request->reqtype = SINGLE_REQUEST;
             request->command = unpack_command(b, header);
             break;
         case 1:
             /* Unpack the BulkRequest format */
+            request->reqtype = BULK_REQUEST;
             request->bulk_command = tmalloc(sizeof(BulkCommand));
             if (!request->bulk_command)
                 goto errnomem1;

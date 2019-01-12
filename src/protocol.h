@@ -38,6 +38,10 @@
 #define EOOM                    0x01
 
 /* Request type */
+#define SINGLE_REQUEST          0x00
+#define BULK_REQUEST            0x01
+
+/* Command type */
 #define EMPTY_COMMAND           0x00
 #define KEY_COMMAND             0x01
 #define KEY_VAL_COMMAND         0x02
@@ -218,9 +222,12 @@ typedef struct {
 } BulkCommand;
 
 /* A complete request, can be either a single command or a bulk one */
-typedef union {
-    Command *command;
-    BulkCommand *bulk_command;
+typedef struct {
+    uint8_t reqtype;
+    union {
+        Command *command;
+        BulkCommand *bulk_command;
+    };
 } Request;
 
 /* Unpack a request from network byteorder (a big-endian) bytestream into a

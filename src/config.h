@@ -78,5 +78,7 @@ void config_set_default(void);
 void config_print(void);
 bool config_load(const char *);
 
+char *time_to_string(size_t);
+char *memory_to_string(size_t);
 
 #endif

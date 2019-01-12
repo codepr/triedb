@@ -307,7 +307,7 @@ static char *test_trie_insert(void) {
     struct Trie *root = trie_new();
     const char *key = "hello";
     char *val = "world";
-    trie_insert(root, key, val, -NOTTL);
+    trie_insert(root, key, val);
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);
     ASSERT("[! trie_insert]: Trie insertion failed", (found == true && payload != NULL));
@@ -324,7 +324,7 @@ static char *test_trie_find(void) {
     struct Trie *root = trie_new();
     const char *key = "hello";
     char *val = "world";
-    trie_insert(root, key, val, -NOTTL);
+    trie_insert(root, key, val);
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);
     ASSERT("[! trie_find]: Trie search failed", (found == true && payload != NULL));
@@ -345,9 +345,9 @@ static char *test_trie_delete(void) {
     char *val1 = "world";
     char *val2 = "world";
     char *val3 = "world";
-    trie_insert(root, key1, val1, -NOTTL);
-    trie_insert(root, key2, val2, -NOTTL);
-    trie_insert(root, key3, val3, -NOTTL);
+    trie_insert(root, key1, val1);
+    trie_insert(root, key2, val2);
+    trie_insert(root, key3, val3);
     trie_delete(root, key1);
     trie_delete(root, key2);
     trie_delete(root, key3);
@@ -376,10 +376,10 @@ static char *test_trie_prefix_delete(void) {
     char *val2 = "world";
     char *val3 = "world";
     char *val4 = "world";
-    trie_insert(root, key1, val1, -NOTTL);
-    trie_insert(root, key2, val2, -NOTTL);
-    trie_insert(root, key3, val3, -NOTTL);
-    trie_insert(root, key4, val4, -NOTTL);
+    trie_insert(root, key1, val1);
+    trie_insert(root, key2, val2);
+    trie_insert(root, key3, val3);
+    trie_insert(root, key4, val4);
     trie_prefix_delete(root, key1);
     void *payload = NULL;
     bool found = trie_find(root, key1, &payload);
@@ -412,10 +412,10 @@ static char *test_trie_prefix_count(void) {
     char *val2 = "world";
     char *val3 = "world";
     char *val4 = "world";
-    trie_insert(root, key1, val1, -NOTTL);
-    trie_insert(root, key2, val2, -NOTTL);
-    trie_insert(root, key3, val3, -NOTTL);
-    trie_insert(root, key4, val4, -NOTTL);
+    trie_insert(root, key1, val1);
+    trie_insert(root, key2, val2);
+    trie_insert(root, key3, val3);
+    trie_insert(root, key4, val4);
     int count = trie_prefix_count(root, "hel");
     ASSERT("[! trie_prefix_count]: Trie prefix count on prefix \"hel\" failed",
             count == 4);
@@ -444,10 +444,10 @@ static char *test_trie_prefix_inc(void) {
     char *val3 = "2";
     char *val4 = "9";
 
-    trie_insert(root, key1, val1, -NOTTL);
-    trie_insert(root, key2, val2, -NOTTL);
-    trie_insert(root, key3, val3, -NOTTL);
-    trie_insert(root, key4, val4, -NOTTL);
+    trie_insert(root, key1, val1);
+    trie_insert(root, key2, val2);
+    trie_insert(root, key3, val3);
+    trie_insert(root, key4, val4);
 
     // Inc prefix call
     trie_prefix_inc(root, "key");
@@ -483,10 +483,10 @@ static char *test_trie_prefix_dec(void) {
     char *val2 = "1";
     char *val3 = "2";
     char *val4 = "10";
-    trie_insert(root, key1, val1, -NOTTL);
-    trie_insert(root, key2, val2, -NOTTL);
-    trie_insert(root, key3, val3, -NOTTL);
-    trie_insert(root, key4, val4, -NOTTL);
+    trie_insert(root, key1, val1);
+    trie_insert(root, key2, val2);
+    trie_insert(root, key3, val3);
+    trie_insert(root, key4, val4);
 
     trie_prefix_dec(root, "key");
 

@@ -100,6 +100,76 @@ static size_t read_time_with_mul(const char *time) {
 
 }
 
+/* Format a memory in bytes to a more human-readable form, e.g. 64b or 18Kb
+ * instead of huge numbers like 130230234 bytes */
+char *memory_to_string(size_t memory) {
+
+    int numlen = 0;
+    int translated_memory = 0;
+
+    char *mstring = NULL;
+
+    if (memory < 1024) {
+        translated_memory = memory;
+        numlen = number_len(translated_memory);
+        // +1 for 'b' +1 for nul terminating
+        mstring = tmalloc(numlen + 1);
+        snprintf(mstring, numlen + 1, "%db", translated_memory);
+    } else if (memory < 1048576) {
+        translated_memory = memory / 1024;
+        numlen = number_len(translated_memory);
+        // +2 for 'Kb' +1 for nul terminating
+        mstring = tmalloc(numlen + 2);
+        snprintf(mstring, numlen + 2, "%dKb", translated_memory);
+    } else if (memory < 1073741824) {
+        translated_memory = memory / (1024 * 1024);
+        numlen = number_len(translated_memory);
+        // +2 for 'Mb' +1 for nul terminating
+        mstring = tmalloc(numlen + 2);
+        snprintf(mstring, numlen + 2, "%dMb", translated_memory);
+    } else {
+        translated_memory = memory / (1024 * 1024 * 1024);
+        numlen = number_len(translated_memory);
+        // +2 for 'Gb' +1 for nul terminating
+        mstring = tmalloc(numlen + 2);
+        snprintf(mstring, numlen + 2, "%dGb", translated_memory);
+    }
+
+    return mstring;
+}
+
+/* Purely utility function, format a time in seconds to a more human-readable
+ * form, e.g. 2m or 4h instead of huge numbers */
+char *time_to_string(size_t time) {
+
+    int numlen = 0;
+    int translated_time = 0;
+
+    char *tstring = NULL;
+
+    if (time < 60) {
+        translated_time = time;
+        numlen = number_len(translated_time);
+        // +1 for 's' +1 for nul terminating
+        tstring = tmalloc(numlen + 1);
+        snprintf(tstring, numlen + 1, "%ds", translated_time);
+    } else if (time < 60 * 60) {
+        translated_time = time / 60;
+        numlen = number_len(translated_time);
+        // +1 for 'm' +1 for nul terminating
+        tstring = tmalloc(numlen + 1);
+        snprintf(tstring, numlen + 1, "%dm", translated_time);
+    } else if (time < 60 * 60 * 24) {
+        translated_time = time / (60 * 60);
+        numlen = number_len(translated_time);
+        // +1 for 'd' +1 for nul terminating
+        tstring = tmalloc(numlen + 1);
+        snprintf(tstring, numlen + 1, "%dd", translated_time);
+    }
+
+    return tstring;
+}
+
 
 static void add_config_value(const char *key, const char *value) {
 
@@ -233,7 +303,11 @@ void config_print(void) {
         tinfo("Logging:");
         tinfo("\tlevel: %s", llevel);
         tinfo("\tlogpath: %s", config.logpath);
-        tinfo("Max memory: %ld", config.max_memory);
-        tinfo("Memory reclaim time: %ld", config.mem_reclaim_time);
+        const char *human_memory = memory_to_string(config.max_memory);
+        const char *human_time = time_to_string(config.mem_reclaim_time);
+        tinfo("Max memory: %s", human_memory);
+        tinfo("Memory reclaim time: %s", human_time);
+        tfree((char *) human_time);
+        tfree((char *) human_memory);
     }
 }

@@ -114,7 +114,18 @@ int parse_int(const char *string) {
     return n;
 }
 
+/* Return the 'length' of a positive number, as the number of chars it would
+ * take in a string */
+int number_len(size_t number) {
+    int len = 1;
+    while (number) {
+        len++;
+        number /= 10;
+    }
+    return len;
+}
 
+/* Out of memory print, for now it just output on stderr and exit */
 void oom(const char *msg) {
     fprintf(stderr, "malloc(3) failed: %s %s\n", strerror(errno), msg);
     fflush(stderr);

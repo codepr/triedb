@@ -291,60 +291,71 @@ static bool compare_ttl(void *arg1, void *arg2) {
 }
 
 
-static int put_handler(TriteDB *db, Client *c) {
-
-    KeyValCommand *cmd = ((Request *) c->ptr)->command->kvcommand;
-    clock_t start, end;
-    double time_elapsed;
+static void put_data_into_trie(TriteDB *db, KeyValCommand *cmd) {
 
     int16_t ttl = cmd->ttl != 0 ? cmd->ttl : -NOTTL;
-
-    tdebug("PUT");
 
     // TODO refactor TTL insertion, investigate on bad-malloc_usable_size
     // issue
     if (cmd->is_prefix == 1) {
-        start = clock();
         trie_prefix_set(db->data, (const char *) cmd->key, cmd->val, ttl);
-        end = clock();
     } else {
-        start = clock();
-        trie_insert(db->data, (const char *) cmd->key, cmd->val, ttl);
-        end = clock();
+        struct NodeData *nd =
+            trie_insert(db->data, (const char *) cmd->key, cmd->val);
+        bool has_ttl = nd->ttl == -NOTTL ? false : true;
 
         // Update expiring keys if ttl != -NOTTL and sort it
         if (ttl != -NOTTL) {
 
-            // XXX Find step to be removed
-            void *val = NULL;
-
-            // Check for key presence in the trie structure
-            trie_find(db->data, (const char *) cmd->key, &val);
-
-            struct NodeData *nd = val;
             nd->ttl = cmd->ttl;
 
-            // It's a new TTL, so we update creation_time to now in order to
-            // calculate the effective expiration of the key
+            // It's a new TTL, so we update creation_time to now in order
+            // to calculate the effective expiration of the key
             nd->ctime = nd->latime = (uint64_t) time(NULL);
 
             struct ExpiringKey *ek = tmalloc(sizeof(*ek));
             ek->nd = nd;
             ek->key = tstrdup((const char *) cmd->key);
-            vector_append(db->expiring_keys, ek);
 
-            // Quicksort in O(nlogn) if there's more than one element in the vector
+            // Add the node data to the expiring keys only if it wasn't
+            // already in, otherwise nothing should change cause the
+            // expiring keys already got a pointer to the node data, which
+            // will now have an updated TTL value
+            if (!has_ttl)
+                vector_append(db->expiring_keys, ek);
+
+            // Quicksort in O(nlogn) if there's more than one element in
+            // the vector
             vector_qsort(db->expiring_keys,
                     compare_ttl, sizeof(struct ExpiringKey));
         }
     }
 
+}
+
+
+static int put_handler(TriteDB *db, Client *c) {
+
+    Request *request = c->ptr;
+
+    if (request->reqtype == SINGLE_REQUEST) {
+
+        KeyValCommand *cmd = request->command->kvcommand;
+
+        // Insert data into the trie
+        put_data_into_trie(db, cmd);
+
+    } else {
+
+        BulkCommand *bcmd = request->bulk_command;
+
+        // Apply insertion for each command
+        for (int i = 0; i < bcmd->ncommands; i++)
+            put_data_into_trie(db, bcmd->commands[i]->kvcommand);
+    }
+
+    // For now just a single response
     set_ack_reply(c, OK);
-
-    time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
-
-    tdebug("PUT %s -> %s in %f ms (s=%d m=%d)",
-            cmd->key, cmd->val, time_elapsed, db->data->size, memory_used());
 
     free_request(c->ptr, 0);
 
@@ -425,6 +436,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
                 cmd->key, db->data->size, memory_used());
     } else {
         struct NodeData *nd = val;
+        bool has_ttl = nd->ttl == -NOTTL ? false : true;
         nd->ttl = cmd->ttl;
 
         // It's a new TTL, so we update creation_time to now in order to
@@ -438,7 +450,9 @@ static int ttl_handler(TriteDB *db, Client *c) {
         // this way we have a mostly updated list of expiring keys at each
         // insert, making it simpler and more efficient to cycle through them
         // and remove it later.
-        vector_append(db->expiring_keys, ek);
+        if (!has_ttl)
+            vector_append(db->expiring_keys, ek);
+
         vector_qsort(db->expiring_keys, compare_ttl, sizeof(struct ExpiringKey));
 
         set_ack_reply(c, NOK);
@@ -909,6 +923,41 @@ static void expire_keys(TriteDB *db) {
     }
 }
 
+/* Print and log some basic stats */
+void log_stats(TriteDB *db) {
+    info.uptime = time(NULL) - info.start_time;
+    const char *uptime = time_to_string(info.uptime);
+    const char *memory = memory_to_string(memory_used());
+    tdebug("Connected clients: %d total connections: %d "
+            "requests: %d keys: %ld memory usage: %s  uptime: %s",
+            info.nclients, info.nconnections, info.nrequests,
+            db->data->size, memory, uptime);
+    tfree((char *) uptime);
+    tfree((char *) memory);
+}
+
+/* Temporary auxiliary function till the network::epoll_loop is ready, add a
+   periodic task to the epoll loop */
+static int add_cron_task(int epollfd, struct itimerspec timervalue) {
+
+    int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+
+    if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0)
+        perror("timerfd_settime");
+
+    // Add the timer to the event loop
+    struct epoll_event ev;
+    ev.data.fd = timerfd;
+    ev.events = EPOLLIN;
+
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, timerfd, &ev) < 0) {
+        perror("epoll_ctl(2): EPOLLIN");
+        return -1;
+    }
+
+    return timerfd;
+}
+
 /* Main worker function, his responsibility is to wait on events on a shared
    EPOLL fd, use the same way for clients or peer to distribute messages */
 static void *run_server(TriteDB *db) {
@@ -923,8 +972,6 @@ static void *run_server(TriteDB *db) {
 
     struct itimerspec timervalue;
 
-    int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
-
     memset(&timervalue, 0x00, sizeof(timervalue));
 
     timervalue.it_value.tv_sec = 0;
@@ -932,16 +979,22 @@ static void *run_server(TriteDB *db) {
     timervalue.it_interval.tv_sec = 0;
     timervalue.it_interval.tv_nsec = TTL_CHECK_INTERVAL;
 
-    if (timerfd_settime(timerfd, 0, &timervalue, NULL) < 0)
-        perror("timerfd_settime");
+    // add expiration keys cron task
+    int exptimerfd = add_cron_task(db->epollfd, timervalue);
 
-    // Add the timer to the event loop
-    struct epoll_event ev;
-    ev.data.fd = timerfd;
-    ev.events = EPOLLIN;
+    int statstimerfd = -1;
+    if (config.loglevel == DEBUG) {
+        struct itimerspec st_timervalue;
 
-    if (epoll_ctl(db->epollfd, EPOLL_CTL_ADD, timerfd, &ev) < 0)
-        perror("epoll_ctl(2): EPOLLIN");
+        memset(&timervalue, 0x00, sizeof(st_timervalue));
+
+        st_timervalue.it_value.tv_sec = STATS_PRINT_INTERVAL;
+        st_timervalue.it_value.tv_nsec = 0;
+        st_timervalue.it_interval.tv_sec = STATS_PRINT_INTERVAL;
+        st_timervalue.it_interval.tv_nsec = 0;
+
+        statstimerfd = add_cron_task(db->epollfd, st_timervalue);
+    }
 
     long int timers = 0;
 
@@ -966,6 +1019,8 @@ static void *run_server(TriteDB *db) {
                 /* An error has occured on this fd, or the socket is not
                    ready for reading */
                 perror("epoll_wait(2)");
+                hashtable_del(db->clients, ((Client *) evs[i].data.ptr)->uuid);
+                info.nclients--;
                 close(evs[i].data.fd);
 
                 continue;
@@ -980,10 +1035,14 @@ static void *run_server(TriteDB *db) {
 
                 goto exit;
 
-            } else if (evs[i].data.fd == timerfd) {
+            } else if (exptimerfd != -1 && evs[i].data.fd == exptimerfd) {
                 (void) read(evs[i].data.fd, &timers, 8);
                 // Check for keys about to expire out
                 expire_keys(db);
+            } else if (statstimerfd != -1 && evs[i].data.fd == statstimerfd) {
+                (void) read(evs[i].data.fd, &timers, 8);
+                // Print stats about the server
+                log_stats(db);
             } else {
                 /* Finally handle the request according to its type */
                 ((Client *) evs[i].data.ptr)->ctx_handler(db, evs[i].data.ptr);

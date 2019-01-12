@@ -84,7 +84,7 @@ struct Trie *trie_new(void);
  * - hk: hk-value
  * - hel: hel-value
  */
-void trie_insert(Trie *, const char *, const void *, int16_t);
+struct NodeData *trie_insert(Trie *, const char *, const void *);
 
 bool trie_delete(Trie *, const char *);
 
