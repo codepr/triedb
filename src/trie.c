@@ -299,6 +299,12 @@ void trie_prefix_delete(Trie *trie, const char *prefix) {
     if (!cursor)
         return;
 
+    // Simply remove the key if it has no children, no need to clear the list
+    if (cursor->children->len == 0) {
+        trie_delete(trie, prefix);
+        return;
+    }
+
     // Clear out all possible sub-paths
     for (ListNode *cur = cursor->children->head; cur; cur = cur->next) {
         trie_node_free(cur->data, &(trie->size));
@@ -553,6 +559,7 @@ void trie_node_free(TrieNode *node, size_t *size) {
         for (ListNode *cur = node->children->head; cur; cur = cur->next)
             trie_node_free(cur->data, size);
         list_free(node->children, 0);
+        node->children = NULL;
     }
 
     // Release memory on data stored on the node

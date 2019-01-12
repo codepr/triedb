@@ -29,11 +29,22 @@ add_executable(tritedb ${SOURCES})
 add_executable(tritedbcli src/config.c src/util.c src/tritedbcli.c)
 
 add_custom_command(
-    TARGET tritedb_test
+    TARGET tritedb
     POST_BUILD
     COMMAND ${CMAKE_BINARY_DIR}/tritedb_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMENT "\n Running tests")
+    COMMENT "\n Running unit tests")
+
+add_custom_command(
+    TARGET tritedb
+    POST_BUILD
+    COMMAND python -m unittest -v ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration_tests.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "\n Running integration tests\n")
 
 # Tests
 add_test(tritedb_test bin/tritedb_test)
+add_test(
+    NAME integration_tests
+    COMMAND ${PYTHON_EXECUTABLE} -m unittest -v ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration_tests.py
+    integration_tests)

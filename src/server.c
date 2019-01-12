@@ -264,8 +264,6 @@ static int keys_handler(TriteDB *db, Client *c) {
     Buffer *buffer = buffer_init(response->lcontent->header->size);
     pack_response(buffer, response, LIST_CONTENT);
 
-    tdebug("KEYS %d", buffer->size);
-
     set_reply(c, buffer);
 
     list_free(keys, 1);
@@ -368,23 +366,11 @@ static int get_handler(TriteDB *db, Client *c) {
     KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
     void *val = NULL;
 
-    clock_t start, end;
-    double time_elapsed;
-
-    start = clock();
-
     // Test for the presence of the key in the trie structure
     bool found = trie_find(db->data, (const char *) cmd->key, &val);
 
-    end = clock();
-
-    // ms of execution
-    time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
-
     if (found == false || val == NULL) {
         set_ack_reply(c, NOK);
-        tdebug("GET %s -> not found (s=%d m=%d)",
-                cmd->key, db->data->size, memory_used());
     } else {
 
         struct NodeData *nd = val;
@@ -396,8 +382,6 @@ static int get_handler(TriteDB *db, Client *c) {
         if (nd->ttl != -NOTTL && delta <= 0) {
             trie_delete(db->data, (const char *) cmd->key);
             set_ack_reply(c, NOK);
-            tdebug("GET %s -> expired (s=%d m=%d)",
-                    cmd->key, db->data->size, memory_used());
         } else {
 
             // Update the last access time
@@ -407,9 +391,6 @@ static int get_handler(TriteDB *db, Client *c) {
             Response *put = make_datacontent_response(nd->data);
             Buffer *b = buffer_init(put->dcontent->header->size);
             pack_response(b, put, DATA_CONTENT);
-
-            tdebug("GET %s -> %s in %f ms (s=%d m=%d)",
-                    cmd->key, nd->data, time_elapsed, db->data->size, memory_used());
 
             set_reply(c, b);
             free_response(put, DATA_CONTENT);
@@ -432,8 +413,6 @@ static int ttl_handler(TriteDB *db, Client *c) {
 
     if (found == false || val == NULL) {
         set_ack_reply(c, NOK);
-        tdebug("TTL %s -> not found (s=%d m=%d)",
-                cmd->key, db->data->size, memory_used());
     } else {
         struct NodeData *nd = val;
         bool has_ttl = nd->ttl == -NOTTL ? false : true;
@@ -455,9 +434,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
 
         vector_qsort(db->expiring_keys, compare_ttl, sizeof(struct ExpiringKey));
 
-        set_ack_reply(c, NOK);
-        tdebug("TTL %s -> %s set %d (s=%d m=%d)",
-                cmd->key, nd->data, cmd->ttl, db->data->size, memory_used());
+        set_ack_reply(c, OK);
     }
 
     free_request(c->ptr, 0);
@@ -471,8 +448,6 @@ static int del_handler(TriteDB *db, Client *c) {
     int code = OK;
     KeyListCommand *cmd = ((Request *) c->ptr)->command->klcommand;
     bool found = false;
-    clock_t start, end;
-    double time_elapsed;
 
     // Flush all data in case of no prefixes passed
     if (cmd->len == 0) {
@@ -486,28 +461,13 @@ static int del_handler(TriteDB *db, Client *c) {
             // it in the trie
             if (cmd->keys[i]->is_prefix == 1) {
 
-                start = clock();
-
                 // We are dealing with a wildcard, so we apply the deletion to
                 // all keys below the wildcard
                 trie_prefix_delete(db->data, (const char *) cmd->keys[i]->key);
-
-                end = clock();
-
-                // ms of execution
-                time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
-                tdebug("DEL prefix %s in %d ms (s=%d m=%d)",
-                        cmd->keys[i]->key, time_elapsed, memory_used());
             } else {
                 found = trie_delete(db->data, (const char *) cmd->keys[i]->key);
-                if (found == false) {
+                if (found == false)
                     code = NOK;
-                    tdebug("DEL %s failed (s=%d m=%d)",
-                            cmd->keys[i]->key, db->data->size, memory_used());
-                } else {
-                    tdebug("DEL %s (s=%d m=%d)",
-                            cmd->keys[i]->key, db->data->size, memory_used());
-                }
             }
         }
     }
@@ -531,24 +491,18 @@ static int inc_handler(TriteDB *db, Client *c) {
 
     for (int i = 0; i < inc->len; i++) {
 
-        if (inc->keys[i]->is_prefix) {
+        if (inc->keys[i]->is_prefix == 1) {
             trie_prefix_inc(db->data, (const char *) inc->keys[i]->key);
-            tdebug("INC %s (s=%d m=%d)",
-                    inc->keys[i]->key, db->data->size, memory_used());
         } else {
             // For each key in the keys array, check for presence and increment it
             // by one
             found = trie_find(db->data, (const char *) inc->keys[i]->key, &val);
             if (found == false || !val) {
                 code = NOK;
-                tdebug("INC %s failed (s=%d m=%d)",
-                        inc->keys[i]->key, db->data->size, memory_used());
             } else {
                 struct NodeData *nd = val;
                 if (!is_integer(nd->data)) {
                     code = NOK;
-                    tdebug("INC %s failed, not an integer value (s=%d m=%d)",
-                            inc->keys[i]->key, db->data->size, memory_used());
                 } else {
                     n = parse_int(nd->data);
                     ++n;
@@ -558,8 +512,6 @@ static int inc_handler(TriteDB *db, Client *c) {
                     size_t len = strlen(tmp);
                     nd->data = trealloc(nd->data, len + 1);
                     strncpy(nd->data, tmp, len + 1);
-                    tdebug("INC %s (s=%d m=%d)",
-                            inc->keys[i]->key, db->data->size, memory_used());
                 }
             }
         }
@@ -586,8 +538,6 @@ static int dec_handler(TriteDB *db, Client *c) {
 
         if (dec->keys[i]->is_prefix) {
             trie_prefix_dec(db->data, (const char *) dec->keys[i]->key);
-            tdebug("DEC %s (s=%d m=%d)",
-                    dec->keys[i]->key, db->data->size, memory_used());
         } else {
 
             // For each key in the keys array, check for presence and increment it
@@ -595,14 +545,10 @@ static int dec_handler(TriteDB *db, Client *c) {
             found = trie_find(db->data, (const char *) dec->keys[i]->key, &val);
             if (found == false || !val) {
                 code = NOK;
-                tdebug("DEC %s failed (s=%d m=%d)",
-                        dec->keys[i]->key, db->data->size, memory_used());
             } else {
                 struct NodeData *nd = val;
                 if (!is_integer(nd->data)) {
                     code = NOK;
-                    tdebug("DEC %s failed, not an integer value (s=%d m=%d)",
-                            dec->keys[i]->key, db->data->size, memory_used());
                 } else {
                     n = parse_int(nd->data);
                     --n;
@@ -612,8 +558,6 @@ static int dec_handler(TriteDB *db, Client *c) {
                     size_t len = strlen(tmp);
                     nd->data = trealloc(nd->data, len + 1);
                     strncpy(nd->data, tmp, len + 1);
-                    tdebug("DEC %s (s=%d m=%d)",
-                            dec->keys[i]->key, db->data->size, memory_used());
                 }
             }
         }
@@ -630,29 +574,11 @@ static int count_handler(TriteDB *db, Client *c) {
 
     int count = 0;
     KeyCommand *cnt = ((Request *) c->ptr)->command->kcommand;
-    clock_t start, end;
-    double time_elapsed;
 
-    if (!cnt->key) {
-
-        // Get size of the entire trie
-        tdebug("COUNT %d (s=%d m=%d)",
-                db->data->size, db->data->size, memory_used());
-        count = db->data->size;
-
-    } else {
-
-        start = clock();
-
-        // Get the size of each key below the requested one, glob operation
-        count = trie_prefix_count(db->data, (const char *) cnt->key);
-        end = clock();
-
-        // ms of execution
-        time_elapsed = (((double) (end - start)) / CLOCKS_PER_SEC) * 1000.0;
-        tdebug("COUNT %d in %f ms (s=%d m=%d)",
-                count, time_elapsed, db->data->size, memory_used());
-    }
+    // Get the size of each key below the requested one, glob operation or the
+    // entire trie size in case of NULL key
+    count = !cnt->key ? db->data->size :
+        trie_prefix_count(db->data, (const char *) cnt->key);
 
     Response *res = make_valuecontent_response(count);
     Buffer *b = buffer_init(res->vcontent->header->size);

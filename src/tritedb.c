@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     }
 
     // Override default DEBUG mode
-    config.loglevel = debug == 1 ? DEBUG : INFORMATION;
+    config.loglevel = debug == 1 ? DEBUG : WARNING;
 
     // Try to load a configuration, if found
     config_load(conf);

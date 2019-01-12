@@ -85,7 +85,7 @@ void list_free(List *l, int deep) {
  */
 void list_clear(List *l, int deep) {
 
-    if (!l) return;
+    if (!l || !l->head) return;
 
     ListNode *h = l->head;
     ListNode *tmp;
