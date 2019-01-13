@@ -33,7 +33,7 @@
 
 // DEFAULT PARAMETERS
 
-#define VERSION                     "0.4.0"
+#define VERSION                     "0.4.2"
 #define DEFAULT_SOCKET_FAMILY       INET
 #define DEFAULT_LOG_LEVEL           INFORMATION
 #define DEFAULT_LOG_PATH            "/tmp/tritedb.log"
@@ -72,6 +72,8 @@ struct config {
     size_t mem_reclaim_time;
     /* Max memory request can allocate */
     size_t max_request_size;
+    /* TCP backlog size */
+    int tcp_backlog;
 };
 
 extern struct config config;

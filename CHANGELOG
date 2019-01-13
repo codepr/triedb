@@ -1,3 +1,12 @@
+0.4.2 - 2019/01/13
+==================
+
+- Add max_request_size configuration and handling the case
+- Add bulk command handling on the PUT command, now it is possible to pipe
+  a stream of PUT commands into a single request
+- Add tcp backlog to configuration, if the value exceed
+  /proc/sys/net/core/somaxconn, it will be clipped to that value.
+
 0.3.6 - 2019/01/07
 ==================
 

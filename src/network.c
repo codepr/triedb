@@ -172,7 +172,7 @@ int make_listen(const char *host, const char *port, int socket_family) {
     if (socket_family == INET)
         set_tcp_nodelay(sfd);
 
-    if ((listen(sfd, SOMAXCONN)) == -1) {
+    if ((listen(sfd, config.tcp_backlog)) == -1) {
         perror("listen");
         abort();
     }

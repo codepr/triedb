@@ -204,6 +204,9 @@ static void add_config_value(const char *key, const char *value) {
         config.mem_reclaim_time = read_time_with_mul(value);
     } else if (STREQ("max_request_size", key, klen) == true) {
         config.max_request_size = read_memory_with_mul(value);
+    } else if (STREQ("tcp_backlog", key, klen) == true) {
+        int tcp_backlog = parse_int(value);
+        config.tcp_backlog = tcp_backlog <= SOMAXCONN ? tcp_backlog : SOMAXCONN;
     }
 }
 
@@ -293,6 +296,7 @@ void config_set_default(void) {
     config.max_memory = read_memory_with_mul(DEFAULT_MAX_MEMORY);
     config.mem_reclaim_time = read_time_with_mul(DEFAULT_MEM_RECLAIM_TIME);
     config.max_request_size = read_memory_with_mul(DEFAULT_MAX_REQUEST_SIZE);
+    config.tcp_backlog = SOMAXCONN;
 }
 
 
@@ -311,7 +315,7 @@ void config_print(void) {
         } else {
             tinfo("\tAddress: %s", config.hostname);
             tinfo("\tPort: %s", config.port);
-            tinfo("\tTcp backlog: %d", SOMAXCONN);
+            tinfo("\tTcp backlog: %d", config.tcp_backlog);
         }
         const char *human_rsize = memory_to_string(config.max_request_size);
         tinfo("\tMax request size: %s", human_rsize);
