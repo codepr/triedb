@@ -33,7 +33,7 @@
 
 // DEFAULT PARAMETERS
 
-#define VERSION                     "0.3.6"
+#define VERSION                     "0.4.0"
 #define DEFAULT_SOCKET_FAMILY       INET
 #define DEFAULT_LOG_LEVEL           INFORMATION
 #define DEFAULT_LOG_PATH            "/tmp/tritedb.log"
@@ -42,6 +42,7 @@
 #define DEFAULT_PORT                "9090"
 #define DEFAULT_MAX_MEMORY          "2GB"
 #define DEFAULT_MEM_RECLAIM_TIME    "1d"
+#define DEFAULT_MAX_REQUEST_SIZE    "2MB"
 
 
 struct config {
@@ -69,6 +70,8 @@ struct config {
     /* Memory reclaim threshold, when reclaiming memory if max_memory limit has
      * been reached, the system starts to reclaim items older than this value */
     size_t mem_reclaim_time;
+    /* Max memory request can allocate */
+    size_t max_request_size;
 };
 
 extern struct config config;

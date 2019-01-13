@@ -162,6 +162,12 @@ char *time_to_string(size_t time) {
     } else if (time < 60 * 60 * 24) {
         translated_time = time / (60 * 60);
         numlen = number_len(translated_time);
+        // +1 for 'h' +1 for nul terminating
+        tstring = tmalloc(numlen + 1);
+        snprintf(tstring, numlen + 1, "%dh", translated_time);
+    } else {
+        translated_time = time / (60 * 60 * 24);
+        numlen = number_len(translated_time);
         // +1 for 'd' +1 for nul terminating
         tstring = tmalloc(numlen + 1);
         snprintf(tstring, numlen + 1, "%dd", translated_time);
@@ -195,6 +201,8 @@ static void add_config_value(const char *key, const char *value) {
         config.max_memory = read_memory_with_mul(value);
     } else if (STREQ("mem_reclaim_time", key, klen) == true) {
         config.mem_reclaim_time = read_time_with_mul(value);
+    } else if (STREQ("max_request_size", key, klen) == true) {
+        config.max_request_size = read_memory_with_mul(value);
     }
 }
 
@@ -282,6 +290,7 @@ void config_set_default(void) {
     config.run = eventfd(0, EFD_NONBLOCK);
     config.max_memory = read_memory_with_mul(DEFAULT_MAX_MEMORY);
     config.mem_reclaim_time = read_time_with_mul(DEFAULT_MEM_RECLAIM_TIME);
+    config.max_request_size = read_memory_with_mul(DEFAULT_MAX_REQUEST_SIZE);
 }
 
 
@@ -293,13 +302,16 @@ void config_print(void) {
             if (lmap[i].loglevel == config.loglevel)
                 llevel = lmap[i].lname;
         }
-        tinfo("Socket family: %s", sfamily);
+        tinfo("Network settings");
+        tinfo("\tSocket family: %s", sfamily);
         if (config.socket_family == UNIX) {
             tinfo("\tUnix socket: %s", config.hostname);
         } else {
             tinfo("\tAddress: %s", config.hostname);
             tinfo("\tPort: %s", config.port);
         }
+        const char *human_rsize = memory_to_string(config.max_request_size);
+        tinfo("\tMax request size: %s", human_rsize);
         tinfo("Logging:");
         tinfo("\tlevel: %s", llevel);
         tinfo("\tlogpath: %s", config.logpath);
@@ -309,5 +321,6 @@ void config_print(void) {
         tinfo("Memory reclaim time: %s", human_time);
         tfree((char *) human_time);
         tfree((char *) human_memory);
+        tfree((char *) human_rsize);
     }
 }

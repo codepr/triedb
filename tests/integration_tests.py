@@ -306,3 +306,42 @@ class TriteDBTest(unittest.TestCase):
         self.assertEqual(data, b'10')
 
         self._send_del(keys)
+
+    def test_put_bulk(self):
+
+        kvs = {
+            'key1': 'value1',
+            'key2': 'value2',
+            'key3': 'value3',
+            'key4': 'value4',
+            'key5': 'value5'
+        }
+
+        prefix = False
+
+        fmt = ''.join(f'HI{len(key)}s{len(val)}sBH' for key, val in kvs.items())
+
+        keysval = [x for t in [(htons(len(k)), htonl(len(v)), k.encode(), v.encode(), prefix, htons(0)) for k, v in kvs.items()] for x in t]
+
+        totlen = 10 + 9 * len(kvs) + sum(len(k) + len(v) for k, v in kvs.items())
+
+        put = struct.pack(
+            f'=BIBI' + fmt,
+            0x01,
+            htonl(totlen),
+            0x01,
+            htonl(len(kvs)),
+            *keysval
+        )
+
+        self.connection.send(put)
+        header = self.connection.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
+        total_len = ntohl(total_len)
+        _ = struct.unpack('=B', self.connection.recv(1))
+
+        self.assertEqual(code, 0x00)
+
+        self.assertEqual(self._send_get('key1'), b'value1')
+
+        self._send_del(kvs.keys())

@@ -33,8 +33,6 @@
 #include "ringbuf.h"
 
 
-#define ONEMB   1048576
-
 // Socket families
 #define UNIX    0
 #define INET    1

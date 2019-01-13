@@ -154,7 +154,7 @@ int8_t ringbuf_bulk_push(Ringbuffer *rbuf, uint8_t *dest, size_t size) {
 
     int8_t r = 0;
 
-    for (uint8_t i = 0; i < size; ++i) {
+    for (unsigned long long i = 0; i < size; ++i) {
         r = ringbuf_push(rbuf, dest[i]);
         if (r == -1) break;
     }

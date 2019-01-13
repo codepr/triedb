@@ -235,13 +235,13 @@ Request *unpack_request(Buffer *b) {
             if (!request->bulk_command)
                 goto errnomem1;
 
-            uint64_t ncommands = read_uint64(b);
+            uint32_t ncommands = read_uint32(b);
             request->bulk_command->ncommands = ncommands;
             request->bulk_command->commands =
-                tmalloc(ncommands * sizeof(Request));
+                tmalloc(ncommands * sizeof(Command));
 
             /* Unpack each single packet into the array of requests */
-            for (unsigned long i = 0; i < ncommands; i++)
+            for (uint32_t i = 0; i < ncommands; i++)
                 request->bulk_command->commands[i] = unpack_command(b, header);
 
             break;
@@ -378,26 +378,7 @@ errnomem3:
 }
 
 
-void free_request(Request *request, uint8_t cmdtype) {
-
-    if (!request)
-        return;
-
-    if (cmdtype == 0) {
-        free_command(request->command);
-    } else {
-
-        for (unsigned long i = 0; i < request->bulk_command->ncommands; i++)
-            free_command(request->bulk_command->commands[i]);
-
-        tfree(request->bulk_command);
-    }
-
-    tfree(request);
-}
-
-
-void free_command(Command *command) {
+static void free_header(Command *command) {
 
     if (!command)
         return;
@@ -405,21 +386,69 @@ void free_command(Command *command) {
     switch (command->cmdtype) {
         case EMPTY_COMMAND:
             tfree(command->ecommand->header);
-            tfree(command->ecommand);
             break;
         case KEY_COMMAND:
             tfree(command->kcommand->header);
+            break;
+        case KEY_VAL_COMMAND:
+            tfree(command->kvcommand->header);
+            break;
+        case KEY_LIST_COMMAND:
+            tfree(command->klcommand->header);
+            break;
+    }
+}
+
+
+void free_request(Request *request, uint8_t cmdtype) {
+
+    if (!request)
+        return;
+
+    if (cmdtype == 0) {
+        free_command(request->command, true);
+    } else {
+
+        // FIXME hack, free the first pointer
+        free_header(request->bulk_command->commands[0]);
+        for (int i = 0; i < request->bulk_command->ncommands; i++)
+            free_command(request->bulk_command->commands[i], false);
+
+        tfree(request->bulk_command->commands);
+        tfree(request->bulk_command);
+    }
+
+    tfree(request);
+}
+
+
+void free_command(Command *command, bool with_header) {
+
+    if (!command)
+        return;
+
+    switch (command->cmdtype) {
+        case EMPTY_COMMAND:
+            if (with_header)
+                tfree(command->ecommand->header);
+            tfree(command->ecommand);
+            break;
+        case KEY_COMMAND:
+            if (with_header)
+                tfree(command->kcommand->header);
             tfree(command->kcommand->key);
             tfree(command->kcommand);
             break;
         case KEY_VAL_COMMAND:
-            tfree(command->kvcommand->header);
+            if (with_header)
+                tfree(command->kvcommand->header);
             tfree(command->kvcommand->key);
             tfree(command->kvcommand->val);
             tfree(command->kvcommand);
             break;
         case KEY_LIST_COMMAND:
-            tfree(command->klcommand->header);
+            if (with_header)
+                tfree(command->klcommand->header);
             for (int i = 0; i < command->klcommand->len; i++) {
                 tfree(command->klcommand->keys[i]->key);
                 tfree(command->klcommand->keys[i]);

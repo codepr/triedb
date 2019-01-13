@@ -167,7 +167,7 @@ typedef struct {
 typedef struct {
     Header *header;
     uint16_t keysize;
-    uint8_t* key;
+    uint8_t *key;
     uint8_t is_prefix;
     uint16_t ttl;
 } KeyCommand;
@@ -217,7 +217,7 @@ typedef struct {
 /* List of commands, used to handle bulk requests, a stream of sequential
    commands to be executed in a single TCP request. */
 typedef struct {
-    size_t ncommands;
+    uint32_t ncommands;
     Command **commands;
 } BulkCommand;
 
@@ -240,7 +240,7 @@ Command *unpack_command(Buffer *, Header *);
 /* Cleanup functions */
 void free_request(Request *, uint8_t);
 
-void free_command(Command *);
+void free_command(Command *, bool);
 
 
 // Response structure without body, like ACK etc.

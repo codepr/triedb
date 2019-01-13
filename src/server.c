@@ -288,7 +288,8 @@ static bool compare_ttl(void *arg1, void *arg2) {
     return delta_l1 <= delta_l2;
 }
 
-
+/* Private function, insert or update values into the the trie database,
+   updating, if any present, expiring keys vector */
 static void put_data_into_trie(TriteDB *db, KeyValCommand *cmd) {
 
     int16_t ttl = cmd->ttl != 0 ? cmd->ttl : -NOTTL;
@@ -328,7 +329,6 @@ static void put_data_into_trie(TriteDB *db, KeyValCommand *cmd) {
                     compare_ttl, sizeof(struct ExpiringKey));
         }
     }
-
 }
 
 
@@ -348,14 +348,14 @@ static int put_handler(TriteDB *db, Client *c) {
         BulkCommand *bcmd = request->bulk_command;
 
         // Apply insertion for each command
-        for (int i = 0; i < bcmd->ncommands; i++)
+        for (uint32_t i = 0; i < bcmd->ncommands; i++)
             put_data_into_trie(db, bcmd->commands[i]->kvcommand);
     }
 
     // For now just a single response
     set_ack_reply(c, OK);
 
-    free_request(c->ptr, 0);
+    free_request(c->ptr, request->reqtype);
 
     return OK;
 }
@@ -603,12 +603,12 @@ static int request_handler(TriteDB *db, Client *client) {
     int clientfd = client->fd;
 
     /* Buffer to initialize the ring buffer, used to handle input from client */
-    uint8_t buffer[ONEMB * 2];
+    uint8_t buffer[config.max_request_size];
 
     /* Ringbuffer pointer struct, helpful to handle different and unknown
        size of chunks of data which can result in partially formed packets or
        overlapping as well */
-    Ringbuffer *rbuf = ringbuf_init(buffer, ONEMB * 2);
+    Ringbuffer *rbuf = ringbuf_init(buffer, config.max_request_size);
 
     /* Placeholders structures, at this point we still don't know if we got a
        request or a response */
