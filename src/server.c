@@ -1,28 +1,28 @@
 /* BSD 2-Clause License
  *
- * Copyright (c) 2018, Andrea Giacomo Baldan
- * All rights reserved.
+ * Copyright (c) 2018, Andrea Giacomo Baldan All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * * Redistributions of source code must retain the above copyright notice, this
- *   list of conditions and the following disclaimer.
+ * * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
  *
  * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <time.h>
@@ -72,6 +72,7 @@ static int del_handler(TriteDB *, Client *);
 static int ttl_handler(TriteDB *, Client *);
 static int inc_handler(TriteDB *, Client *);
 static int dec_handler(TriteDB *, Client *);
+static int use_handler(TriteDB *, Client *);
 static int count_handler(TriteDB *, Client *);
 static int keys_handler(TriteDB *, Client *);
 static int info_handler(TriteDB *, Client *);
@@ -93,6 +94,7 @@ static struct command commands_map[COMMAND_COUNT] = {
     {DEC, dec_handler},
     {COUNT, count_handler},
     {KEYS, keys_handler},
+    {USE, use_handler},
     {INFO, info_handler},
     {QUIT, quit_handler}
 };
@@ -320,6 +322,7 @@ static void put_data_into_trie(TriteDB *db, KeyValCommand *cmd) {
             // to calculate the effective expiration of the key
             nd->ctime = nd->latime = (uint64_t) time(NULL);
 
+            // Create a data strucuture to handle expiration
             struct ExpiringKey *ek = tmalloc(sizeof(*ek));
             ek->nd = nd;
             ek->key = tstrdup((const char *) cmd->key);
@@ -577,6 +580,15 @@ static int dec_handler(TriteDB *db, Client *c) {
     return OK;
 }
 
+/* Set the current selected namespace for the connected client.
+   XXX still inactive */
+static int use_handler(TriteDB *db, Client *c) {
+
+    // TODO
+
+    return OK;
+}
+
 
 static int count_handler(TriteDB *db, Client *c) {
 
@@ -611,7 +623,7 @@ static int request_handler(TriteDB *db, Client *client) {
     int clientfd = client->fd;
 
     /* Buffer to initialize the ring buffer, used to handle input from client */
-    uint8_t buffer[config.max_request_size];
+    uint8_t *buffer = tmalloc(config.max_request_size);
 
     /* Ringbuffer pointer struct, helpful to handle different and unknown
        size of chunks of data which can result in partially formed packets or
@@ -652,6 +664,8 @@ static int request_handler(TriteDB *db, Client *client) {
 
     /* Free ring buffer as we alredy have all needed informations in memory */
     ringbuf_free(rbuf);
+
+    tfree(buffer);
 
     /* If the packet couldn't be unpacket (e.g. we're OOM) we close the
        connection and release the client */
@@ -701,6 +715,7 @@ exit:
 freebuf:
 
     ringbuf_free(rbuf);
+    tfree(buffer);
 
 reset:
 
@@ -860,8 +875,7 @@ static void expire_keys(TriteDB *db) {
 
         vector_delete(db->expiring_keys, i);
 
-        tdebug("EXPIRING %s (s=%d m=%d)",
-                ek->key, db->data->size, memory_used());
+        tdebug("EXPIRING %s", ek->key);
 
         tfree((char *) ek->key);
         tfree(ek);
@@ -1041,7 +1055,8 @@ int start_server(const char *addr, const char *port, int node_fd) {
     /* Initialize the sockets, first the server one */
     int fd = make_listen(addr, port, config.socket_family);
 
-    /* Add eventfd to the loop, this time only in LT in order to wake up all threads */
+    /* Add eventfd to the loop, this time only in LT in order to wake up all
+       threads */
     struct epoll_event ev;
     ev.data.fd = config.run;
     ev.events = EPOLLIN;

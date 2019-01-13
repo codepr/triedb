@@ -1,28 +1,28 @@
 /* BSD 2-Clause License
  *
- * Copyright (c) 2018, Andrea Giacomo Baldan
- * All rights reserved.
+ * Copyright (c) 2018, Andrea Giacomo Baldan All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * * Redistributions of source code must retain the above copyright notice, this
- *   list of conditions and the following disclaimer.
+ * * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
  *
  * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <stdio.h>
@@ -203,6 +203,7 @@ static const int opcode_req_map[COMMAND_COUNT][2] = {
     {DEC, KEY_LIST_COMMAND},
     {COUNT, KEY_COMMAND},
     {KEYS, KEY_COMMAND},
+    {USE, KEY_COMMAND},
     {INFO, EMPTY_COMMAND},
     {QUIT, EMPTY_COMMAND}
 };
@@ -500,20 +501,15 @@ Response *make_nocontent_response(uint8_t code) {
 
     Response *response = tmalloc(sizeof(*response));
     if (!response)
-        return NULL;
+        goto errnomem3;
 
     response->ncontent = tmalloc(sizeof(NoContent));
-    if (!response->ncontent) {
-        tfree(response);
-        return NULL;
-    }
+    if (!response->ncontent)
+        goto errnomem2;
 
     response->ncontent->header = tmalloc(sizeof(Header));
-    if (!response->ncontent->header) {
-        tfree(response->ncontent);
-        tfree(response);
-        return NULL;
-    }
+    if (!response->ncontent->header)
+        goto errnomem1;
 
     response->ncontent->header->opcode = ACK;
     response->ncontent->header->size = HEADERLEN + sizeof(uint8_t);
@@ -522,6 +518,18 @@ Response *make_nocontent_response(uint8_t code) {
     response->ncontent->code = code;
 
     return response;
+
+errnomem1:
+
+    tfree(response->ncontent);
+
+errnomem2:
+
+    tfree(response);
+
+errnomem3:
+
+    return NULL;
 }
 
 
@@ -529,20 +537,15 @@ Response *make_datacontent_response(const uint8_t *data) {
 
     Response *response = tmalloc(sizeof(*response));
     if (!response)
-        return NULL;
+        goto errnomem3;
 
     response->dcontent = tmalloc(sizeof(DataContent));
-    if (!response->dcontent) {
-        tfree(response);
-        return NULL;
-    }
+    if (!response->dcontent)
+        goto errnomem2;
 
     response->dcontent->header = tmalloc(sizeof(Header));
-    if (!response->dcontent->header) {
-        tfree(response->dcontent);
-        tfree(response);
-        return NULL;
-    }
+    if (!response->dcontent->header)
+        goto errnomem1;
 
     response->dcontent->header->opcode = PUT;
     response->dcontent->header->size =
@@ -553,6 +556,18 @@ Response *make_datacontent_response(const uint8_t *data) {
     response->dcontent->data = (uint8_t *) tstrdup((const char *) data);
 
     return response;
+
+errnomem1:
+
+    tfree(response->dcontent);
+
+errnomem2:
+
+    tfree(response);
+
+errnomem3:
+
+    return NULL;
 }
 
 
@@ -560,20 +575,15 @@ Response *make_valuecontent_response(uint32_t value) {
 
     Response *response = tmalloc(sizeof(*response));
     if (!response)
-        return NULL;
+        goto errnomem3;
 
     response->vcontent = tmalloc(sizeof(ValueContent));
-    if (!response->vcontent) {
-        tfree(response);
-        return NULL;
-    }
+    if (!response->vcontent)
+        goto errnomem2;
 
     response->vcontent->header = tmalloc(sizeof(Header));
-    if (!response->vcontent->header) {
-        tfree(response->vcontent);
-        tfree(response);
-        return NULL;
-    }
+    if (!response->vcontent->header)
+        goto errnomem1;
 
     response->vcontent->header->opcode = ACK;
     response->vcontent->header->size = HEADERLEN + sizeof(uint32_t);
@@ -582,6 +592,18 @@ Response *make_valuecontent_response(uint32_t value) {
     response->vcontent->val = value;
 
     return response;
+
+errnomem1:
+
+    tfree(response->vcontent);
+
+errnomem2:
+
+    tfree(response);
+
+errnomem3:
+
+    return NULL;
 }
 
 
@@ -618,7 +640,8 @@ Response *make_listcontent_response(const List *content) {
         key->key = (uint8_t *) tstrdup((const char *) cur->data);
         key->keysize = strlen((const char *) cur->data);
         response->lcontent->keys[i] = key;
-        response->lcontent->header->size += key->keysize + sizeof(uint16_t) + sizeof(uint8_t);
+        response->lcontent->header->size +=
+            key->keysize + sizeof(uint16_t) + sizeof(uint8_t);
         i++;
     }
 
