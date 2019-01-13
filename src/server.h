@@ -39,6 +39,10 @@
 #define TTL_CHECK_INTERVAL      50 * 1024 * 1024
 #define STATS_PRINT_INTERVAL    15
 
+/* Error codes help */
+#define ERRMAXREQSIZE           1
+#define ERRCLIENTDC             2
+
 
 typedef struct client Client;
 

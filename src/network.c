@@ -38,6 +38,7 @@
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/eventfd.h>
 #include "util.h"
@@ -49,16 +50,25 @@
 int set_nonblocking(int fd) {
     int flags, result;
     flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) {
-        perror("fcntl");
-        return -1;
-    }
+
+    if (flags == -1)
+        goto err;
+
     result = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    if (result == -1) {
-        perror("fcntl");
-        return -1;
-    }
+    if (result == -1)
+        goto err;
+
     return 0;
+
+err:
+
+    perror("set_nonblocking");
+    return -1;
+}
+
+/* Disable Nagle's algorithm by setting TCP_NODELAY */
+int set_tcp_nodelay(int fd) {
+    return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &(int) {1}, sizeof(int));
 }
 
 
@@ -158,6 +168,10 @@ int make_listen(const char *host, const char *port, int socket_family) {
     if ((set_nonblocking(sfd)) == -1)
         abort();
 
+    // Set TCP_NODELAY only for TCP sockets
+    if (socket_family == INET)
+        set_tcp_nodelay(sfd);
+
     if ((listen(sfd, SOMAXCONN)) == -1) {
         perror("listen");
         abort();
@@ -172,12 +186,16 @@ int accept_connection(int serversock) {
     int clientsock;
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
+
     if ((clientsock = accept(serversock,
-                    (struct sockaddr *) &addr, &addrlen)) < 0) {
+                    (struct sockaddr *) &addr, &addrlen)) < 0)
         return -1;
-    }
 
     set_nonblocking(clientsock);
+
+     // Set TCP_NODELAY only for TCP sockets
+    if (config.socket_family == INET)
+        set_tcp_nodelay(clientsock);
 
     char ip_buff[INET_ADDRSTRLEN + 1];
     if (inet_ntop(AF_INET, &addr.sin_addr,

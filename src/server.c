@@ -99,7 +99,7 @@ static struct command commands_map[COMMAND_COUNT] = {
 
 /* Parse header, require at least the first 5 bytes in order to read packet
    type and total length that we need to recv to complete the packet */
-Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
+Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode, int *rc) {
 
     size_t n = 0;
     uint8_t read_all = 0;
@@ -108,9 +108,7 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
         /* Read first 6 bytes to get the total len of the packet */
         n += recvbytes(clientfd, rbuf, read_all, HEADLEN);
         if (n <= 0) {
-            shutdown(clientfd, 0);
-            close(clientfd);
-            // TODO: remove client from config
+            *rc = -ERRCLIENTDC;
             return NULL;
         }
     }
@@ -136,6 +134,13 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode) {
 
     /* Read the total length of the packet */
     uint32_t tlen = ntohl(*((uint32_t *) (tmp + sizeof(uint8_t))));
+
+    /* Set return code to -ERRMAXREQSIZE in case of total packet len exceed
+       the configuration limit `max_request_size` */
+    if (tlen > config.max_request_size) {
+        *rc = -ERRMAXREQSIZE;
+        goto err;
+    }
 
     /* Read remaining bytes to complete the packet */
     while (ringbuf_size(rbuf) < tlen - HEADLEN)
@@ -165,6 +170,9 @@ errrecv:
 
     shutdown(clientfd, 0);
     close(clientfd);
+
+err:
+
     return NULL;
 }
 
@@ -613,12 +621,22 @@ static int request_handler(TriteDB *db, Client *client) {
     /* Placeholders structures, at this point we still don't know if we got a
        request or a response */
     uint8_t opcode = 0;
+    int rc = 0;
 
     /* We must read all incoming bytes till an entire packet is received. This
        is achieved by using a standardized protocol, which send the size of the
        complete packet as the first 4 bytes. By knowing it we know if the
        packet is ready to be deserialized and used. */
-    Buffer *b = recv_packet(clientfd, rbuf, &opcode);
+    Buffer *b = recv_packet(clientfd, rbuf, &opcode, &rc);
+
+    /* Looks like we got a client disconnection.
+       TODO: Set a error_handler for ERRMAXREQSIZE instead of dropping client
+             connection, explicitly returning an informative error code to the
+             client connected. */
+    if (rc == -ERRCLIENTDC || rc == -ERRMAXREQSIZE) {
+        ringbuf_free(rbuf);
+        goto errclient;
+    }
 
     /* If not correct packet received, we must free ringbuffer and reset the
        handler to the request again, setting EPOLL to EPOLLIN */
@@ -692,9 +710,11 @@ reset:
 
 errclient:
 
+    terror("Dropping client on %s", client->addr);
     shutdown(client->fd, 0);
     close(client->fd);
     hashtable_del(db->clients, client->uuid);
+    info.nclients--;
     return -1;
 }
 
@@ -944,7 +964,8 @@ static void *run_server(TriteDB *db) {
 
                 /* An error has occured on this fd, or the socket is not
                    ready for reading */
-                perror("epoll_wait(2)");
+                terror("Dropping client on %s",
+                        ((Client *) evs[i].data.ptr)->addr);
                 hashtable_del(db->clients, ((Client *) evs[i].data.ptr)->uuid);
                 info.nclients--;
                 close(evs[i].data.fd);

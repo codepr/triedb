@@ -28,6 +28,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/socket.h>
 #include <sys/eventfd.h>
 #include "util.h"
 #include "config.h"
@@ -228,7 +229,8 @@ bool config_load(const char *configpath) {
     FILE *fh = fopen(configpath, "r");
 
     if (!fh) {
-        twarning("WARNING: Unable to open conf file %s", configpath);
+        twarning("WARNING: Unable to open conf file %s."
+                " To specify a conf file run tritedb -c /path/to/conf", configpath);
         return false;
     }
 
@@ -302,13 +304,14 @@ void config_print(void) {
             if (lmap[i].loglevel == config.loglevel)
                 llevel = lmap[i].lname;
         }
-        tinfo("Network settings");
+        tinfo("Network settings:");
         tinfo("\tSocket family: %s", sfamily);
         if (config.socket_family == UNIX) {
             tinfo("\tUnix socket: %s", config.hostname);
         } else {
             tinfo("\tAddress: %s", config.hostname);
             tinfo("\tPort: %s", config.port);
+            tinfo("\tTcp backlog: %d", SOMAXCONN);
         }
         const char *human_rsize = memory_to_string(config.max_request_size);
         tinfo("\tMax request size: %s", human_rsize);
