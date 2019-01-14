@@ -1166,17 +1166,19 @@ int start_server(const char *addr, const char *port, int node_fd) {
     add_epoll(epollfd, fd, &server);
 
     /* Add socket for bus communication if accepted by a seed node */
+    // TODO make it in another thread or better, crate a usable client
+    // structure like if it was accepted as a new connection, cause
+    // actually it crashes the server by having NULL ptr
+    Client node;
     if (node_fd > 0) {
 
-        Client node = {
-            .addr = addr,
-            .fd = node_fd,
-            .last_action_time = 0,
-            .ctx_handler = accept_handler,
-            .reply = NULL,
-            .ptr = NULL,
-            .db = NULL
-        };
+        node.addr = addr,
+        node.fd = node_fd,
+        node.last_action_time = 0,
+        node.ctx_handler = accept_handler,
+        node.reply = NULL,
+        node.ptr = NULL,
+        node.db = NULL;
 
         add_epoll(epollfd, node_fd, &node);
     }
@@ -1185,6 +1187,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
 
     /* If it is run in CLUSTER mode add an additional descriptor and register
        it to the event loop */
+    Client bus_server;
     if (config.mode == CLUSTER) {
 
         /* Add 10k to the listening server port */
@@ -1196,18 +1199,13 @@ int start_server(const char *addr, const char *port, int node_fd) {
         int bfd = make_listen(addr, tritedb.busport, INET);
 
         /* Client structure for the bus server component */
-        // TODO make it in another thread or better, crate a usable client
-        // structure like if it was accepted as a new connection, cause
-        // actually it crashes the server by having NULL ptr
-        Client bus_server = {
-            .addr = addr,
-            .fd = bfd,
-            .last_action_time = 0,
-            .ctx_handler = accept_handler,
-            .reply = NULL,
-            .ptr = NULL,
-            .db = NULL
-        };
+        bus_server.addr = addr,
+        bus_server.fd = bfd,
+        bus_server.last_action_time = 0,
+        bus_server.ctx_handler = accept_handler,
+        bus_server.reply = NULL,
+        bus_server.ptr = NULL,
+        bus_server.db = NULL;
 
         /* Set bus socket in EPOLLIN too */
         add_epoll(tritedb.epollfd, bfd, &bus_server);
