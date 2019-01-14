@@ -43,14 +43,24 @@
 #define ERRMAXREQSIZE           1
 #define ERRCLIENTDC             2
 
-
-typedef struct client Client;
-
-typedef struct reply Reply;
-
-typedef struct tritedb TriteDB;
-
-typedef struct database Database;
+/* Global db instance, containing some connection data, clients, expiring keys
+   and databases */
+struct tritedb {
+    /* Main epoll loop fd */
+    int epollfd;
+    /* Bus port for cluster communication */
+    char busport[5];
+    /* Connected clients */
+    HashTable *clients;
+    /* Peers connected */
+    List *peers;
+    /* Expiring keys */
+    Vector *expiring_keys;
+    /* struct database mappings name -> db object */
+    HashTable *dbs;
+    /* Total count of the database keys */
+    size_t keyspace_size;
+};
 
 
 /* Basic client structure, represents a connected client, with his last reply
@@ -63,7 +73,7 @@ typedef struct database Database;
  *    - reply
  *
  * Each of these function is represented by a handler function in the form of
- * x_handler(TriteDB *, Client *) where x is one of those actions.
+ * x_handler(struct tritedb *, struct client *) where x is one of those actions.
  *
  * This way it's easier to plug-in different handlers and use epoll_wait just
  * to call the correct context.
@@ -74,28 +84,29 @@ struct client {
     const char *addr;
     const char uuid[37];
     int fd;
-    int (*ctx_handler)(TriteDB *, Client *);
-    Reply *reply;
+    int (*ctx_handler)(struct tritedb *, struct client *);
+    struct reply *reply;
     void *ptr;
-    Database *db;
+    struct database *db;
 };
 
 
 struct reply {
     int fd;
-    Buffer *payload;
+    struct buffer *payload;
 };
 
 
 struct command {
     int ctype;
-    int (*handler)(TriteDB *, Client *);
+    int (*handler)(struct tritedb *, struct client *);
 };
 
-
-struct ExpiringKey {
+/* Structure to represent a key with a TTL set which is not -NOTTL, e.g. has a
+   timeout after which the key will be deleted */
+struct expiring_key {
     Trie *data_ptr;
-    const struct NodeData *nd;
+    const struct node_data *nd;
     const char *key;
 };
 
@@ -105,24 +116,6 @@ struct ExpiringKey {
 struct database {
     const char *name;
     Trie *data;
-};
-
-
-struct tritedb {
-    /* Main epoll loop fd */
-    int epollfd;
-    /* Bus port for cluster communication */
-    char busport[5];
-    /* Connected clients */
-    HashTable *clients;
-    /* Peers connected */
-    List *peers;
-    /* Expiring keys */
-    Vector *expiring_keys;
-    /* Database mappings name -> db object */
-    HashTable *dbs;
-    /* Total count of the database keys */
-    size_t keyspace_size;
 };
 
 

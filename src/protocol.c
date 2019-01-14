@@ -35,8 +35,8 @@
 #include "protocol.h"
 
 
-static void pack_header(const Header *, Buffer *);
-static void unpack_header(Buffer *, Header *);
+static void pack_header(const Header *, struct buffer *);
+static void unpack_header(struct buffer *, Header *);
 
 
 /* Host-to-network (native endian to big endian) */
@@ -63,9 +63,9 @@ uint_least64_t ntohll(const uint8_t *block) {
         (uint_least64_t) block[7] << 0;
 }
 
-/* Init Buffer data structure, to ease byte arrays handling */
-Buffer *buffer_init(size_t len) {
-    Buffer *b = tmalloc(sizeof(Buffer));
+/* Init struct buffer data structure, to ease byte arrays handling */
+struct buffer *buffer_init(size_t len) {
+    struct buffer *b = tmalloc(sizeof(struct buffer));
     b->data = tmalloc(len);
     if (!b || !b->data)
         oom("allocating memory for new buffer");
@@ -75,8 +75,8 @@ Buffer *buffer_init(size_t len) {
 }
 
 
-/* Destroy a previously allocated Buffer structure */
-void buffer_destroy(Buffer *b) {
+/* Destroy a previously allocated struct buffer structure */
+void buffer_destroy(struct buffer *b) {
     assert(b && b->data);
     b->size = b->pos = 0;
     tfree(b->data);
@@ -85,7 +85,7 @@ void buffer_destroy(Buffer *b) {
 
 
 // Reading data
-uint8_t read_uint8(Buffer *b) {
+uint8_t read_uint8(struct buffer *b) {
     if ((b->pos + sizeof(uint8_t)) > b->size)
         return 0;
     uint8_t val = *(b->data + b->pos);
@@ -94,7 +94,7 @@ uint8_t read_uint8(Buffer *b) {
 }
 
 
-uint16_t read_uint16(Buffer *b) {
+uint16_t read_uint16(struct buffer *b) {
     if ((b->pos + sizeof(uint16_t)) > b->size)
         return 0;
     uint16_t val = ntohs(*((uint16_t *) (b->data + b->pos)));
@@ -103,7 +103,7 @@ uint16_t read_uint16(Buffer *b) {
 }
 
 
-uint32_t read_uint32(Buffer *b) {
+uint32_t read_uint32(struct buffer *b) {
     if ((b->pos + sizeof(uint32_t)) > b->size)
         return 0;
     uint32_t val = ntohl(*((uint32_t *) (b->data + b->pos)));
@@ -112,7 +112,7 @@ uint32_t read_uint32(Buffer *b) {
 }
 
 
-uint64_t read_uint64(Buffer *b) {
+uint64_t read_uint64(struct buffer *b) {
     if ((b->pos + sizeof(uint64_t)) > b->size)
         return 0;
     uint64_t val = ntohll(b->data + b->pos);
@@ -121,7 +121,7 @@ uint64_t read_uint64(Buffer *b) {
 }
 
 
-uint8_t *read_bytes(Buffer *b, size_t len) {
+uint8_t *read_bytes(struct buffer *b, size_t len) {
     if ((b->pos + len) > b->size)
         return NULL;
     uint8_t *str = tmalloc(len + 1);
@@ -133,7 +133,7 @@ uint8_t *read_bytes(Buffer *b, size_t len) {
 
 
 // Write data
-void write_uint8(Buffer *b, uint8_t val) {
+void write_uint8(struct buffer *b, uint8_t val) {
     if ((b->pos + sizeof(uint8_t)) > b->size)
         return;
     *(b->data + b->pos) = val;
@@ -141,7 +141,7 @@ void write_uint8(Buffer *b, uint8_t val) {
 }
 
 
-void write_uint16(Buffer *b, uint16_t val) {
+void write_uint16(struct buffer *b, uint16_t val) {
     if ((b->pos + sizeof(uint16_t)) > b->size)
         return;
     *((uint16_t *) (b->data + b->pos)) = htons(val);
@@ -149,7 +149,7 @@ void write_uint16(Buffer *b, uint16_t val) {
 }
 
 
-void write_uint32(Buffer *b, uint32_t val) {
+void write_uint32(struct buffer *b, uint32_t val) {
     if ((b->pos + sizeof(uint32_t)) > b->size)
         return;
     *((uint32_t *) (b->data + b->pos)) = htonl(val);
@@ -157,7 +157,7 @@ void write_uint32(Buffer *b, uint32_t val) {
 }
 
 
-void write_uint64(Buffer *b, uint64_t val) {
+void write_uint64(struct buffer *b, uint64_t val) {
     if ((b->pos + sizeof(uint64_t)) > b->size)
         return;
     htonll(b->data + b->pos, val);
@@ -165,7 +165,7 @@ void write_uint64(Buffer *b, uint64_t val) {
 }
 
 
-void write_bytes(Buffer *b, uint8_t *str) {
+void write_bytes(struct buffer *b, uint8_t *str) {
     size_t len = strlen((char *) str);
     if ((b->pos + len) > b->size)
         return;
@@ -174,7 +174,7 @@ void write_bytes(Buffer *b, uint8_t *str) {
 }
 
 
-static void pack_header(const Header *h, Buffer *b) {
+static void pack_header(const Header *h, struct buffer *b) {
 
     assert(b && h);
 
@@ -184,7 +184,7 @@ static void pack_header(const Header *h, Buffer *b) {
 }
 
 
-static void unpack_header(Buffer *b, Header *h) {
+static void unpack_header(struct buffer *b, Header *h) {
 
     assert(b && h);
 
@@ -210,7 +210,7 @@ static const int opcode_req_map[COMMAND_COUNT][2] = {
 };
 
 
-Request *unpack_request(Buffer *b) {
+Request *unpack_request(struct buffer *b) {
 
     assert(b);
 
@@ -263,7 +263,7 @@ errnomem2:
 
 /* Main unpacking function, to translates bytes received from clients to a
    packet structure, based on the opcode */
-Command *unpack_command(Buffer *b, Header *header) {
+Command *unpack_command(struct buffer *b, Header *header) {
 
     assert(b && header);
 
@@ -464,7 +464,7 @@ void free_command(Command *command, bool with_header) {
 }
 
 
-void pack_response(Buffer *b, const Response *r, int restype) {
+void pack_response(struct buffer *b, const Response *r, int restype) {
 
     assert(b && r);
 
@@ -636,7 +636,7 @@ Response *make_listcontent_response(const List *content) {
 
     int i = 0;
 
-    for (ListNode *cur = content->head; cur; cur = cur->next) {
+    for (struct list_node *cur = content->head; cur; cur = cur->next) {
         struct Key *key = tmalloc(sizeof(*key));
         key->key = (uint8_t *) tstrdup((const char *) cur->data);
         key->keysize = strlen((const char *) cur->data);

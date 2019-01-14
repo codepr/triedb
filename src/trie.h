@@ -38,10 +38,8 @@
 
 typedef struct Trie Trie;
 
-typedef struct TrieNode TrieNode;
-
 /* Main data structure, contains the data to be stored on leaf nodes */
-struct NodeData {
+struct node_data {
     time_t ctime;  // creation time
     time_t latime; // last access time
     int16_t ttl;   // time to live
@@ -51,24 +49,27 @@ struct NodeData {
 /* Trie node, it contains a fixed size array (every node can have at max the
    alphabet length size of children), a flag defining if the node represent
    the end of a word and then if it contains a value defined by data. */
-struct TrieNode {
+struct trie_node {
     char chr;
     List *children;
-    struct NodeData *ndata;
+    struct node_data *ndata;
 };
 
 
-/* Trie ADT, it is formed by a root TrieNode, and the total size of the Trie */
+/* Trie ADT, it is formed by a root struct trie_node, and the total size of the Trie */
 struct Trie {
-    struct TrieNode *root;
+    struct trie_node *root;
     size_t size;
 };
 
 // Returns new trie node (initialized to NULLs)
-struct TrieNode *trie_new_node(char);
+struct trie_node *trie_new_node(char);
 
 // Returns a new Trie, which is formed by a root node and a size
 struct Trie *trie_new(void);
+
+// Return the size of the trie
+size_t trie_size(Trie *);
 
 /* The leaf represents the node with the associated data
  *           .
@@ -84,7 +85,7 @@ struct Trie *trie_new(void);
  * - hk: hk-value
  * - hel: hel-value
  */
-struct NodeData *trie_insert(Trie *, const char *, const void *);
+struct node_data *trie_insert(Trie *, const char *, const void *);
 
 bool trie_delete(Trie *, const char *);
 
@@ -93,11 +94,11 @@ bool trie_delete(Trie *, const char *);
    present */
 bool trie_find(const Trie *, const char *, void **);
 
-void trie_node_free(TrieNode *, size_t *);
+void trie_node_free(struct trie_node *, size_t *);
 
 void trie_free(Trie *);
 
-void display(TrieNode *, char [], int);
+void display(struct trie_node *, char [], int);
 
 /* Remove all keys matching a given prefix in a less than linear time
    complexity */
@@ -129,7 +130,7 @@ void trie_prefix_ttl(Trie *, const char *, int16_t);
 List *trie_prefix_find(const Trie *, const char *);
 
 /* Apply a given function to all nodes which keys match a given prefix */
-void trie_prefix_map(Trie *, const char *, void (*mapfunc)(TrieNode *));
+void trie_prefix_map(Trie *, const char *, void (*mapfunc)(struct trie_node *));
 
 
 #endif

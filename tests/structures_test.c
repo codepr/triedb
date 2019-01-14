@@ -252,7 +252,7 @@ static char *test_list_push_back(void) {
 
 static int compare_str(void *arg1, void *arg2) {
 
-    const char *tn1 = ((ListNode *) arg1)->data;
+    const char *tn1 = ((struct list_node *) arg1)->data;
     const char *tn2 = arg2;
 
     if (strcmp(tn1, tn2) == 0)
@@ -267,7 +267,7 @@ static char *test_list_remove_node(void) {
     char *x = "abc";
     l = list_push(l, x);
     ASSERT("[! list_remove_node :: list_push]: item not pushed in", l->len == 1);
-    ListNode *node = list_remove_node(l, x, compare_str);
+    struct list_node *node = list_remove_node(l, x, compare_str);
     ASSERT("[! list_remove_node]: item not removed", strcmp(node->data, x) == 0);
     tfree(node);
     list_free(l, 0);
@@ -291,9 +291,9 @@ static char *test_trie_new(void) {
  * Tests the creation of a new node
  */
 static char *test_trie_new_node(void) {
-    struct TrieNode *node = trie_new_node('a');
+    struct trie_node *node = trie_new_node('a');
     size_t size = 0;
-    ASSERT("[! trie_new_node]: TrieNode not created", node != NULL);
+    ASSERT("[! trie_new_node]: struct trie_node not created", node != NULL);
     trie_node_free(node, &size);
     printf(" [trie::trie_new_node]: OK\n");
     return 0;
@@ -459,10 +459,10 @@ static char *test_trie_prefix_inc(void) {
     trie_find(root, key4, &retval4);
 
     ASSERT("[! trie_prefix_inc]: Trie prefix inc on prefix \"key\" failed",
-            strcmp(((struct NodeData *) retval1)->data, "1") == 0 &&
-            strcmp(((struct NodeData *) retval2)->data, "2") == 0 &&
-            strcmp(((struct NodeData *) retval3)->data, "3") == 0 &&
-            strcmp(((struct NodeData *) retval4)->data, "10") == 0);
+            strcmp(((struct node_data *) retval1)->data, "1") == 0 &&
+            strcmp(((struct node_data *) retval2)->data, "2") == 0 &&
+            strcmp(((struct node_data *) retval3)->data, "3") == 0 &&
+            strcmp(((struct node_data *) retval4)->data, "10") == 0);
 
     trie_free(root);
     printf(" [trie::trie_prefix_inc]: OK\n");
@@ -497,10 +497,10 @@ static char *test_trie_prefix_dec(void) {
     trie_find(root, key4, &retval4);
 
     ASSERT("[! trie_prefix_dec]: Trie prefix dec on prefix \"key\" failed",
-            strcmp(((struct NodeData *) retval1)->data, "-1") == 0 &&
-            strcmp(((struct NodeData *) retval2)->data, "0") == 0 &&
-            strcmp(((struct NodeData *) retval3)->data, "1") == 0 &&
-            strcmp(((struct NodeData *) retval4)->data, "9") == 0);
+            strcmp(((struct node_data *) retval1)->data, "-1") == 0 &&
+            strcmp(((struct node_data *) retval2)->data, "0") == 0 &&
+            strcmp(((struct node_data *) retval3)->data, "1") == 0 &&
+            strcmp(((struct node_data *) retval4)->data, "9") == 0);
 
     trie_free(root);
     printf(" [trie::trie_prefix_dec]: OK\n");

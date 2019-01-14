@@ -36,12 +36,9 @@ struct list_node {
 };
 
 
-typedef struct list_node ListNode;
-
-
 typedef struct {
-    ListNode *head;
-    ListNode *tail;
+    struct list_node *head;
+    struct list_node *tail;
     unsigned long len;
 } List;
 
@@ -57,11 +54,14 @@ List *list_init(void);
  * (e.g. going to free also data field of every node) */
 void list_free(List *, int);
 
+/* Return list size */
+unsigned long list_size(List *);
+
 /* Clear out the list without de-allocating it */
 void list_clear(List *, int);
 
 /* Attach a list to another one on tail */
-List *list_attach(List *, ListNode *, unsigned long);
+List *list_attach(List *, struct list_node *, unsigned long);
 
 /* Insert data into a node and push it to the front of the list */
 List *list_push(List *, void *);
@@ -72,21 +72,21 @@ List *list_push_back(List *, void *);
 /* Remove a node from the list based on a compare function that must be
    previously defined and passed in as a function pointer, accept two void *
    args, which generally means a node and his subsequent */
-void list_remove(List *, ListNode *, compare_func);
+void list_remove(List *, struct list_node *, compare_func);
 
 /* Remove a single node from the list, the first one satisfy compare_func
  * criteria, without de-allocating it
  */
-ListNode *list_remove_node(List *, void *, compare_func);
+struct list_node *list_remove_node(List *, void *, compare_func);
 
 /* Merge sort customized on TTL of new values data with complexity of O(nlogn) */
-ListNode *merge_sort(ListNode *);
+struct list_node *merge_sort(struct list_node *);
 
 /* Merge sort customized on char comparison */
-ListNode *merge_sort_tnode(ListNode *);
+struct list_node *merge_sort_tnode(struct list_node *);
 
 /* Perform a linear search in O(n) at worst */
-ListNode *linear_search(List *, int);
+struct list_node *linear_search(List *, int);
 
 
 #endif

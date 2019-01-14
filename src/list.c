@@ -31,7 +31,7 @@
 #include "server.h"
 
 
-static ListNode *list_node_remove(ListNode *, ListNode *, compare_func, int *);
+static struct list_node *list_node_remove(struct list_node *, struct list_node *, compare_func, int *);
 
 /*
  * Create a list, initializing all fields
@@ -60,8 +60,8 @@ void list_free(List *l, int deep) {
 
     if (!l) return;
 
-    ListNode *h = l->head;
-    ListNode *tmp;
+    struct list_node *h = l->head;
+    struct list_node *tmp;
 
     // free all nodes
     while (l->len--) {
@@ -80,6 +80,11 @@ void list_free(List *l, int deep) {
     tfree(l);
 }
 
+
+unsigned long list_size(List *list) {
+    return list->len;
+}
+
 /*
  * Destroy a list, releasing all allocated memory but the list itself
  */
@@ -87,8 +92,8 @@ void list_clear(List *l, int deep) {
 
     if (!l || !l->head) return;
 
-    ListNode *h = l->head;
-    ListNode *tmp;
+    struct list_node *h = l->head;
+    struct list_node *tmp;
 
     // free all nodes
     while (l->len--) {
@@ -110,7 +115,7 @@ void list_clear(List *l, int deep) {
 /*
  * Attach a node to the head of a new list
  */
-List *list_attach(List *l, ListNode *head, unsigned long len) {
+List *list_attach(List *l, struct list_node *head, unsigned long len) {
     // set default values to the List structure fields
     l->head = head;
     l->len = len;
@@ -123,7 +128,7 @@ List *list_attach(List *l, ListNode *head, unsigned long len) {
  */
 List *list_push(List *l, void *val) {
 
-    ListNode *new_node = tmalloc(sizeof(ListNode));
+    struct list_node *new_node = tmalloc(sizeof(struct list_node));
 
     if (!new_node) {
         perror("malloc(3) failed");
@@ -152,7 +157,7 @@ List *list_push(List *l, void *val) {
  */
 List *list_push_back(List *l, void *val) {
 
-    ListNode *new_node = tmalloc(sizeof(ListNode));
+    struct list_node *new_node = tmalloc(sizeof(struct list_node));
 
     if (!new_node) {
         perror("malloc(3) failed");
@@ -175,7 +180,7 @@ List *list_push_back(List *l, void *val) {
 }
 
 
-void list_remove(List *l, ListNode *node, compare_func cmp) {
+void list_remove(List *l, struct list_node *node, compare_func cmp) {
 
     if (!l || !node)
         return;
@@ -189,15 +194,15 @@ void list_remove(List *l, ListNode *node, compare_func cmp) {
 }
 
 
-static ListNode *list_node_remove(ListNode *head,
-        ListNode *node, compare_func cmp, int *counter) {
+static struct list_node *list_node_remove(struct list_node *head,
+        struct list_node *node, compare_func cmp, int *counter) {
 
     if (!head)
         return NULL;
 
     if (cmp(head, node) == 0) {
 
-        ListNode *tmp_next = head->next;
+        struct list_node *tmp_next = head->next;
         tfree(head);
         head = NULL;
 
@@ -213,8 +218,8 @@ static ListNode *list_node_remove(ListNode *head,
 }
 
 
-static ListNode *list_remove_single_node(ListNode *head,
-        void *data, ListNode **ret, compare_func cmp) {
+static struct list_node *list_remove_single_node(struct list_node *head,
+        void *data, struct list_node **ret, compare_func cmp) {
 
     if (!head)
         return NULL;
@@ -222,7 +227,7 @@ static ListNode *list_remove_single_node(ListNode *head,
     // We want the first match
     if (cmp(head, data) == 0 && !*ret) {
 
-        ListNode *tmp_next = head->next;
+        struct list_node *tmp_next = head->next;
 
         *ret = head;
 
@@ -237,12 +242,12 @@ static ListNode *list_remove_single_node(ListNode *head,
 }
 
 
-ListNode *list_remove_node(List *list, void *data, compare_func cmp){
+struct list_node *list_remove_node(List *list, void *data, compare_func cmp){
 
     if (list->len == 0 || !list)
         return NULL;
 
-    ListNode *node = NULL;
+    struct list_node *node = NULL;
 
     list_remove_single_node(list->head, data, &node, cmp);
 
@@ -258,10 +263,10 @@ ListNode *list_remove_node(List *list, void *data, compare_func cmp){
  * Returns a pointer to a node near the middle of the list,
  * after having truncated the original list before that point.
  */
-static ListNode *bisect_list(ListNode *head) {
+static struct list_node *bisect_list(struct list_node *head) {
     /* The fast pointer moves twice as fast as the slow pointer. */
     /* The prev pointer points to the node preceding the slow pointer. */
-    ListNode *fast = head, *slow = head, *prev = NULL;
+    struct list_node *fast = head, *slow = head, *prev = NULL;
 
     while (fast != NULL && fast->next != NULL) {
         fast = fast->next->next;
@@ -279,9 +284,9 @@ static ListNode *bisect_list(ListNode *head) {
  * Merges two list by using the head node of the two, sorting them according to
  * lexigraphical ordering of the node names.
  */
-static ListNode *merge_list(ListNode *list1, ListNode *list2) {
+static struct list_node *merge_list(struct list_node *list1, struct list_node *list2) {
 
-    ListNode dummy_head = { NULL, NULL }, *tail = &dummy_head;
+    struct list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
 
     unsigned long long now = time(NULL);
     unsigned long long delta_l1, delta_l2;
@@ -289,14 +294,14 @@ static ListNode *merge_list(ListNode *list1, ListNode *list2) {
     while (list1 && list2) {
 
         /* cast to cluster_node */
-        const struct NodeData *n1 = ((struct ExpiringKey *) list1->data)->nd;
-        const struct NodeData *n2 = ((struct ExpiringKey *) list2->data)->nd;
+        const struct node_data *n1 = ((struct expiring_key *) list1->data)->nd;
+        const struct node_data *n2 = ((struct expiring_key *) list2->data)->nd;
 
         delta_l1 = (n1->ctime + n1->ttl) - now;
         delta_l2 = (n2->ctime + n2->ttl) - now;
 
-        ListNode **min = delta_l1 <= delta_l2 ? &list1 : &list2;
-        ListNode *next = (*min)->next;
+        struct list_node **min = delta_l1 <= delta_l2 ? &list1 : &list2;
+        struct list_node *next = (*min)->next;
         tail = tail->next = *min;
         *min = next;
     }
@@ -308,15 +313,15 @@ static ListNode *merge_list(ListNode *list1, ListNode *list2) {
 /*
  * Merge sort for nodes list, based on the name field of every node
  */
-ListNode *merge_sort(ListNode *head) {
+struct list_node *merge_sort(struct list_node *head) {
 
-    ListNode *list1 = head;
+    struct list_node *list1 = head;
 
     if (!list1 || !list1->next)
         return list1;
 
     /* find the middle */
-    ListNode *list2 = bisect_list(list1);
+    struct list_node *list2 = bisect_list(list1);
 
     return merge_list(merge_sort(list1), merge_sort(list2));
 }
@@ -324,15 +329,15 @@ ListNode *merge_sort(ListNode *head) {
 /* Search for a given node based on a comparison of char stored in structure
  * and a value, O(n) at worst
  */
-ListNode *linear_search(List *list, int value) {
+struct list_node *linear_search(List *list, int value) {
 
     if (!list || list->len == 0)
         return NULL;
 
-    for (ListNode *cur = list->head; cur != NULL; cur = cur->next) {
-        if (((TrieNode *) cur->data)->chr == value)
+    for (struct list_node *cur = list->head; cur != NULL; cur = cur->next) {
+        if (((struct trie_node *) cur->data)->chr == value)
             return cur;
-        else if (((TrieNode *) cur->data)->chr > value)
+        else if (((struct trie_node *) cur->data)->chr > value)
             break;
     }
 
@@ -340,18 +345,18 @@ ListNode *linear_search(List *list, int value) {
 }
 
 
-static ListNode *merge_tnode_list(ListNode *list1, ListNode *list2) {
+static struct list_node *merge_tnode_list(struct list_node *list1, struct list_node *list2) {
 
-    ListNode dummy_head = { NULL, NULL }, *tail = &dummy_head;
+    struct list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
 
     while (list1 && list2) {
 
         /* cast to cluster_node */
-        char chr1 = ((TrieNode *) list1->data)->chr;
-        char chr2 = ((TrieNode *) list2->data)->chr;
+        char chr1 = ((struct trie_node *) list1->data)->chr;
+        char chr2 = ((struct trie_node *) list2->data)->chr;
 
-        ListNode **min = chr1 <= chr2 ? &list1 : &list2;
-        ListNode *next = (*min)->next;
+        struct list_node **min = chr1 <= chr2 ? &list1 : &list2;
+        struct list_node *next = (*min)->next;
         tail = tail->next = *min;
         *min = next;
     }
@@ -361,15 +366,15 @@ static ListNode *merge_tnode_list(ListNode *list1, ListNode *list2) {
 }
 
 
-ListNode *merge_sort_tnode(ListNode *head) {
+struct list_node *merge_sort_tnode(struct list_node *head) {
 
-    ListNode *list1 = head;
+    struct list_node *list1 = head;
 
     if (!list1 || !list1->next)
         return list1;
 
     /* find the middle */
-    ListNode *list2 = bisect_list(list1);
+    struct list_node *list2 = bisect_list(list1);
 
     return merge_tnode_list(merge_sort_tnode(list1), merge_sort_tnode(list2));
 }

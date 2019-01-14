@@ -68,7 +68,7 @@ typedef struct {
 
 
 InputBuffer *input_buffer_new() {
-    InputBuffer *input_buffer = tmalloc(sizeof(InputBuffer));
+    InputBuffer *input_buffer = tmalloc(sizeof(*input_buffer));
     input_buffer->buffer = NULL;
     input_buffer->buflen = 0;
     input_buffer->inputlen = 0;

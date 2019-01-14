@@ -1,29 +1,29 @@
 /*
  * BSD 2-Clause License
  *
- * Copyright (c) 2018, Andrea Giacomo Baldan
- * All rights reserved.
+ * Copyright (c) 2018, Andrea Giacomo Baldan All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
- * * Redistributions of source code must retain the above copyright notice, this
- *   list of conditions and the following disclaimer.
+ * * Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
  *
  * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <stdio.h>
@@ -67,7 +67,7 @@ static uint32_t hashtable_hash_int(HashTable *m, const uint8_t *keystr) {
 }
 
 /*
- * Return the integer of the location in entries to store the point to the item,
+ * Return the integer of the location in entries to store the point to the item
  * or -HASHTABLE_FULL.
  */
 static int hashtable_hash(HashTable *table, const uint8_t *key) {
@@ -109,10 +109,12 @@ static int hashtable_rehash(HashTable *table) {
     assert(table);
 
     size_t old_size;
-    HashTableEntry *curr;
+    struct hashtable_entry *curr;
 
     /* Setup the new elements */
-    HashTableEntry *temp = tcalloc(2 * table->table_size, sizeof(*temp));
+    struct hashtable_entry *temp =
+        tcalloc(2 * table->table_size, sizeof(*temp));
+
     if (!temp)
         return -HASHTABLE_ERR;
 
@@ -144,7 +146,7 @@ static int hashtable_rehash(HashTable *table) {
 }
 
 /* callback function used with iterate to clean up the hashtable */
-static int destroy_entry(HashTableEntry *entry) {
+static int destroy_entry(struct hashtable_entry *entry) {
 
     if (!entry)
         return -HASHTABLE_ERR;
@@ -165,13 +167,13 @@ static int destroy_entry(HashTableEntry *entry) {
  * Return an empty hashtable, or NULL on failure. The newly create HashTable is
  * dynamically allocated on the heap memory, so it must be released manually.
  */
-HashTable *hashtable_create(int (*destructor)(HashTableEntry *)) {
+HashTable *hashtable_create(int (*destructor)(struct hashtable_entry *)) {
 
     HashTable *table = tmalloc(sizeof(HashTable));
     if(!table)
         return NULL;
 
-    table->entries = tcalloc(INITIAL_SIZE, sizeof(HashTableEntry));
+    table->entries = tcalloc(INITIAL_SIZE, sizeof(struct hashtable_entry));
     if(!table->entries) {
         hashtable_release(table);
         return NULL;
@@ -185,6 +187,10 @@ HashTable *hashtable_create(int (*destructor)(HashTableEntry *)) {
     return table;
 }
 
+
+size_t hashtable_size(HashTable *table) {
+    return table->size;
+}
 
 /* Add a new key-value pair into the hashtable entries array, use chaining in
    case of collision. */
@@ -244,7 +250,7 @@ void *hashtable_get(HashTable *table, const char *key) {
 /*
  * Return the key-value pair represented by a key in the hashtable
  */
-HashTableEntry *hashtable_get_entry(HashTable *table, const char *key) {
+struct hashtable_entry *hashtable_get_entry(HashTable *table, const char *key) {
 
     assert(table && key);
 
@@ -308,7 +314,7 @@ int hashtable_del(HashTable *table, const char *key) {
  * void * argument is passed to the function as its first argument,
  * representing the key-value pair structure.
  */
-int hashtable_map(HashTable *table, int (*func)(HashTableEntry *)) {
+int hashtable_map(HashTable *table, int (*func)(struct hashtable_entry *)) {
 
     assert(func);
 
@@ -322,7 +328,7 @@ int hashtable_map(HashTable *table, int (*func)(HashTableEntry *)) {
         if (table->entries[i].taken == true) {
 
             /* Apply function to the key-value entry */
-            HashTableEntry data = table->entries[i];
+            struct hashtable_entry data = table->entries[i];
             int status = func(&data);
 
             if (status != HASHTABLE_OK)

@@ -42,11 +42,11 @@
 
 
 /* We need to keep keys and values */
-typedef struct {
+struct hashtable_entry {
     const char *key;
     void *val;
     bool taken;
-} HashTableEntry;
+};
 
 
 /*
@@ -56,21 +56,24 @@ typedef struct {
 typedef struct {
     size_t table_size;
     size_t size;
-    int (*destructor)(HashTableEntry *);
-    HashTableEntry *entries;
+    int (*destructor)(struct hashtable_entry *);
+    struct hashtable_entry *entries;
 } HashTable;
 
 
 /* HashTable API to create a new `HashTable`, it require a function pointer to
    define a custom destructor, which can be NULL in case of bytes stream or
    simple pointers as values */
-HashTable *hashtable_create(int (*destructor)(HashTableEntry *));
+HashTable *hashtable_create(int (*destructor)(struct hashtable_entry *));
 
 /* Destroy the hashtable by calling functor `destructor` on every
-   `HashTableEntry`, thus it needs to have a defined destructor function for
+   `struct hashtable_entry`, thus it needs to have a defined destructor function for
    each different data-type inserted. In case of a NULL destructor, it' ll call
    normal free. */
 void hashtable_release(HashTable *);
+
+/* Return hashtable size */
+size_t hashtable_size(HashTable *);
 
 /* Insert a new key-value pair into the hashtable, accept a const char * as
    key and a void * for value */
@@ -84,7 +87,7 @@ int hashtable_del(HashTable *, const char *);
 
 /* Iterate through all key-value pairs in the hashtable, accept a functor as
    parameter to apply function to each pair */
-int hashtable_map(HashTable *, int (*func)(HashTableEntry *));
+int hashtable_map(HashTable *, int (*func)(struct hashtable_entry *));
 
 
 uint64_t crc32(const uint8_t *, const uint32_t);
