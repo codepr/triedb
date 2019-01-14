@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
     char *addr = DEFAULT_HOSTNAME;
     char *port = DEFAULT_PORT;
     char *conf = DEFAULT_CONF_PATH;
+    char *mode = "STANDALONE";
     int debug = 0;
     int fd = -1;
     int opt;
@@ -58,7 +59,7 @@ int main(int argc, char **argv) {
     // Set default configuration
     config_set_default();
 
-    while ((opt = getopt(argc, argv, "a:c:p:vn:")) != -1) {
+    while ((opt = getopt(argc, argv, "a:c:p:m:vn:")) != -1) {
         switch (opt) {
             case 'a':
                 addr = optarg;
@@ -71,12 +72,30 @@ int main(int argc, char **argv) {
                 port = optarg;
                 strcpy(config.port, port);
                 break;
+            case 'm':
+                mode = optarg;
+                config.mode = STREQ(mode, "CLUSTER", 7) ? CLUSTER : STANDALONE;
+                break;
             case 'v':
                 debug = 1;
                 break;
             default:
                 fprintf(stderr, "Usage: %s [-a addr] [-p port] [-v]\n", argv[0]);
                 exit(EXIT_FAILURE);
+        }
+    }
+
+    if (optind < argc) {
+        if (STREQ(argv[optind], "join", 4) == 0) {
+
+            // Target is the pair target_host:port+10000
+            char *target = argv[optind + 1];
+            int tport = atoi(argv[optind + 2]) + 10000;
+
+            // Connect to the listening peer node
+            fd = open_connection(target, tport);
+            set_nonblocking(fd);
+            set_tcp_nodelay(fd);
         }
     }
 

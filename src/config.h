@@ -31,9 +31,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// DEFAULT PARAMETERS
+// Run mode
 
-#define VERSION                     "0.4.3"
+#define STANDALONE                  0x00
+#define CLUSTER                     0x01
+
+// Default parameters
+
+#define VERSION                     "0.4.4"
+#define DEFAULT_MODE                STANDALONE
 #define DEFAULT_SOCKET_FAMILY       INET
 #define DEFAULT_LOG_LEVEL           INFORMATION
 #define DEFAULT_LOG_PATH            "/tmp/tritedb.log"
@@ -48,6 +54,9 @@
 struct config {
     /* TriteDB version <MAJOR.MINOR.PATCH> */
     const char *version;
+    /* Instance run mode, can be either STANDALONE for a single node or CLUSTER
+       for a distributed system */
+    int mode;
     /* Eventfd to break the epoll_wait loop in case of signals */
     uint8_t run;
     /* Logging level, to be set by reading configuration */

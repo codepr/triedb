@@ -70,11 +70,8 @@ void vector_append(Vector *v, void *item) {
 
 
 void vector_set(Vector *v, int index, void *item) {
-    if (index >= 0 && index < v->size) {
-        if (!v->items[index])
-            v->size++;
+    if (index >= 0 && index < v->size)
         v->items[index] = item;
-    }
 }
 
 

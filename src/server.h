@@ -111,6 +111,8 @@ struct database {
 struct tritedb {
     /* Main epoll loop fd */
     int epollfd;
+    /* Bus port for cluster communication */
+    char busport[5];
     /* Connected clients */
     HashTable *clients;
     /* Peers connected */

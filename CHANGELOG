@@ -1,8 +1,10 @@
-0.4.3 - 2019/01/14
+0.4.4 - 2019/01/14
 ==================
 
 - Add basic database abstraction, for now it only gives a level of namespacing
   to ease the management of key storing.
+- Add startup mode, standalone on a single node and cluster for a distributed
+  system, opening an additional port for bus communication.
 
 
 0.4.2 - 2019/01/13

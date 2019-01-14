@@ -176,7 +176,8 @@ char *time_to_string(size_t time) {
     return tstring;
 }
 
-
+/* Set configuration values based on what is read from the persistent
+   configuration on disk */
 static void add_config_value(const char *key, const char *value) {
 
     size_t klen = strlen(key);
@@ -206,6 +207,9 @@ static void add_config_value(const char *key, const char *value) {
     } else if (STREQ("tcp_backlog", key, klen) == true) {
         int tcp_backlog = parse_int(value);
         config.tcp_backlog = tcp_backlog <= SOMAXCONN ? tcp_backlog : SOMAXCONN;
+    } else if (STREQ("mode", key, klen) == true) {
+        int mode = STREQ(value, "STANDALONE", 10) ? STANDALONE : CLUSTER;
+        config.mode = mode;
     }
 }
 
@@ -285,6 +289,7 @@ bool config_load(const char *configpath) {
 
 void config_set_default(void) {
     config.version = VERSION;
+    config.mode = STANDALONE;
     config.socket_family = DEFAULT_SOCKET_FAMILY;
     config.loglevel = DEFAULT_LOG_LEVEL;
     strcpy(config.logpath, DEFAULT_LOG_PATH);
@@ -307,6 +312,8 @@ void config_print(void) {
             if (lmap[i].loglevel == config.loglevel)
                 llevel = lmap[i].lname;
         }
+        tinfo("TriteDB is starting");
+        tinfo("Mode: %s", config.mode == STANDALONE ? "standalone" : "cluster");
         tinfo("Network settings:");
         tinfo("\tSocket family: %s", sfamily);
         if (config.socket_family == UNIX) {

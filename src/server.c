@@ -60,7 +60,6 @@ struct informations info;
 
 
 static void free_reply(Reply *);
-static void _client_free(Client *);
 static int reply_handler(TriteDB *, Client *);
 static int accept_handler(TriteDB *, Client *);
 static int request_handler(TriteDB *, Client *);
@@ -210,11 +209,16 @@ static void free_reply(Reply *r) {
     tfree(r);
 }
 
+/* Hashtable destructor function for Client objects. */
+static int client_free(HashTableEntry *entry) {
 
-static void _client_free(Client *c) {
+    if (!entry)
+        return -HASHTABLE_ERR;
+
+    Client *c = entry->val;
 
     if (!c)
-        return;
+        return -HASHTABLE_ERR;
 
     if (c->addr)
         tfree((char *) c->addr);
@@ -223,15 +227,6 @@ static void _client_free(Client *c) {
         free_reply(c->reply);
 
     tfree(c);
-}
-
-/* Hashtable destructor function for Client objects. */
-static int client_free(HashTableEntry *entry) {
-
-    if (!entry)
-        return -HASHTABLE_ERR;
-
-    _client_free(entry->val);
 
     return HASHTABLE_OK;
 }
@@ -266,7 +261,7 @@ static int quit_handler(TriteDB *db, Client *c) {
     close(c->fd);
     info.nclients--;
 
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     // Remove client from the clients map
     hashtable_del(db->clients, c->uuid);
@@ -279,7 +274,7 @@ static int info_handler(TriteDB *db, Client *c) {
 
     info.uptime = time(NULL) - info.start_time;
     // TODO make key-val-list response
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -300,7 +295,7 @@ static int keys_handler(TriteDB *db, Client *c) {
 
     list_free(keys, 1);
     free_response(response, LIST_CONTENT);
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -437,7 +432,7 @@ static int get_handler(TriteDB *db, Client *c) {
         }
     }
 
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -478,7 +473,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
         set_ack_reply(c, OK);
     }
 
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -522,7 +517,7 @@ static int del_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -568,7 +563,7 @@ static int inc_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -615,7 +610,7 @@ static int dec_handler(TriteDB *db, Client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -630,7 +625,7 @@ static int db_handler(TriteDB *db, Client *c) {
     set_reply(c, buffer);
     free_response(response, DATA_CONTENT);
 
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -659,7 +654,7 @@ static int use_handler(TriteDB *db, Client *c) {
 
     set_ack_reply(c, OK);
 
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -681,7 +676,7 @@ static int count_handler(TriteDB *db, Client *c) {
     set_reply(c, b);
     free_response(res, VALUE_CONTENT);
 
-    free_request(c->ptr, 0);
+    free_request(c->ptr, SINGLE_REQUEST);
 
     return OK;
 }
@@ -1172,11 +1167,41 @@ int start_server(const char *addr, const char *port, int node_fd) {
 
     tritedb.epollfd = epollfd;
 
+    /* If it is run in CLUSTER mode add an additional descriptor and register
+       it to the event loop */
+    if (config.mode == CLUSTER) {
+
+        /* Add 10k to the listening server port */
+        int bport = atoi(port) + 10000;
+        char bus_port[number_len(bport)];
+        snprintf(tritedb.busport, sizeof(bus_port), "%d", bport);
+
+        /* The bus one for distribution */
+        int bfd = make_listen(addr, tritedb.busport, AF_INET);
+
+        /* Client structure for the bus server component */
+        Client bus_server = {
+            .addr = addr,
+            .fd = bfd,
+            .last_action_time = 0,
+            .ctx_handler = accept_handler,
+            .reply = NULL,
+            .ptr = NULL,
+            .db = NULL
+        };
+
+        /* Set bus socket in EPOLLIN too */
+        add_epoll(tritedb.epollfd, bfd, &bus_server);
+    }
+
     tinfo("TriteDB v%s", config.version);
     if (config.socket_family == UNIX)
         tinfo("Starting server on %s", addr);
     else
         tinfo("Starting server on %s:%s", addr, port);
+
+    if (config.mode == CLUSTER)
+        tinfo("Opened bus port on %s:%s", addr, tritedb.busport);
 
     // Record start time
     info.start_time = time(NULL);

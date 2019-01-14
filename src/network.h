@@ -59,6 +59,10 @@ typedef struct {
 /* Set non-blocking socket */
 int set_nonblocking(int);
 
+/* Set TCP_NODELAY flag to true, disabling Nagle's algorithm, no more waiting
+   for incoming packets on the buffer */
+int set_tcp_nodelay(int);
+
 /* Auxiliary function for creating epoll server */
 int create_and_bind(const char *, const char *, int);
 
@@ -70,6 +74,9 @@ int make_listen(const char *, const char *, int);
 
 /* Accept a connection and add it to the right epollfd */
 int accept_connection(int);
+
+/* Open a connection with a target host:port */
+int open_connection(const char *, int);
 
 /* Epoll management functions */
 EpollLoop *epoll_loop_init(int, int);
