@@ -647,6 +647,7 @@ static int request_handler(TriteDB *db, Client *client) {
              client connected. */
     if (rc == -ERRCLIENTDC || rc == -ERRMAXREQSIZE) {
         ringbuf_free(rbuf);
+        tfree(buffer);
         goto errclient;
     }
 
