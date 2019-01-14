@@ -115,7 +115,7 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode, int *rc) {
         }
     }
 
-    uint8_t tmp[ringbuf_size(rbuf)];
+    uint8_t *tmp = tmalloc(ringbuf_size(rbuf));
     uint8_t *bytearray = tmp;
 
     /* Try to read at least length of the packet */
@@ -166,6 +166,8 @@ Buffer *recv_packet(int clientfd, Ringbuffer *rbuf, uint8_t *opcode, int *rc) {
 
     *opcode = *opc;
 
+    tfree(tmp);
+
     return b;
 
 errrecv:
@@ -174,6 +176,8 @@ errrecv:
     close(clientfd);
 
 err:
+
+    tfree(tmp);
 
     return NULL;
 }
