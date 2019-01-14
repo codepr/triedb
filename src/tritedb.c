@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
                 debug = 1;
                 break;
             default:
-                fprintf(stderr, "Usage: %s [-a addr] [-p port] [-v]\n", argv[0]);
+                fprintf(stderr, "Usage: %s [-a addr] [-p port] [-m mode] [-c conf] [-v]\n", argv[0]);
                 exit(EXIT_FAILURE);
         }
     }
@@ -92,6 +92,7 @@ int main(int argc, char **argv) {
             char *target = argv[optind + 1];
             int tport = atoi(argv[optind + 2]) + 10000;
 
+            tinfo("Connecting to %s:%d", target, tport);
             // Connect to the listening peer node
             fd = open_connection(target, tport);
             set_nonblocking(fd);

@@ -1165,6 +1165,22 @@ int start_server(const char *addr, const char *port, int node_fd) {
     /* Set socket in EPOLLIN flag mode, ready to read data */
     add_epoll(epollfd, fd, &server);
 
+    /* Add socket for bus communication if accepted by a seed node */
+    if (node_fd > 0) {
+
+        Client node = {
+            .addr = addr,
+            .fd = node_fd,
+            .last_action_time = 0,
+            .ctx_handler = accept_handler,
+            .reply = NULL,
+            .ptr = NULL,
+            .db = NULL
+        };
+
+        add_epoll(epollfd, node_fd, &node);
+    }
+
     tritedb.epollfd = epollfd;
 
     /* If it is run in CLUSTER mode add an additional descriptor and register
@@ -1177,9 +1193,12 @@ int start_server(const char *addr, const char *port, int node_fd) {
         snprintf(tritedb.busport, sizeof(bus_port), "%d", bport);
 
         /* The bus one for distribution */
-        int bfd = make_listen(addr, tritedb.busport, AF_INET);
+        int bfd = make_listen(addr, tritedb.busport, INET);
 
         /* Client structure for the bus server component */
+        // TODO make it in another thread or better, crate a usable client
+        // structure like if it was accepted as a new connection, cause
+        // actually it crashes the server by having NULL ptr
         Client bus_server = {
             .addr = addr,
             .fd = bfd,
