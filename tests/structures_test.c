@@ -520,6 +520,81 @@ static bool compare(void *ptr1, void *ptr2) {
 }
 
 
+static char *test_vector_init(void) {
+    Vector *v = vector_init();
+    ASSERT("[! vector_init]: Vector is not properly created", v != NULL);
+    vector_free(v);
+    printf(" [vector::vector_init]: OK\n");
+
+    return 0;
+}
+
+
+static char *test_vector_free(void) {
+    Vector *v = vector_init();
+    ASSERT("[! vector_free]: Vector is not properly created", v != NULL);
+    vector_free(v);
+    // XXX Hack, useless way
+    v = NULL;
+    ASSERT("[! vector_free]: Vector is not properly freed", v == NULL);
+    printf(" [vector::vector_free]: OK\n");
+
+    return 0;
+}
+
+
+static char *test_vector_append(void) {
+    Vector *v = vector_init();
+    vector_append(v, "hello");
+    ASSERT("[! vector_append]: Vector has not appended new item correctly", v->size == 1);
+    vector_free(v);
+    printf(" [vector::vector_append]: OK\n");
+
+    return 0;
+}
+
+
+static char *test_vector_set(void) {
+    Vector *v = vector_init();
+    vector_append(v, "hello");
+    vector_set(v, 0, "hellonew");
+    char *item = vector_get(v, 0);
+    ASSERT("[! vector_set]: Vector has not set new item correctly", STREQ(item, "hellonew", 8));
+    vector_free(v);
+    printf(" [vector::vector_set]: OK\n");
+
+    return 0;
+}
+
+
+static char *test_vector_get(void) {
+    Vector *v = vector_init();
+    vector_append(v, "hello");
+    vector_set(v, 0, "hellonew");
+    char *item = vector_get(v, 0);
+    ASSERT("[! vector_get]: Vector has not get new item correctly", STREQ(item, "hellonew", 8));
+    vector_free(v);
+    printf(" [vector::vector_get]: OK\n");
+
+    return 0;
+}
+
+
+static char *test_vector_delete(void) {
+    Vector *v = vector_init();
+    vector_append(v, "hello");
+    vector_set(v, 0, "hellonew");
+    char *item = vector_get(v, 0);
+    ASSERT("[! vector_delete]: Vector has not set new item correctly", STREQ(item, "hellonew", 8));
+    vector_delete(v, 0);
+    ASSERT("[! vector_delete]: Vector has not deleted item correctly", v->size == 0);
+    vector_free(v);
+    printf(" [vector::vector_delete]: OK\n");
+
+    return 0;
+}
+
+
 static char *test_vector_qsort(void) {
     Vector *v = vector_init();
     int n1 = 0;
@@ -645,6 +720,12 @@ char *structures_test() {
     RUN_TEST(test_trie_prefix_count);
     RUN_TEST(test_trie_prefix_inc);
     RUN_TEST(test_trie_prefix_dec);
+    RUN_TEST(test_vector_init);
+    RUN_TEST(test_vector_free);
+    RUN_TEST(test_vector_append);
+    RUN_TEST(test_vector_set);
+    RUN_TEST(test_vector_get);
+    RUN_TEST(test_vector_delete);
     RUN_TEST(test_vector_qsort);
     RUN_TEST(test_hashtable_create);
     RUN_TEST(test_hashtable_put);

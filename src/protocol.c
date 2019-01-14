@@ -204,6 +204,7 @@ static const int opcode_req_map[COMMAND_COUNT][2] = {
     {COUNT, KEY_COMMAND},
     {KEYS, KEY_COMMAND},
     {USE, KEY_COMMAND},
+    {DB, EMPTY_COMMAND},
     {INFO, EMPTY_COMMAND},
     {QUIT, EMPTY_COMMAND}
 };

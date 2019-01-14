@@ -345,3 +345,93 @@ class TriteDBTest(unittest.TestCase):
         self.assertEqual(self._send_get('key1'), b'value1')
 
         self._send_del(kvs.keys())
+
+    def test_use(self):
+
+        db = struct.pack('=BIB', 0xfd, htonl(6), 0x00)
+        self.connection.send(db)
+
+        header = self.connection.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
+        total_len = ntohl(total_len)
+        if code == 0x00:
+            payload = struct.unpack('=B', self.connection.recv(total_len - 6))
+            payload = code
+        else:
+            datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
+            payload = struct.unpack(f'={datalen}s', self.connection.recv(datalen))[0]
+
+        self.assertEqual(code, 0x01)
+        self.assertEqual(payload, b'db0')
+
+        dbname = "test-database"
+
+        use = struct.pack(
+            f'=BIBH{len(dbname)}s',
+            0x09,
+            htonl(8 + len(dbname)),
+            0x00,
+            htons(len(dbname)),
+            dbname.encode()
+        )
+
+        self.connection.send(use)
+
+        header = self.connection.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
+        total_len = ntohl(total_len)
+        _ = struct.unpack('=B', self.connection.recv(1))
+
+        self.assertEqual(code, 0x00)
+
+        db = struct.pack('=BIB', 0xfd, htonl(6), 0x00)
+        self.connection.send(db)
+
+        header = self.connection.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
+        total_len = ntohl(total_len)
+        if code == 0x00:
+            payload = struct.unpack('=B', self.connection.recv(total_len - 6))
+            payload = code
+        else:
+            datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
+            payload = struct.unpack(f'={datalen}s', self.connection.recv(datalen))[0]
+
+        self.assertEqual(code, 0x01)
+        self.assertEqual(payload, dbname.encode())
+
+        defaultdb = "db0"
+
+        use = struct.pack(
+            f'=BIBH{len(defaultdb)}s',
+            0x09,
+            htonl(8 + len(defaultdb)),
+            0x00,
+            htons(len(defaultdb)),
+            defaultdb.encode()
+        )
+
+        self.connection.send(use)
+
+        header = self.connection.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
+        total_len = ntohl(total_len)
+        _ = struct.unpack('=B', self.connection.recv(1))
+
+        self.assertEqual(code, 0x00)
+
+        db = struct.pack('=BIB', 0xfd, htonl(6), 0x00)
+        self.connection.send(db)
+
+        header = self.connection.recv(6)
+        code, total_len, _ = struct.unpack('=BIB', header)
+        total_len = ntohl(total_len)
+        if code == 0x00:
+            payload = struct.unpack('=B', self.connection.recv(total_len - 6))
+            payload = code
+        else:
+            datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
+            payload = struct.unpack(f'={datalen}s', self.connection.recv(datalen))[0]
+
+        self.assertEqual(code, 0x01)
+        self.assertEqual(payload, defaultdb.encode())

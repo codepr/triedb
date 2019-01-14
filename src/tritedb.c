@@ -38,6 +38,7 @@
 
 // Stops epoll_wait loops by sending an event
 void sigint_handler(int signum) {
+    printf("\n");
     eventfd_write(config.run, 1);
 }
 

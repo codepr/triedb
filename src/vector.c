@@ -36,7 +36,10 @@ Vector *vector_init(void) {
 
     v->maxsize = VECTOR_INIT_CAPACITY;
     v->size = 0L;
-    v->items = tcalloc(v->maxsize, sizeof(void *));
+    v->items = tmalloc(v->maxsize * sizeof(void *));
+
+    for (int i = 0; i < v->maxsize; i++)
+        v->items[i] = NULL;
 
     return v;
 }
@@ -67,8 +70,11 @@ void vector_append(Vector *v, void *item) {
 
 
 void vector_set(Vector *v, int index, void *item) {
-    if (index >= 0 && index < v->size)
+    if (index >= 0 && index < v->size) {
+        if (!v->items[index])
+            v->size++;
         v->items[index] = item;
+    }
 }
 
 

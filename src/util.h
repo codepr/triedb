@@ -33,7 +33,7 @@
 #include <stdbool.h>
 
 
-#define MAX_LOG_SIZE 99
+#define MAX_LOG_SIZE 119
 
 
 enum { DEBUG, INFORMATION, WARNING, ERROR };

@@ -73,6 +73,7 @@ static int ttl_handler(TriteDB *, Client *);
 static int inc_handler(TriteDB *, Client *);
 static int dec_handler(TriteDB *, Client *);
 static int use_handler(TriteDB *, Client *);
+static int db_handler(TriteDB *, Client *);
 static int count_handler(TriteDB *, Client *);
 static int keys_handler(TriteDB *, Client *);
 static int info_handler(TriteDB *, Client *);
@@ -95,6 +96,7 @@ static struct command commands_map[COMMAND_COUNT] = {
     {COUNT, count_handler},
     {KEYS, keys_handler},
     {USE, use_handler},
+    {DB, db_handler},
     {INFO, info_handler},
     {QUIT, quit_handler}
 };
@@ -223,13 +225,29 @@ static void _client_free(Client *c) {
     tfree(c);
 }
 
-/* Hashtable destructor function */
+/* Hashtable destructor function for Client objects. */
 static int client_free(HashTableEntry *entry) {
 
     if (!entry)
         return -HASHTABLE_ERR;
 
     _client_free(entry->val);
+
+    return HASHTABLE_OK;
+}
+
+/* Hashtable destructor function for Database objects. */
+static int database_free(HashTableEntry *entry) {
+
+    if (!entry)
+        return -HASHTABLE_ERR;
+
+    tfree((char *) ((Database *) entry->val)->name);
+
+    trie_free(((Database *) entry->val)->data);
+
+    tfree(entry->val);
+    tfree((char *) entry->key);
 
     return HASHTABLE_OK;
 }
@@ -271,7 +289,7 @@ static int keys_handler(TriteDB *db, Client *c) {
 
     KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
 
-    List *keys = trie_prefix_find(db->data, (const char *) cmd->key);
+    List *keys = trie_prefix_find(c->db->data, (const char *) cmd->key);
 
     Response *response = make_listcontent_response(keys);
 
@@ -304,7 +322,7 @@ static bool compare_ttl(void *arg1, void *arg2) {
 
 /* Private function, insert or update values into the the trie database,
    updating, if any present, expiring keys vector */
-static void put_data_into_trie(TriteDB *db, KeyValCommand *cmd) {
+static void put_data_into_trie(TriteDB *tdb, Database *db, KeyValCommand *cmd) {
 
     int16_t ttl = cmd->ttl != 0 ? cmd->ttl : -NOTTL;
 
@@ -315,6 +333,7 @@ static void put_data_into_trie(TriteDB *db, KeyValCommand *cmd) {
     } else {
         struct NodeData *nd =
             trie_insert(db->data, (const char *) cmd->key, cmd->val);
+
         bool has_ttl = nd->ttl == -NOTTL ? false : true;
 
         // Update expiring keys if ttl != -NOTTL and sort it
@@ -330,19 +349,23 @@ static void put_data_into_trie(TriteDB *db, KeyValCommand *cmd) {
             struct ExpiringKey *ek = tmalloc(sizeof(*ek));
             ek->nd = nd;
             ek->key = tstrdup((const char *) cmd->key);
+            ek->data_ptr = db->data;
 
             // Add the node data to the expiring keys only if it wasn't
             // already in, otherwise nothing should change cause the
             // expiring keys already got a pointer to the node data, which
             // will now have an updated TTL value
             if (!has_ttl)
-                vector_append(db->expiring_keys, ek);
+                vector_append(tdb->expiring_keys, ek);
 
             // Quicksort in O(nlogn) if there's more than one element in
             // the vector
-            vector_qsort(db->expiring_keys,
+            vector_qsort(tdb->expiring_keys,
                     compare_ttl, sizeof(struct ExpiringKey));
         }
+
+        // Update total counter of keys
+        tdb->keyspace_size++;
     }
 }
 
@@ -356,7 +379,7 @@ static int put_handler(TriteDB *db, Client *c) {
         KeyValCommand *cmd = request->command->kvcommand;
 
         // Insert data into the trie
-        put_data_into_trie(db, cmd);
+        put_data_into_trie(db, c->db, cmd);
 
     } else {
 
@@ -364,7 +387,7 @@ static int put_handler(TriteDB *db, Client *c) {
 
         // Apply insertion for each command
         for (uint32_t i = 0; i < bcmd->ncommands; i++)
-            put_data_into_trie(db, bcmd->commands[i]->kvcommand);
+            put_data_into_trie(db, c->db, bcmd->commands[i]->kvcommand);
     }
 
     // For now just a single response
@@ -382,7 +405,7 @@ static int get_handler(TriteDB *db, Client *c) {
     void *val = NULL;
 
     // Test for the presence of the key in the trie structure
-    bool found = trie_find(db->data, (const char *) cmd->key, &val);
+    bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
         set_ack_reply(c, NOK);
@@ -395,20 +418,22 @@ static int get_handler(TriteDB *db, Client *c) {
         int64_t delta = (nd->ctime + nd->ttl) - now;
 
         if (nd->ttl != -NOTTL && delta <= 0) {
-            trie_delete(db->data, (const char *) cmd->key);
+            trie_delete(c->db->data, (const char *) cmd->key);
             set_ack_reply(c, NOK);
+            // Update total keyspace counter
+            db->keyspace_size--;
         } else {
 
             // Update the last access time
             nd->latime = time(NULL);
 
             // and return it
-            Response *put = make_datacontent_response(nd->data);
-            Buffer *b = buffer_init(put->dcontent->header->size);
-            pack_response(b, put, DATA_CONTENT);
+            Response *response = make_datacontent_response(nd->data);
+            Buffer *buffer = buffer_init(response->dcontent->header->size);
+            pack_response(buffer, response, DATA_CONTENT);
 
-            set_reply(c, b);
-            free_response(put, DATA_CONTENT);
+            set_reply(c, buffer);
+            free_response(response, DATA_CONTENT);
         }
     }
 
@@ -424,7 +449,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
     void *val = NULL;
 
     // Check for key presence in the trie structure
-    bool found = trie_find(db->data, (const char *) cmd->key, &val);
+    bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
         set_ack_reply(c, NOK);
@@ -439,6 +464,7 @@ static int ttl_handler(TriteDB *db, Client *c) {
         struct ExpiringKey *ek = tmalloc(sizeof(*ek));
         ek->nd = nd;
         ek->key = tstrdup((const char *) cmd->key);
+        ek->data_ptr = c->db->data;
 
         // Push into the expiring keys list and merge sort it shortly after,
         // this way we have a mostly updated list of expiring keys at each
@@ -466,8 +492,11 @@ static int del_handler(TriteDB *db, Client *c) {
 
     // Flush all data in case of no prefixes passed
     if (cmd->len == 0) {
-        trie_node_free(db->data->root, &db->data->size);
+        trie_node_free(c->db->data->root, &c->db->data->size);
+        // Update total keyspace counter
+        db->keyspace_size--;
     } else {
+        size_t currsize = 0;
         for (int i = 0; i < cmd->len; i++) {
 
             // For each key in the keys array, check for presence and try to
@@ -476,13 +505,18 @@ static int del_handler(TriteDB *db, Client *c) {
             // it in the trie
             if (cmd->keys[i]->is_prefix == 1) {
 
+                currsize = c->db->data->size;
                 // We are dealing with a wildcard, so we apply the deletion to
                 // all keys below the wildcard
-                trie_prefix_delete(db->data, (const char *) cmd->keys[i]->key);
+                trie_prefix_delete(c->db->data, (const char *) cmd->keys[i]->key);
+                // Update total keyspace counter
+                db->keyspace_size -= currsize - c->db->data->size;
             } else {
-                found = trie_delete(db->data, (const char *) cmd->keys[i]->key);
+                found = trie_delete(c->db->data, (const char *) cmd->keys[i]->key);
                 if (found == false)
                     code = NOK;
+                // Update total keyspace counter
+                db->keyspace_size--;
             }
         }
     }
@@ -507,11 +541,12 @@ static int inc_handler(TriteDB *db, Client *c) {
     for (int i = 0; i < inc->len; i++) {
 
         if (inc->keys[i]->is_prefix == 1) {
-            trie_prefix_inc(db->data, (const char *) inc->keys[i]->key);
+            trie_prefix_inc(c->db->data, (const char *) inc->keys[i]->key);
         } else {
             // For each key in the keys array, check for presence and increment it
             // by one
-            found = trie_find(db->data, (const char *) inc->keys[i]->key, &val);
+            found = trie_find(c->db->data,
+                    (const char *) inc->keys[i]->key, &val);
             if (found == false || !val) {
                 code = NOK;
             } else {
@@ -522,7 +557,7 @@ static int inc_handler(TriteDB *db, Client *c) {
                     n = parse_int(nd->data);
                     ++n;
                     // Check for realloc if the new value is "larger" then previous
-                    char tmp[12];  // max size in bytes
+                    char tmp[number_len(n)];  // max size in bytes
                     sprintf(tmp, "%d", n);  // XXX Unsafe
                     size_t len = strlen(tmp);
                     nd->data = trealloc(nd->data, len + 1);
@@ -552,12 +587,13 @@ static int dec_handler(TriteDB *db, Client *c) {
     for (int i = 0; i < dec->len; i++) {
 
         if (dec->keys[i]->is_prefix) {
-            trie_prefix_dec(db->data, (const char *) dec->keys[i]->key);
+            trie_prefix_dec(c->db->data, (const char *) dec->keys[i]->key);
         } else {
 
             // For each key in the keys array, check for presence and increment it
             // by one
-            found = trie_find(db->data, (const char *) dec->keys[i]->key, &val);
+            found = trie_find(c->db->data,
+                    (const char *) dec->keys[i]->key, &val);
             if (found == false || !val) {
                 code = NOK;
             } else {
@@ -568,7 +604,7 @@ static int dec_handler(TriteDB *db, Client *c) {
                     n = parse_int(nd->data);
                     --n;
                     // Check for realloc if the new value is "smaller" then previous
-                    char tmp[12];
+                    char tmp[number_len(n)];
                     sprintf(tmp, "%d", n);
                     size_t len = strlen(tmp);
                     nd->data = trealloc(nd->data, len + 1);
@@ -584,11 +620,46 @@ static int dec_handler(TriteDB *db, Client *c) {
     return OK;
 }
 
-/* Set the current selected namespace for the connected client.
-   XXX still inactive */
+/* Get the current selected DB of the requesting client */
+static int db_handler(TriteDB *db, Client *c) {
+
+    Response *response = make_datacontent_response((uint8_t *) c->db->name);
+    Buffer *buffer = buffer_init(response->dcontent->header->size);
+    pack_response(buffer, response, DATA_CONTENT);
+
+    set_reply(c, buffer);
+    free_response(response, DATA_CONTENT);
+
+    free_request(c->ptr, 0);
+
+    return OK;
+}
+
+/* Set the current selected namespace for the connected client. */
 static int use_handler(TriteDB *db, Client *c) {
 
-    // TODO
+    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
+
+    /* Check for presence first */
+    Database *database = hashtable_get(db->dbs, (const char *) cmd->key);
+
+    /* It doesn't exist, we create a new database with the given name,
+       otherwise just assign it to the current db of the client */
+    if (!database) {
+        // TODO check for OOM
+        database = tmalloc(sizeof(*database));
+        database->name = tstrdup((const char *) cmd->key);
+        database->data = trie_new();
+        // Add it to the databases table
+        hashtable_put(db->dbs, tstrdup(database->name), database);
+        c->db = database;
+    } else {
+        c->db = database;
+    }
+
+    set_ack_reply(c, OK);
+
+    free_request(c->ptr, 0);
 
     return OK;
 }
@@ -601,8 +672,8 @@ static int count_handler(TriteDB *db, Client *c) {
 
     // Get the size of each key below the requested one, glob operation or the
     // entire trie size in case of NULL key
-    count = !cnt->key ? db->data->size :
-        trie_prefix_count(db->data, (const char *) cnt->key);
+    count = !cnt->key ? c->db->data->size :
+        trie_prefix_count(c->db->data, (const char *) cnt->key);
 
     Response *res = make_valuecontent_response(count);
     Buffer *b = buffer_init(res->vcontent->header->size);
@@ -815,6 +886,9 @@ static int accept_handler(TriteDB *db, Client *server) {
 
     client->reply = NULL;
 
+    /* Set the default db for the current user */
+    client->db = hashtable_get(db->dbs, "db0");
+
     /* Add it to the db instance */
     hashtable_put(db->clients, client->uuid, client);
 
@@ -861,7 +935,7 @@ static void free_expiring_keys(Vector *ekeys) {
    elegible */
 static void expire_keys(TriteDB *db) {
 
-    if (db->expiring_keys->size <= 0)
+    if (db->expiring_keys->size == 0)
         return;
 
     int64_t now = (int64_t) time(NULL);
@@ -876,9 +950,14 @@ static void expire_keys(TriteDB *db) {
         if (delta > 0)
             break;
 
-        trie_delete(db->data, ek->key);
+        /* ek->data_ptr points to the trie of the client which stores the given
+           key */
+        trie_delete(ek->data_ptr, ek->key);
 
         vector_delete(db->expiring_keys, i);
+
+        // Update total keyspace counter
+        db->keyspace_size--;
 
         tdebug("EXPIRING %s", ek->key);
 
@@ -894,9 +973,9 @@ void log_stats(TriteDB *db) {
     const char *uptime = time_to_string(info.uptime);
     const char *memory = memory_to_string(memory_used());
     tdebug("Connected clients: %d total connections: %d "
-            "requests: %d keys: %ld memory usage: %s  uptime: %s",
-            info.nclients, info.nconnections, info.nrequests,
-            db->data->size, memory, uptime);
+            "requests: %d dbs: %ld keys: %ld memory usage: %s  uptime: %s",
+            info.nclients, info.nconnections, info.nrequests, db->dbs->size,
+            db->keyspace_size, memory, uptime);
     tfree((char *) uptime);
     tfree((char *) memory);
 }
@@ -1044,10 +1123,18 @@ int start_server(const char *addr, const char *port, int node_fd) {
     TriteDB tritedb;
 
     /* Initialize SizigyDB server object */
-    tritedb.data = trie_new();
     tritedb.clients = hashtable_create(client_free);
     tritedb.peers = list_init();
     tritedb.expiring_keys = vector_init();
+    tritedb.dbs = hashtable_create(database_free);
+    tritedb.keyspace_size = 0LL;
+
+    /* Create default database */
+    Database *default_db = tmalloc(sizeof(Database));
+    default_db->name = tstrdup("db0");
+    default_db->data = trie_new();
+
+    hashtable_put(tritedb.dbs, tstrdup(default_db->name), default_db);
 
     /* Initialize epollfd for server component */
     int epollfd = epoll_create1(0);
@@ -1076,7 +1163,8 @@ int start_server(const char *addr, const char *port, int node_fd) {
         .last_action_time = 0,
         .ctx_handler = accept_handler,
         .reply = NULL,
-        .ptr = NULL
+        .ptr = NULL,
+        .db = NULL
     };
 
     /* Set socket in EPOLLIN flag mode, ready to read data */
@@ -1099,8 +1187,8 @@ cleanup:
 
     /* Free all resources allocated */
     list_free(tritedb.peers, 1);
-    trie_free(tritedb.data);
     hashtable_release(tritedb.clients);
+    hashtable_release(tritedb.dbs);
     free_expiring_keys(tritedb.expiring_keys);
 
     tdebug("Bye\n");

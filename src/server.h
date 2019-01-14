@@ -50,6 +50,8 @@ typedef struct reply Reply;
 
 typedef struct tritedb TriteDB;
 
+typedef struct database Database;
+
 
 /* Basic client structure, represents a connected client, with his last reply
  * and the command packet associated (PUT, GET, DEL etc...). It uses a function
@@ -75,6 +77,7 @@ struct client {
     int (*ctx_handler)(TriteDB *, Client *);
     Reply *reply;
     void *ptr;
+    Database *db;
 };
 
 
@@ -91,6 +94,7 @@ struct command {
 
 
 struct ExpiringKey {
+    Trie *data_ptr;
     const struct NodeData *nd;
     const char *key;
 };
@@ -98,23 +102,25 @@ struct ExpiringKey {
 
 /* Simple database abstraction, provide some namespacing to keyspace for each
    client */
-typedef struct {
+struct database {
     const char *name;
     Trie *data;
-} Database;
+};
 
 
 struct tritedb {
     /* Main epoll loop fd */
     int epollfd;
-    /* Main object map */
-    Trie *data;
     /* Connected clients */
     HashTable *clients;
     /* Peers connected */
     List *peers;
     /* Expiring keys */
     Vector *expiring_keys;
+    /* Database mappings name -> db object */
+    HashTable *dbs;
+    /* Total count of the database keys */
+    size_t keyspace_size;
 };
 
 
