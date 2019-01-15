@@ -30,7 +30,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <arpa/inet.h>
@@ -51,12 +50,12 @@
  * code for responding to commands like PUT or DEL, stating the result of the
  * operation
  */
-#define set_ack_reply(c, o) do {                        \
-    Response *r = make_nocontent_response((o));         \
-    struct buffer *b = buffer_init(r->ncontent->header->size); \
-    pack_response((b), r, NO_CONTENT);                  \
-    set_reply((c), (b));                                \
-    free_response(r, NO_CONTENT);                       \
+#define set_ack_reply(c, o) do {                                      \
+    union response *response = make_nocontent_response((o));          \
+    struct buffer *b = buffer_init(response->ncontent->header->size); \
+    pack_response((b), response, NO_CONTENT);                         \
+    set_reply((c), (b));                                              \
+    free_response(response, NO_CONTENT);                              \
 } while (0)
 
 /* Global information structure */
@@ -295,7 +294,7 @@ static int quit_handler(struct client *c) {
     close(c->fd);
     info.nclients--;
 
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     // Remove client from the clients map
     hashtable_del(tritedb.clients, c->uuid);
@@ -308,7 +307,7 @@ static int info_handler(struct client *c) {
 
     info.uptime = time(NULL) - info.start_time;
     // TODO make key-val-list response
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -316,11 +315,11 @@ static int info_handler(struct client *c) {
 
 static int keys_handler(struct client *c) {
 
-    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
+    struct key_command *cmd = c->request->command->kcommand;
 
     List *keys = trie_prefix_find(c->db->data, (const char *) cmd->key);
 
-    Response *response = make_listcontent_response(keys);
+    union response *response = make_listcontent_response(keys);
 
     struct buffer *buffer = buffer_init(response->lcontent->header->size);
     pack_response(buffer, response, LIST_CONTENT);
@@ -329,7 +328,7 @@ static int keys_handler(struct client *c) {
 
     list_free(keys, 1);
     free_response(response, LIST_CONTENT);
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -351,7 +350,8 @@ static bool compare_ttl(void *arg1, void *arg2) {
 
 /* Private function, insert or update values into the the trie database,
    updating, if any present, expiring keys vector */
-static void put_data_into_trie(struct database *db, KeyValCommand *cmd) {
+static void put_data_into_trie(struct database *db,
+        struct keyval_command *cmd) {
 
     int16_t ttl = cmd->ttl != 0 ? cmd->ttl : -NOTTL;
 
@@ -409,18 +409,18 @@ static void put_data_into_trie(struct database *db, KeyValCommand *cmd) {
 
 static int put_handler(struct client *c) {
 
-    Request *request = c->ptr;
+    struct request *request = c->request;
 
     if (request->reqtype == SINGLE_REQUEST) {
 
-        KeyValCommand *cmd = request->command->kvcommand;
+        struct keyval_command *cmd = request->command->kvcommand;
 
         // Insert data into the trie
         put_data_into_trie(c->db, cmd);
 
     } else {
 
-        BulkCommand *bcmd = request->bulk_command;
+        struct bulk_command *bcmd = request->bulk_command;
 
         // Apply insertion for each command
         for (uint32_t i = 0; i < bcmd->ncommands; i++)
@@ -430,7 +430,7 @@ static int put_handler(struct client *c) {
     // For now just a single response
     set_ack_reply(c, OK);
 
-    free_request(c->ptr, request->reqtype);
+    free_request(c->request, request->reqtype);
 
     return OK;
 }
@@ -438,7 +438,7 @@ static int put_handler(struct client *c) {
 
 static int get_handler(struct client *c) {
 
-    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
+    struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
 
     // Test for the presence of the key in the trie structure
@@ -465,7 +465,7 @@ static int get_handler(struct client *c) {
             nd->latime = time(NULL);
 
             // and return it
-            Response *response = make_datacontent_response(nd->data);
+            union response *response = make_datacontent_response(nd->data);
 
             struct buffer *buffer =
                 buffer_init(response->dcontent->header->size);
@@ -477,7 +477,7 @@ static int get_handler(struct client *c) {
         }
     }
 
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -485,7 +485,7 @@ static int get_handler(struct client *c) {
 
 static int ttl_handler(struct client *c) {
 
-    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
+    struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
 
     // Check for key presence in the trie structure
@@ -523,7 +523,7 @@ static int ttl_handler(struct client *c) {
         set_ack_reply(c, OK);
     }
 
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -532,7 +532,7 @@ static int ttl_handler(struct client *c) {
 static int del_handler(struct client *c) {
 
     int code = OK;
-    KeyListCommand *cmd = ((Request *) c->ptr)->command->klcommand;
+    struct key_list_command *cmd = c->request->command->klcommand;
     bool found = false;
 
     // Flush all data in case of no prefixes passed
@@ -571,7 +571,7 @@ static int del_handler(struct client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -583,7 +583,7 @@ static int del_handler(struct client *c) {
 static int inc_handler(struct client *c) {
 
     int code = OK, n = 0;
-    KeyListCommand *inc = ((Request *) c->ptr)->command->klcommand;
+    struct key_list_command *inc = c->request->command->klcommand;
     bool found = false;
     void *val = NULL;
 
@@ -620,7 +620,7 @@ static int inc_handler(struct client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -632,7 +632,7 @@ static int inc_handler(struct client *c) {
 static int dec_handler(struct client *c) {
 
     int code = OK, n = 0;
-    KeyListCommand *dec = ((Request *) c->ptr)->command->klcommand;
+    struct key_list_command *dec = c->request->command->klcommand;
     bool found = false;
     void *val = NULL;
 
@@ -668,7 +668,7 @@ static int dec_handler(struct client *c) {
     }
 
     set_ack_reply(c, code);
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -676,14 +676,16 @@ static int dec_handler(struct client *c) {
 /* Get the current selected DB of the requesting client */
 static int db_handler(struct client *c) {
 
-    Response *response = make_datacontent_response((uint8_t *) c->db->name);
+    union response *response =
+        make_datacontent_response((uint8_t *) c->db->name);
+
     struct buffer *buffer = buffer_init(response->dcontent->header->size);
     pack_response(buffer, response, DATA_CONTENT);
 
     set_reply(c, buffer);
     free_response(response, DATA_CONTENT);
 
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -691,7 +693,7 @@ static int db_handler(struct client *c) {
 /* Set the current selected namespace for the connected client. */
 static int use_handler(struct client *c) {
 
-    KeyCommand *cmd = ((Request *) c->ptr)->command->kcommand;
+    struct key_command *cmd = c->request->command->kcommand;
 
     /* Check for presence first */
     struct database *database =
@@ -713,7 +715,7 @@ static int use_handler(struct client *c) {
 
     set_ack_reply(c, OK);
 
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -722,20 +724,20 @@ static int use_handler(struct client *c) {
 static int count_handler(struct client *c) {
 
     int count = 0;
-    KeyCommand *cnt = ((Request *) c->ptr)->command->kcommand;
+    struct key_command *cnt = c->request->command->kcommand;
 
     // Get the size of each key below the requested one, glob operation or the
     // entire trie size in case of NULL key
     count = !cnt->key ? c->db->data->size :
         trie_prefix_count(c->db->data, (const char *) cnt->key);
 
-    Response *res = make_valuecontent_response(count);
+    union response *res = make_valuecontent_response(count);
     struct buffer *b = buffer_init(res->vcontent->header->size);
     pack_response(b, res, VALUE_CONTENT);
     set_reply(c, b);
     free_response(res, VALUE_CONTENT);
 
-    free_request(c->ptr, SINGLE_REQUEST);
+    free_request(c->request, SINGLE_REQUEST);
 
     return OK;
 }
@@ -787,8 +789,8 @@ static int request_handler(struct client *client) {
         goto freebuf;
 
     /* Currently we have a stream of bytes, we want to unpack them into a
-       Request structure */
-    Request *pkt = unpack_request(b);
+       struct request structure */
+    struct request *request = unpack_request(b);
 
     /* No more need of the byte buffer from now on */
     buffer_destroy(b);
@@ -800,14 +802,14 @@ static int request_handler(struct client *client) {
 
     /* If the packet couldn't be unpacket (e.g. we're OOM) we close the
        connection and release the client */
-    if (!pkt)
+    if (!request)
         goto errclient;
 
     client->last_action_time = (uint64_t) time(NULL);
 
     /* Link the correct structure to the client, according to the packet type
        received */
-    client->ptr = pkt;
+    client->request = request;
 
     int executed = 0;
     int dc = 0;
@@ -1214,7 +1216,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
         .last_action_time = 0,
         .ctx_handler = accept_handler,
         .reply = NULL,
-        .ptr = NULL,
+        .request = NULL,
         .db = NULL
     };
 
@@ -1233,7 +1235,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
         node.last_action_time = 0,
         node.ctx_handler = accept_handler,
         node.reply = NULL,
-        node.ptr = NULL,
+        node.request = NULL,
         node.db = NULL;
 
         add_epoll(epollfd, node_fd, &node);
@@ -1259,7 +1261,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
         bus_server.last_action_time = 0,
         bus_server.ctx_handler = accept_handler,
         bus_server.reply = NULL,
-        bus_server.ptr = NULL,
+        bus_server.request = NULL,
         bus_server.db = NULL;
 
         /* Set bus socket in EPOLLIN too */

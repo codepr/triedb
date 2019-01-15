@@ -86,7 +86,7 @@ struct client {
     int fd;
     int (*ctx_handler)(struct client *);
     struct reply *reply;
-    void *ptr;
+    struct request *request;
     struct database *db;
 };
 

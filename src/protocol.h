@@ -37,7 +37,7 @@
 #define NOK                     0x01
 #define EOOM                    0x01
 
-/* Request type */
+/* struct request type */
 #define SINGLE_REQUEST          0x00
 #define BULK_REQUEST            0x01
 
@@ -48,7 +48,7 @@
 #define KEY_LIST_COMMAND        0x03
 #define KEY_VAL_LIST_COMMAND    0x04
 
-/* Response type */
+/* union response type */
 #define NO_CONTENT              0x00
 #define DATA_CONTENT            0x01
 #define VALUE_CONTENT           0x02
@@ -131,25 +131,25 @@ void write_bytes(struct buffer *, uint8_t *);
  * code, the total size of the packet including the body and if it carry a
  * single command or a stream of sequential commands.
  */
-typedef struct {
+struct header {
     uint8_t opcode;
     uint32_t size;
     uint8_t is_bulk;
-} Header;
+};
 
 /* Definition of a single key, with `is_prefix` defining if the key must be
  * treated as a prefix, in other words if the command which operates on it
  * have to be used as a glob style command e.g. DEL hello* deletes all keys
  * starting with hello
  */
-struct Key {
+struct key {
     uint16_t keysize;
     uint8_t *key;
     uint8_t is_prefix;
 };
 
 /* Definition of a key-value pair, for the rest it is equal to Key */
-struct KeyVal {
+struct keyval {
     uint16_t keysize;
     uint32_t valsize;
     uint8_t *key;
@@ -159,134 +159,134 @@ struct KeyVal {
 
 // Empty command, for those commands that doesn't require a body at all, like
 // QUIT
-typedef struct {
-    Header *header;
-} EmptyCommand;
+struct empty_command {
+    struct header *header;
+};
 
 // For all commands that does only need key field and some extra optionals
 // fields like the time to live (`ttl`) or the `is_prefix` flag
 // e.g. GET, TTL, INC, DEC.. etc
-typedef struct {
-    Header *header;
+struct key_command {
+    struct header *header;
     uint16_t keysize;
     uint8_t *key;
     uint8_t is_prefix;
     uint16_t ttl;
-} KeyCommand;
+};
 
 // For all commands that does need key and val fields with some extra optionals
 // fields like the time to live (`ttl`) or the `is_prefix` flag
 // e.g. PUT .. etc
-typedef struct {
-    Header *header;
+struct keyval_command {
+    struct header *header;
     uint16_t keysize;
     uint32_t valsize;
     uint8_t *key;
     uint8_t *val;
     uint8_t is_prefix;
     uint16_t ttl;
-} KeyValCommand;
+};
 
 // For all commands that does need a list of keys with some extra optionals
 // fields like the time to live (`ttl`) or the `is_prefix` flag
 // e.g. DEL .. etc
-typedef struct {
-    Header *header;
+struct key_list_command {
+    struct header *header;
     uint32_t len;
-    struct Key **keys;
-} KeyListCommand;
+    struct key **keys;
+};
 
 // For commands list formed by key-value complete pairs
-typedef struct {
-    Header *header;
+struct keyval_list_command {
+    struct header *header;
     uint16_t len;
-    struct KeyValue **pairs;
-} KeyValListCommand;
+    struct keyvalue **pairs;
+};
 
-// Define a request, can be either an `EmptyCommand`, a `KeyCommand`, a
-// `KeyValCommand` or a `KeyListCommand`
+// Define a request, can be either an `struct empty_command`, a `struct key_command`, a
+// `struct keyval_command` or a `struct key_list_command`
 // TODO move header outside of each single command
-typedef struct {
+struct command {
     uint8_t cmdtype;
     union {
-        EmptyCommand *ecommand;
-        KeyCommand *kcommand;
-        KeyValCommand *kvcommand;
-        KeyListCommand *klcommand;
+        struct empty_command *ecommand;
+        struct key_command *kcommand;
+        struct keyval_command *kvcommand;
+        struct key_list_command *klcommand;
     };
-} Command;
+};
 
 /* List of commands, used to handle bulk requests, a stream of sequential
    commands to be executed in a single TCP request. */
-typedef struct {
+struct bulk_command {
     uint32_t ncommands;
-    Command **commands;
-} BulkCommand;
+    struct command **commands;
+};
 
 /* A complete request, can be either a single command or a bulk one */
-typedef struct {
+struct request {
     uint8_t reqtype;
     union {
-        Command *command;
-        BulkCommand *bulk_command;
+        struct command *command;
+        struct bulk_command *bulk_command;
     };
-} Request;
+};
 
 /* Unpack a request from network byteorder (a big-endian) bytestream into a
-   Request struct */
-Request *unpack_request(struct buffer *);
+   struct request struct */
+struct request *unpack_request(struct buffer *);
 
 /* Unpack a command from network byteorder to a Command struct */
-Command *unpack_command(struct buffer *, Header *);
+struct command *unpack_command(struct buffer *, struct header *);
 
 /* Cleanup functions */
-void free_request(Request *, uint8_t);
+void free_request(struct request *, uint8_t);
 
-void free_command(Command *, bool);
+void free_command(struct command *, bool);
 
 
-// Response structure without body, like ACK etc.
-typedef struct {
-    Header *header;
+// union response structure without body, like ACK etc.
+struct no_content {
+    struct header *header;
     uint8_t code;
-} NoContent;
+};
 
-// Response with data, like GET etc.
-typedef struct {
-    Header *header;
+// union response with data, like GET etc.
+struct data_content {
+    struct header *header;
     uint32_t datalen;
     uint8_t *data;
-} DataContent;
+};
 
-// Response with values, like COUNT etc.
-typedef struct {
-    Header *header;
+// union response with values, like COUNT etc.
+struct value_content {
+    struct header *header;
     uint32_t val;
-} ValueContent;
+};
 
-// Response with list, like glob GET etc.
-typedef struct {
-    Header *header;
+// union response with list, like glob GET etc.
+struct list_content {
+    struct header *header;
     uint16_t len;
-    struct Key **keys;
-} ListContent;
+    struct key **keys;
+};
 
 
-typedef union {
-    NoContent *ncontent;
-    DataContent *dcontent;
-    ValueContent *vcontent;
-    ListContent *lcontent;
-} Response;
+union response {
+    struct no_content *ncontent;
+    struct data_content *dcontent;
+    struct value_content *vcontent;
+    struct list_content *lcontent;
+};
 
 
-Response *make_nocontent_response(uint8_t);
-Response *make_datacontent_response(const uint8_t *);
-Response *make_valuecontent_response(uint32_t);
-Response *make_listcontent_response(const List *);
+int make_nocontent_response(uint8_t, union response *);
+int make_datacontent_response(const uint8_t *, union response *);
+int make_valuecontent_response(uint32_t, union response *);
+int make_listcontent_response(const List *, union response *);
 
-void pack_response(struct buffer *, const Response *, int);
-void free_response(Response *, int);
+void pack_response(struct buffer *, const union response *, int);
+void free_response(union response *, int);
 
 
 #endif
