@@ -81,7 +81,7 @@ void list_free(List *l, int deep) {
 }
 
 
-unsigned long list_size(List *list) {
+unsigned long list_size(const List *list) {
     return list->len;
 }
 
@@ -329,7 +329,7 @@ struct list_node *merge_sort(struct list_node *head) {
 /* Search for a given node based on a comparison of char stored in structure
  * and a value, O(n) at worst
  */
-struct list_node *linear_search(List *list, int value) {
+struct list_node *linear_search(const List *list, int value) {
 
     if (!list || list->len == 0)
         return NULL;

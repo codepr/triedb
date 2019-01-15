@@ -84,23 +84,12 @@ struct client {
     const char *addr;
     const char uuid[37];
     int fd;
-    int (*ctx_handler)(struct tritedb *, struct client *);
+    int (*ctx_handler)(struct client *);
     struct reply *reply;
     void *ptr;
     struct database *db;
 };
 
-
-struct reply {
-    int fd;
-    struct buffer *payload;
-};
-
-
-struct command {
-    int ctype;
-    int (*handler)(struct tritedb *, struct client *);
-};
 
 /* Structure to represent a key with a TTL set which is not -NOTTL, e.g. has a
    timeout after which the key will be deleted */
@@ -133,10 +122,7 @@ struct informations {
 };
 
 
-extern struct informations info;
-
-
-int start_server(const char *, const char *, int );
+int start_server(const char *, const char *, int);
 
 
 #endif

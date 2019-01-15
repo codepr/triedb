@@ -188,7 +188,7 @@ HashTable *hashtable_create(int (*destructor)(struct hashtable_entry *)) {
 }
 
 
-size_t hashtable_size(HashTable *table) {
+size_t hashtable_size(const HashTable *table) {
     return table->size;
 }
 

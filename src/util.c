@@ -58,14 +58,15 @@ void t_log_close(void) {
 }
 
 
-void t_log(const uint8_t level, const char *fmt, ...) {
+void t_log(uint8_t level, const char *fmt, ...) {
 
     assert(fmt);
 
     va_list ap;
     char msg[MAX_LOG_SIZE + 4];
 
-    if (level < config.loglevel) return;
+    if (level < conf->loglevel)
+        return;
 
     va_start(ap, fmt);
     vsnprintf(msg, sizeof(msg), fmt, ap);

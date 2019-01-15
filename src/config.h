@@ -38,7 +38,7 @@
 
 // Default parameters
 
-#define VERSION                     "0.4.4"
+#define VERSION                     "0.4.5"
 #define DEFAULT_MODE                STANDALONE
 #define DEFAULT_SOCKET_FAMILY       INET
 #define DEFAULT_LOG_LEVEL           INFORMATION
@@ -85,7 +85,7 @@ struct config {
     int tcp_backlog;
 };
 
-extern struct config config;
+extern struct config *conf;
 
 
 void config_set_default(void);

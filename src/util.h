@@ -47,7 +47,7 @@ int number_len(size_t);
 /* Logging */
 void t_log_init(const char *);
 void t_log_close(void);
-void t_log(const uint8_t, const char *, ...);
+void t_log(uint8_t, const char *, ...);
 
 /* Memory management */
 void *tmalloc(size_t);

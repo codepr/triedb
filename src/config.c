@@ -35,6 +35,11 @@
 #include "network.h"
 
 
+/* The main configuration structure */
+static struct config config;
+struct config *conf;
+
+
 struct llevel {
     const char *lname;
     int loglevel;
@@ -47,11 +52,6 @@ static const struct llevel lmap[5] = {
     {"INFO", INFORMATION},
     {"INFORMATION", INFORMATION}
 };
-
-
-// Reference to the config structure, could be refactored lately to a more
-// structured configuration
-struct config config;
 
 
 static size_t read_memory_with_mul(const char *memory_string) {
@@ -214,13 +214,13 @@ static void add_config_value(const char *key, const char *value) {
 }
 
 
-static void strip_spaces(char **str) {
+static inline void strip_spaces(char **str) {
     if (!*str) return;
     while (isspace(**str) && **str) ++(*str);
 }
 
 
-static void read_bytes(char **str, char *dest) {
+static inline void read_bytes(char **str, char *dest) {
 
     if (!str || !dest) return;
 
@@ -288,6 +288,11 @@ bool config_load(const char *configpath) {
 
 
 void config_set_default(void) {
+
+    // Set the global pointer
+    conf = &config;
+
+    // Set default values
     config.version = VERSION;
     config.mode = STANDALONE;
     config.socket_family = DEFAULT_SOCKET_FAMILY;

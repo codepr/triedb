@@ -51,6 +51,11 @@ void vector_free(Vector *v) {
 }
 
 
+size_t vector_size(const Vector *v) {
+    return v->size;
+}
+
+
 static void vector_resize(Vector *v, int newsize) {
 
     void **items = trealloc(v->items, sizeof(void *) * newsize);
@@ -75,7 +80,7 @@ void vector_set(Vector *v, int index, void *item) {
 }
 
 
-void *vector_get(Vector *v, int index) {
+void *vector_get(const Vector *v, int index) {
     if (index >= 0 && index < v->size)
         return v->items[index];
     return NULL;

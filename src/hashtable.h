@@ -73,7 +73,7 @@ HashTable *hashtable_create(int (*destructor)(struct hashtable_entry *));
 void hashtable_release(HashTable *);
 
 /* Return hashtable size */
-size_t hashtable_size(HashTable *);
+size_t hashtable_size(const HashTable *);
 
 /* Insert a new key-value pair into the hashtable, accept a const char * as
    key and a void * for value */

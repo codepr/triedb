@@ -55,7 +55,7 @@ List *list_init(void);
 void list_free(List *, int);
 
 /* Return list size */
-unsigned long list_size(List *);
+unsigned long list_size(const List *);
 
 /* Clear out the list without de-allocating it */
 void list_clear(List *, int);
@@ -86,7 +86,7 @@ struct list_node *merge_sort(struct list_node *);
 struct list_node *merge_sort_tnode(struct list_node *);
 
 /* Perform a linear search in O(n) at worst */
-struct list_node *linear_search(List *, int);
+struct list_node *linear_search(const List *, int);
 
 
 #endif

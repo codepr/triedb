@@ -48,11 +48,13 @@ Vector *vector_init(void);
 
 void vector_free(Vector *);
 
+size_t vector_size(const Vector *);
+
 void vector_append(Vector *, void *);
 
 void vector_set(Vector *, int, void *);
 
-void *vector_get(Vector *, int);
+void *vector_get(const Vector *, int);
 
 void vector_delete(Vector *, int);
 

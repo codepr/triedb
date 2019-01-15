@@ -119,7 +119,7 @@ Trie *trie_new(void) {
 }
 
 
-size_t trie_size(Trie *trie) {
+size_t trie_size(const Trie *trie) {
     return trie->size;
 }
 

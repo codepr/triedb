@@ -39,7 +39,7 @@
 // Stops epoll_wait loops by sending an event
 void sigint_handler(int signum) {
     printf("\n");
-    eventfd_write(config.run, 1);
+    eventfd_write(conf->run, 1);
 }
 
 
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
 
     char *addr = DEFAULT_HOSTNAME;
     char *port = DEFAULT_PORT;
-    char *conf = DEFAULT_CONF_PATH;
+    char *confpath = DEFAULT_CONF_PATH;
     char *mode = "STANDALONE";
     int debug = 0;
     int fd = -1;
@@ -63,18 +63,18 @@ int main(int argc, char **argv) {
         switch (opt) {
             case 'a':
                 addr = optarg;
-                strcpy(config.hostname, addr);
+                strcpy(conf->hostname, addr);
                 break;
             case 'c':
-                conf = optarg;
+                confpath = optarg;
                 break;
             case 'p':
                 port = optarg;
-                strcpy(config.port, port);
+                strcpy(conf->port, port);
                 break;
             case 'm':
                 mode = optarg;
-                config.mode = STREQ(mode, "CLUSTER", 7) ? CLUSTER : STANDALONE;
+                conf->mode = STREQ(mode, "CLUSTER", 7) ? CLUSTER : STANDALONE;
                 break;
             case 'v':
                 debug = 1;
@@ -101,18 +101,18 @@ int main(int argc, char **argv) {
     }
 
     // Override default DEBUG mode
-    config.loglevel = debug == 1 ? DEBUG : WARNING;
+    conf->loglevel = debug == 1 ? DEBUG : WARNING;
 
     // Try to load a configuration, if found
-    config_load(conf);
+    config_load(confpath);
 
     // Initialize logging
-    t_log_init(config.logpath);
+    t_log_init(conf->logpath);
 
     config_print();
 
     // Start
-    start_server(config.hostname, config.port, fd);
+    start_server(conf->hostname, conf->port, fd);
 
     // Close logger
     t_log_close();

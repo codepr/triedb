@@ -172,7 +172,7 @@ int make_listen(const char *host, const char *port, int socket_family) {
     if (socket_family == INET)
         set_tcp_nodelay(sfd);
 
-    if ((listen(sfd, config.tcp_backlog)) == -1) {
+    if ((listen(sfd, conf->tcp_backlog)) == -1) {
         perror("listen");
         abort();
     }
@@ -194,7 +194,7 @@ int accept_connection(int serversock) {
     set_nonblocking(clientsock);
 
      // Set TCP_NODELAY only for TCP sockets
-    if (config.socket_family == INET)
+    if (conf->socket_family == INET)
         set_tcp_nodelay(clientsock);
 
     char ip_buff[INET_ADDRSTRLEN + 1];
