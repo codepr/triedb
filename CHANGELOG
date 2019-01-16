@@ -1,3 +1,13 @@
+0.4.5 - 2019/01/15
+==================
+
+- Refactored code to address some readability issues and respecting a better
+  style of coding in not abusing typedef declaration that hides when a structure
+  is not encapsulated and accessed by only dedicated functions (e.g. containers).
+- Incrementing cluster mode, handling connection from nodes.
+- Add additional stats to information global structure.
+
+
 0.4.4 - 2019/01/14
 ==================
 

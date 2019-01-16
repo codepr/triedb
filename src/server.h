@@ -43,6 +43,9 @@
 #define ERRMAXREQSIZE           1
 #define ERRCLIENTDC             2
 
+
+enum client_type { CLIENT, SERVER, NODE };
+
 /* Global db instance, containing some connection data, clients, expiring keys
    and databases */
 struct tritedb {
@@ -52,8 +55,8 @@ struct tritedb {
     char busport[5];
     /* Connected clients */
     HashTable *clients;
-    /* Peers connected */
-    List *peers;
+    /* Other tritedb nodes connected, only in CLUSTER mode */
+    HashTable *nodes;
     /* Expiring keys */
     Vector *expiring_keys;
     /* struct database mappings name -> db object */
@@ -80,6 +83,7 @@ struct tritedb {
  */
 
 struct client {
+    enum client_type ctype;
     uint64_t last_action_time;
     const char *addr;
     const char uuid[37];
@@ -111,6 +115,8 @@ struct database {
 struct informations {
     /* Number of clients currently connected */
     uint32_t nclients;
+    /* Number of nodes currently connected */
+    uint16_t nnodes;
     /* Total number of clients connected since the start */
     uint32_t nconnections;
     /* Timestamp of the start time */
@@ -119,6 +125,10 @@ struct informations {
     uint64_t uptime;
     /* Total number of requests served */
     uint32_t nrequests;
+    /* Total number of bytes received */
+    uint64_t ninputbytes;
+    /* Total number of bytes sent out */
+    uint64_t noutputbytes;
 };
 
 

@@ -50,12 +50,12 @@
  * code for responding to commands like PUT or DEL, stating the result of the
  * operation
  */
-#define set_ack_reply(c, o) do {                                      \
-    union response *response = make_nocontent_response((o));          \
-    struct buffer *b = buffer_init(response->ncontent->header->size); \
-    pack_response((b), response, NO_CONTENT);                         \
-    set_reply((c), (b));                                              \
-    free_response(response, NO_CONTENT);                              \
+#define set_ack_reply(c, o) do {                                            \
+    union response *response = make_ack_response((o));                      \
+    struct buffer *buffer = buffer_init(response->ncontent->header->size);  \
+    pack_response(buffer, response, NO_CONTENT);                            \
+    set_reply((c), buffer, -1);                                                 \
+    free_response(response, NO_CONTENT);                                    \
 } while (0)
 
 /* Global information structure */
@@ -84,6 +84,15 @@ struct command_handler {
 };
 
 /*
+ * Connection structure for private use of the module, mainly for accepting
+ * new connections
+ */
+struct connection {
+    char ip[INET_ADDRSTRLEN + 1];
+    int fd;
+};
+
+/*
  * General context handler functions, with the exception of free_reply which
  * is just an helper function to deallocate a reply structure, all of them
  * should be associated to a requesting client on each different step of
@@ -92,6 +101,7 @@ struct command_handler {
 static void free_reply(struct reply *);
 static int reply_handler(struct client *);
 static int accept_handler(struct client *);
+static int accept_node_handler(struct client *);
 static int request_handler(struct client *);
 
 /* Specific handlers for commands that every client can request */
@@ -216,16 +226,27 @@ err:
     return NULL;
 }
 
-/* Build a reply object and link it to the struct client pointer */
-static inline void set_reply(struct client *c, struct buffer *payload) {
+/*
+ * Build a reply object and link it to the struct client pointer. Even tho it
+ * removes the const qualifier from the struct buffer pointed by the ptr as a
+ * matter of fact it doesn't touch it, so it is semantically correct to mark
+ * it as const in the declaration.
+ *
+ * As last parameter it accepts a file descriptor which can be optionally set
+ * to a negative value (-1 std) to fallback to the client fd; this to handle
+ * communication from connected clients or from other tritedb nodes in a
+ * cluster.
+ */
+static inline void set_reply(struct client *c,
+        const struct buffer *payload, int fd) {
 
     struct reply *r = tmalloc(sizeof(*r));
 
     if (!r)
         oom("setting reply");
 
-    r->fd = c->fd;
-    r->payload = payload;
+    r->fd = fd > 0 ? fd : c->fd;
+    r->payload = (struct buffer *) payload;
 
     c->reply = r;
 }
@@ -264,7 +285,11 @@ static inline int client_free(struct hashtable_entry *entry) {
     return HASHTABLE_OK;
 }
 
-/* Hashtable destructor function for struct database objects. */
+/*
+ * Hashtable destructor function for struct database objects. It's the
+ * function that will be called on hashtable_del call as well as
+ * hashtable_release too.
+ */
 static inline int database_free(struct hashtable_entry *entry) {
 
     if (!entry)
@@ -319,12 +344,12 @@ static int keys_handler(struct client *c) {
 
     List *keys = trie_prefix_find(c->db->data, (const char *) cmd->key);
 
-    union response *response = make_listcontent_response(keys);
+    union response *response = make_list_response(keys);
 
     struct buffer *buffer = buffer_init(response->lcontent->header->size);
     pack_response(buffer, response, LIST_CONTENT);
 
-    set_reply(c, buffer);
+    set_reply(c, buffer, -1);
 
     list_free(keys, 1);
     free_response(response, LIST_CONTENT);
@@ -465,14 +490,14 @@ static int get_handler(struct client *c) {
             nd->latime = time(NULL);
 
             // and return it
-            union response *response = make_datacontent_response(nd->data);
+            union response *response = make_data_response(nd->data);
 
             struct buffer *buffer =
                 buffer_init(response->dcontent->header->size);
 
             pack_response(buffer, response, DATA_CONTENT);
 
-            set_reply(c, buffer);
+            set_reply(c, buffer, -1);
             free_response(response, DATA_CONTENT);
         }
     }
@@ -676,13 +701,12 @@ static int dec_handler(struct client *c) {
 /* Get the current selected DB of the requesting client */
 static int db_handler(struct client *c) {
 
-    union response *response =
-        make_datacontent_response((uint8_t *) c->db->name);
+    union response *response = make_data_response((uint8_t *) c->db->name);
 
     struct buffer *buffer = buffer_init(response->dcontent->header->size);
     pack_response(buffer, response, DATA_CONTENT);
 
-    set_reply(c, buffer);
+    set_reply(c, buffer, -1);
     free_response(response, DATA_CONTENT);
 
     free_request(c->request, SINGLE_REQUEST);
@@ -734,7 +758,7 @@ static int count_handler(struct client *c) {
     union response *res = make_valuecontent_response(count);
     struct buffer *b = buffer_init(res->vcontent->header->size);
     pack_response(b, res, VALUE_CONTENT);
-    set_reply(c, b);
+    set_reply(c, b, -1);
     free_response(res, VALUE_CONTENT);
 
     free_request(c->request, SINGLE_REQUEST);
@@ -753,43 +777,56 @@ static int request_handler(struct client *client) {
 
     int clientfd = client->fd;
 
-    /* struct buffer to initialize the ring buffer, used to handle input from
-       client */
+    /*
+     * struct buffer to initialize the ring buffer, used to handle input from
+     * client
+     */
     uint8_t *buffer = tmalloc(conf->max_request_size);
 
-    /* Ringbuffer pointer struct, helpful to handle different and unknown
-       size of chunks of data which can result in partially formed packets or
-       overlapping as well */
+    /*
+     * Ringbuffer pointer struct, helpful to handle different and unknown
+     * size of chunks of data which can result in partially formed packets or
+     * overlapping as well
+     */
     Ringbuffer *rbuf = ringbuf_init(buffer, conf->max_request_size);
 
-    /* Placeholders structures, at this point we still don't know if we got a
-       request or a response */
     uint8_t opcode = 0;
     int rc = 0;
 
-    /* We must read all incoming bytes till an entire packet is received. This
-       is achieved by using a standardized protocol, which send the size of the
-       complete packet as the first 4 bytes. By knowing it we know if the
-       packet is ready to be deserialized and used. */
+    /*
+     * We must read all incoming bytes till an entire packet is received. This
+     * is achieved by using a standardized protocol, which send the size of the
+     * complete packet as the first 4 bytes. By knowing it we know if the
+     * packet is ready to be deserialized and used.
+     */
     struct buffer *b = recv_packet(clientfd, rbuf, &opcode, &rc);
 
-    /* Looks like we got a client disconnection.
-       TODO: Set a error_handler for ERRMAXREQSIZE instead of dropping client
-             connection, explicitly returning an informative error code to the
-             client connected. */
+    /*
+     * Looks like we got a client disconnection.
+     * TODO: Set a error_handler for ERRMAXREQSIZE instead of dropping client
+     *       connection, explicitly returning an informative error code to the
+     *       client connected.
+     */
     if (rc == -ERRCLIENTDC || rc == -ERRMAXREQSIZE) {
         ringbuf_free(rbuf);
         tfree(buffer);
         goto errclient;
     }
 
-    /* If not correct packet received, we must free ringbuffer and reset the
-       handler to the request again, setting EPOLL to EPOLLIN */
+    /*
+     * If not correct packet received, we must free ringbuffer and reset the
+     * handler to the request again, setting EPOLL to EPOLLIN
+     */
     if (!b)
         goto freebuf;
 
-    /* Currently we have a stream of bytes, we want to unpack them into a
-       struct request structure */
+    // Update information stats
+    info.ninputbytes += b->size;
+
+    /*
+     * Currently we have a stream of bytes, we want to unpack them into a
+     * struct request structure
+     */
     struct request *request = unpack_request(b);
 
     /* No more need of the byte buffer from now on */
@@ -800,15 +837,19 @@ static int request_handler(struct client *client) {
 
     tfree(buffer);
 
-    /* If the packet couldn't be unpacket (e.g. we're OOM) we close the
-       connection and release the client */
+    /*
+     * If the packet couldn't be unpacket (e.g. we're OOM) we close the
+     * connection and release the client
+     */
     if (!request)
         goto errclient;
 
     client->last_action_time = (uint64_t) time(NULL);
 
-    /* Link the correct structure to the client, according to the packet type
-       received */
+    /*
+     * Link the correct structure to the client, according to the packet type
+     * received
+     */
     client->request = request;
 
     int executed = 0;
@@ -829,16 +870,20 @@ static int request_handler(struct client *client) {
     if (executed == 0)
         goto reset;
 
-    /* A disconnection happened, we close the handler, the file descriptor
-       have been already removed from the event loop */
+    /*
+     * A disconnection happened, we close the handler, the file descriptor
+     * have been already removed from the event loop
+     */
     if (dc == -1)
         goto exit;
 
     // Set reply handler as the current context handler
     client->ctx_handler = reply_handler;
 
-    /* Reset handler to request_handler in order to read new incoming data and
-       EPOLL event for read fds */
+    /*
+     * Reset handler to request_handler in order to read new incoming data and
+     * EPOLL event for read fds
+     */
     mod_epoll(tritedb.epollfd, clientfd, EPOLLOUT, client);
 
 exit:
@@ -867,8 +912,12 @@ errclient:
 }
 
 
-/* Handle reply state, after a request/response has been processed in
-   request_handler routine */
+/*
+ * Handle reply state, after a request/response has been processed in
+ * request_handler routine. Just send out all bytes stored in the reply buffer
+ * to the reply file descriptor, which can be either a connected client or a
+ * tritedb node connected to the bus port.
+ */
 static int reply_handler(struct client *client) {
 
     int ret = 0;
@@ -884,6 +933,9 @@ static int reply_handler(struct client *client) {
         ret = -1;
     }
 
+    // Update information stats
+    info.noutputbytes += sent;
+
     free_reply(client->reply);
     client->reply = NULL;
 
@@ -893,13 +945,16 @@ static int reply_handler(struct client *client) {
     return ret;
 }
 
-/* Handle new connection, create a a fresh new struct client structure and link
-   it to the fd, ready to be set in EPOLLIN event */
-static int accept_handler(struct client *server) {
+/*
+ * Accept a new incoming connection assigning ip address and socket descriptor
+ * to the connection structure pointer passed as argument
+ */
+static int accept_new_client(int fd, struct connection *conn) {
 
-    int fd = server->fd;
+    if (!conn)
+        return -1;
 
-    /* Accept the connection */
+     /* Accept the connection */
     int clientsock = accept_connection(fd);
 
     /* Abort if not accepted */
@@ -923,6 +978,22 @@ static int accept_handler(struct client *server) {
     if (getsockname(fd, (struct sockaddr *) &sin, &sinlen) < 0)
         return -1;
 
+    conn->fd = clientsock;
+    strcpy(conn->ip, ip_buff);
+
+    return 0;
+}
+
+/*
+ * Handle new connection, create a a fresh new struct client structure and link
+ * it to the fd, ready to be set in EPOLLIN event
+ */
+static int accept_handler(struct client *server) {
+
+    struct connection conn;
+
+    accept_new_client(server->fd, &conn);
+
     /* Create a client structure to handle his context connection */
     struct client *client = tmalloc(sizeof(struct client));
     if (!client)
@@ -934,8 +1005,9 @@ static int accept_handler(struct client *server) {
     uuid_unparse(binuuid, (char *) client->uuid);
 
     /* Populate client structure */
-    client->addr = tstrdup(ip_buff);
-    client->fd = clientsock;
+    client->ctype = CLIENT;
+    client->addr = tstrdup(conn.ip);
+    client->fd = conn.fd;
     client->ctx_handler = request_handler;
 
     /* Record last action as of now */
@@ -950,16 +1022,67 @@ static int accept_handler(struct client *server) {
     hashtable_put(tritedb.clients, client->uuid, client);
 
     /* Add it to the epoll loop */
-    add_epoll(tritedb.epollfd, clientsock, client);
+    add_epoll(tritedb.epollfd, conn.fd, client);
 
     /* Rearm server fd to accept new connections */
-    mod_epoll(tritedb.epollfd, fd, EPOLLIN, server);
+    mod_epoll(tritedb.epollfd, server->fd, EPOLLIN, server);
 
     /* Record the new client connected */
     info.nclients++;
     info.nconnections++;
 
     return 0;
+}
+
+/*
+ * Accept a tritedb instance connecting from a (at least logical) separate node
+ * by setting the client connected as type NODE
+ */
+static int accept_node_handler(struct client *bus_server) {
+
+    struct connection conn;
+
+    accept_new_client(bus_server->fd, &conn);
+
+    /* Create a client structure to handle his context connection */
+    struct client *new_node = tmalloc(sizeof(struct client));
+    if (!new_node)
+        oom("creating new_node during accept");
+
+    /* Generate random uuid */
+    uuid_t binuuid;
+    uuid_generate_random(binuuid);
+    uuid_unparse(binuuid, (char *) new_node->uuid);
+
+    /* Populate new_node structure */
+    new_node->ctype = NODE;
+    new_node->addr = tstrdup(conn.ip);
+    new_node->fd = conn.fd;
+    new_node->ctx_handler = request_handler;
+
+    /* Record last action as of now */
+    new_node->last_action_time = (uint64_t) time(NULL);
+
+    new_node->reply = NULL;
+
+    /* Set the default db for the current user */
+    new_node->db = hashtable_get(tritedb.dbs, "db0");
+
+    /* Add it to the db instance */
+    hashtable_put(tritedb.nodes, new_node->uuid, new_node);
+
+    /* Add it to the epoll loop */
+    add_epoll(tritedb.epollfd, conn.fd, new_node);
+
+    /* Rearm server fd to accept new connections */
+    mod_epoll(tritedb.epollfd, bus_server->fd, EPOLLIN, bus_server);
+
+    /* Record the new node connected */
+    info.nnodes++;
+    info.nconnections++;
+
+    return 0;
+
 }
 
 
@@ -1059,8 +1182,10 @@ static int add_cron_task(int epollfd, struct itimerspec timervalue) {
     return timerfd;
 }
 
-/* Main worker function, his responsibility is to wait on events on a shared
-   EPOLL fd, use the same way for clients or peer to distribute messages */
+/*
+ * Main worker function, his responsibility is to wait on events on a shared
+ * EPOLL fd, use the same way for clients or peer to distribute messages
+ */
 static void run_server(void) {
 
     struct epoll_event *evs = tmalloc(sizeof(*evs) * MAX_EVENTS);
@@ -1117,13 +1242,27 @@ static void run_server(void) {
                     (evs[i].events & EPOLLHUP) ||
                     (!(evs[i].events & EPOLLIN) && !(evs[i].events & EPOLLOUT))) {
 
-                /* An error has occured on this fd, or the socket is not
-                   ready for reading */
-                terror("Dropping client on %s",
-                        ((struct client *) evs[i].data.ptr)->addr);
-                hashtable_del(tritedb.clients,
-                        ((struct client *) evs[i].data.ptr)->uuid);
-                info.nclients--;
+                /*
+                 * An error has occured on this fd, or the socket is not ready
+                 * for reading
+                 */
+                struct client *client = evs[i].data.ptr;
+
+                terror("Dropping client on %s", client->addr);
+
+                /*
+                 * Clean out from global tables, from clients or from nodes
+                 * based on the client type
+                 */
+                hashtable_del(client->ctype == NODE ?
+                        tritedb.nodes : tritedb.clients, client->uuid);
+
+                // TODO: unify with if above
+                if (client->ctype == NODE)
+                    info.nnodes--;
+                else
+                    info.nclients--;
+
                 close(evs[i].data.fd);
 
                 continue;
@@ -1177,7 +1316,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
 
     /* Initialize SizigyDB server object */
     tritedb.clients = hashtable_create(client_free);
-    tritedb.peers = list_init();
+    tritedb.nodes = hashtable_create(client_free);
     tritedb.expiring_keys = vector_init();
     tritedb.dbs = hashtable_create(database_free);
     tritedb.keyspace_size = 0LL;
@@ -1209,8 +1348,12 @@ int start_server(const char *addr, const char *port, int node_fd) {
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conf->run, &ev) < 0)
         perror("epoll_ctl(2): add epollin");
 
-    /* struct client structure for the server component */
+    /*
+     * Client structure for the server component, start in the ACCEPT state,
+     * ready to accept new connections from client and handle commands.
+     */
     struct client server = {
+        .ctype = SERVER,
         .addr = addr,
         .fd = fd,
         .last_action_time = 0,
@@ -1223,19 +1366,22 @@ int start_server(const char *addr, const char *port, int node_fd) {
     /* Set socket in EPOLLIN flag mode, ready to read data */
     add_epoll(epollfd, fd, &server);
 
-    /* Add socket for bus communication if accepted by a seed node */
-    // TODO make it in another thread or better, crate a usable client
-    // structure like if it was accepted as a new connection, cause
-    // actually it crashes the server by having NULL ptr
+    /*
+     * Add socket for bus communication if accepted by a seed node
+     * TODO make it in another thread or better, crate a usable client
+     * structure like if it was accepted as a new connection, cause actually
+     * it crashes the server by having NULL ptr
+     */
     struct client node;
     if (node_fd > 0) {
 
-        node.addr = addr,
-        node.fd = node_fd,
-        node.last_action_time = 0,
-        node.ctx_handler = accept_handler,
-        node.reply = NULL,
-        node.request = NULL,
+        node.ctype = NODE;
+        node.addr = addr;
+        node.fd = node_fd;
+        node.last_action_time = 0;
+        node.ctx_handler = request_handler;
+        node.reply = NULL;
+        node.request = NULL;
         node.db = NULL;
 
         add_epoll(epollfd, node_fd, &node);
@@ -1243,8 +1389,11 @@ int start_server(const char *addr, const char *port, int node_fd) {
 
     tritedb.epollfd = epollfd;
 
-    /* If it is run in CLUSTER mode add an additional descriptor and register
-       it to the event loop */
+    /*
+     * If it is run in CLUSTER mode add an additional descriptor and register
+     * it to the event loop, ready to accept incoming connections from other
+     * tritedb nodes and handle cluster commands.
+     */
     struct client bus_server;
     if (conf->mode == CLUSTER) {
 
@@ -1256,12 +1405,13 @@ int start_server(const char *addr, const char *port, int node_fd) {
         int bfd = make_listen(addr, tritedb.busport, INET);
 
         /* struct client structure for the bus server component */
-        bus_server.addr = addr,
-        bus_server.fd = bfd,
-        bus_server.last_action_time = 0,
-        bus_server.ctx_handler = accept_handler,
-        bus_server.reply = NULL,
-        bus_server.request = NULL,
+        bus_server.ctype = SERVER;
+        bus_server.addr = addr;
+        bus_server.fd = bfd;
+        bus_server.last_action_time = 0;
+        bus_server.ctx_handler = accept_node_handler;
+        bus_server.reply = NULL;
+        bus_server.request = NULL;
         bus_server.db = NULL;
 
         /* Set bus socket in EPOLLIN too */
@@ -1286,7 +1436,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
 cleanup:
 
     /* Free all resources allocated */
-    list_free(tritedb.peers, 1);
+    hashtable_release(tritedb.nodes);
     hashtable_release(tritedb.clients);
     hashtable_release(tritedb.dbs);
     free_expiring_keys(tritedb.expiring_keys);

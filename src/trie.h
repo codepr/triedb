@@ -46,9 +46,11 @@ struct node_data {
     void *data;    // payload
 };
 
-/* Trie node, it contains a fixed size array (every node can have at max the
-   alphabet length size of children), a flag defining if the node represent
-   the end of a word and then if it contains a value defined by data. */
+/*
+ * Trie node, it contains a fixed size array (every node can have at max the
+ * alphabet length size of children), a flag defining if the node represent
+ * the end of a word and then if it contains a value defined by data.
+ */
 struct trie_node {
     char chr;
     List *children;
@@ -56,7 +58,10 @@ struct trie_node {
 };
 
 
-/* Trie ADT, it is formed by a root struct trie_node, and the total size of the Trie */
+/*
+ * Trie ADT, it is formed by a root struct trie_node, and the total size of the
+ * Trie
+ */
 struct Trie {
     struct trie_node *root;
     size_t size;
@@ -71,7 +76,8 @@ struct Trie *trie_new(void);
 // Return the size of the trie
 size_t trie_size(const Trie *);
 
-/* The leaf represents the node with the associated data
+/*
+ * The leaf represents the node with the associated data
  *           .
  *          / \
  *         h   s: s-value
@@ -106,12 +112,14 @@ void trie_prefix_delete(Trie *, const char *);
    complexity */
 int trie_prefix_count(const Trie *, const char *);
 
-/* Integer modifying function. Check if a subset of the trie matching a given
+/*
+ * Integer modifying function. Check if a subset of the trie matching a given
  * prefix contains integer and increment it by a value
  */
 void trie_prefix_inc(Trie *, const char *);
 
-/* Integer modifying function. Check if a subset of the trie matching a given
+/*
+ * Integer modifying function. Check if a subset of the trie matching a given
  * prefix contains integer and decrement it by a value
  */
 void trie_prefix_dec(Trie *, const char *);

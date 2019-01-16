@@ -94,8 +94,10 @@ void htonll(uint8_t *, uint_least64_t);
    treating a single u64 as two u32 numbers */
 uint_least64_t ntohll(const uint8_t *);
 
-// struct buffer constructor, it require a size cause we use a bounded buffer,
-// e.g. no resize over a defined size
+/*
+ * struct buffer constructor, it require a size cause we use a bounded buffer,
+ * e.g. no resize over a defined size
+ */
 struct buffer *buffer_init(size_t);
 
 void buffer_destroy(struct buffer *);
@@ -127,8 +129,9 @@ void write_uint64(struct buffer *, uint64_t);
 void write_bytes(struct buffer *, uint8_t *);
 
 
-/* Definition of the common header, for now it simply define the operation
- * code, the total size of the packet including the body and if it carry a
+/*
+ * Definition of the common header, for now it simply define the operation
+ * code, the total size of the packet including the body and if it carries a
  * single command or a stream of sequential commands.
  */
 struct header {
@@ -137,7 +140,8 @@ struct header {
     uint8_t is_bulk;
 };
 
-/* Definition of a single key, with `is_prefix` defining if the key must be
+/*
+ * Definition of a single key, with `is_prefix` defining if the key must be
  * treated as a prefix, in other words if the command which operates on it
  * have to be used as a glob style command e.g. DEL hello* deletes all keys
  * starting with hello
@@ -157,15 +161,19 @@ struct keyval {
     uint8_t is_prefix;
 };
 
-// Empty command, for those commands that doesn't require a body at all, like
-// QUIT
+/*
+ * Empty command, for those commands that doesn't require a body at all, like
+ * QUIT
+ */
 struct empty_command {
     struct header *header;
 };
 
-// For all commands that does only need key field and some extra optionals
-// fields like the time to live (`ttl`) or the `is_prefix` flag
-// e.g. GET, TTL, INC, DEC.. etc
+/*
+ * For all commands that does only need key field and some extra optionals
+ * fields like the time to live (`ttl`) or the `is_prefix` flag
+ * e.g. GET, TTL, INC, DEC.. etc
+ */
 struct key_command {
     struct header *header;
     uint16_t keysize;
@@ -174,9 +182,11 @@ struct key_command {
     uint16_t ttl;
 };
 
-// For all commands that does need key and val fields with some extra optionals
-// fields like the time to live (`ttl`) or the `is_prefix` flag
-// e.g. PUT .. etc
+/*
+ * For all commands that does need key and val fields with some extra optionals
+ * fields like the time to live (`ttl`) or the `is_prefix` flag
+ * e.g. PUT .. etc
+ */
 struct keyval_command {
     struct header *header;
     uint16_t keysize;
@@ -187,9 +197,11 @@ struct keyval_command {
     uint16_t ttl;
 };
 
-// For all commands that does need a list of keys with some extra optionals
-// fields like the time to live (`ttl`) or the `is_prefix` flag
-// e.g. DEL .. etc
+/*
+ * For all commands that does need a list of keys with some extra optionals
+ * fields like the time to live (`ttl`) or the `is_prefix` flag
+ * e.g. DEL .. etc
+ */
 struct key_list_command {
     struct header *header;
     uint32_t len;
@@ -203,9 +215,11 @@ struct keyval_list_command {
     struct keyvalue **pairs;
 };
 
-// Define a request, can be either an `struct empty_command`, a `struct key_command`, a
-// `struct keyval_command` or a `struct key_list_command`
-// TODO move header outside of each single command
+/*
+ * Define a request, can be either an `struct empty_command`, a `struct key_command`, a
+ * `struct keyval_command` or a `struct key_list_command`
+ * TODO move header outside of each single command
+ */
 struct command {
     uint8_t cmdtype;
     union {
@@ -280,10 +294,10 @@ union response {
 };
 
 
-union response *make_nocontent_response(uint8_t);
-union response *make_datacontent_response(const uint8_t *);
+union response *make_ack_response(uint8_t);
+union response *make_data_response(const uint8_t *);
 union response *make_valuecontent_response(uint32_t);
-union response *make_listcontent_response(const List *);
+union response *make_list_response(const List *);
 
 void pack_response(struct buffer *, const union response *, int);
 void free_response(union response *, int);

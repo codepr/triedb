@@ -498,7 +498,7 @@ void pack_response(struct buffer *b, const union response *r, int restype) {
 }
 
 
-union response *make_nocontent_response(uint8_t code) {
+union response *make_ack_response(uint8_t code) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -534,7 +534,7 @@ errnomem3:
 }
 
 
-union response *make_datacontent_response(const uint8_t *data) {
+union response *make_data_response(const uint8_t *data) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -608,7 +608,7 @@ errnomem3:
 }
 
 
-union response *make_listcontent_response(const List *content) {
+union response *make_list_response(const List *content) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
