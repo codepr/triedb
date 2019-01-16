@@ -280,10 +280,10 @@ union response {
 };
 
 
-int make_nocontent_response(uint8_t, union response *);
-int make_datacontent_response(const uint8_t *, union response *);
-int make_valuecontent_response(uint32_t, union response *);
-int make_listcontent_response(const List *, union response *);
+union response *make_nocontent_response(uint8_t);
+union response *make_datacontent_response(const uint8_t *);
+union response *make_valuecontent_response(uint32_t);
+union response *make_listcontent_response(const List *);
 
 void pack_response(struct buffer *, const union response *, int);
 void free_response(union response *, int);

@@ -498,21 +498,39 @@ void pack_response(struct buffer *b, const union response *r, int restype) {
 }
 
 
-int make_nocontent_response(uint8_t code, union response *response) {
+union response *make_nocontent_response(uint8_t code) {
 
+    union response *response = tmalloc(sizeof(*response));
     if (!response)
-        return -1;
+        goto errnomem3;
 
-    struct header hdr;
-    hdr.opcode = ACK;
-    hdr.size = HEADERLEN + sizeof(uint8_t);
-    hdr.is_bulk = 0;
+    response->ncontent = tmalloc(sizeof(struct no_content));
+    if (!response->ncontent)
+        goto errnomem2;
 
-    response->ncontent->header = &hdr;
+    response->ncontent->header = tmalloc(sizeof(struct header));
+    if (!response->ncontent->header)
+        goto errnomem1;
+
+    response->ncontent->header->opcode = ACK;
+    response->ncontent->header->size = HEADERLEN + sizeof(uint8_t);
+    response->ncontent->header->is_bulk = 0;
 
     response->ncontent->code = code;
 
-    return 1;
+    return response;
+
+errnomem1:
+
+    tfree(response->ncontent);
+
+errnomem2:
+
+    tfree(response);
+
+errnomem3:
+
+    return NULL;
 }
 
 
