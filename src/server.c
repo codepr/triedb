@@ -112,6 +112,7 @@ static int ttl_handler(struct client *);
 static int inc_handler(struct client *);
 static int dec_handler(struct client *);
 static int use_handler(struct client *);
+static int ping_handler(struct client *);
 static int db_handler(struct client *);
 static int count_handler(struct client *);
 static int keys_handler(struct client *);
@@ -137,6 +138,7 @@ static struct command_handler commands_map[COMMAND_COUNT] = {
     {COUNT, count_handler},
     {KEYS, keys_handler},
     {USE, use_handler},
+    {PING, ping_handler},
     {DB, db_handler},
     {INFO, info_handler},
     {QUIT, quit_handler}
@@ -325,6 +327,19 @@ static int quit_handler(struct client *c) {
     hashtable_del(tritedb.clients, c->uuid);
 
     return -1;
+}
+
+
+static int ping_handler(struct client *c) {
+
+    tdebug("PING from %s", c->addr);
+
+    // TODO send out a PONG
+    set_ack_reply(c, OK);
+
+    free_request(c->request, SINGLE_REQUEST);
+
+    return OK;
 }
 
 

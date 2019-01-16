@@ -204,7 +204,7 @@ int accept_connection(int serversock) {
         return -1;
     }
 
-    tdebug("struct client connection from %s", ip_buff);
+    tdebug("Client connection from %s", ip_buff);
 
     return clientsock;
 }
