@@ -48,6 +48,9 @@ int main(int argc, char **argv) {
     signal(SIGINT, sigint_handler);
     signal(SIGTERM, sigint_handler);
 
+    /* Intialize random seed */
+    srand((unsigned int) time(NULL));
+
     char *addr = DEFAULT_HOSTNAME;
     char *port = DEFAULT_PORT;
     char *confpath = DEFAULT_CONF_PATH;

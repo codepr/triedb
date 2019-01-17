@@ -399,7 +399,7 @@ static void put_data_into_trie(struct database *db,
      * TODO refactor TTL insertion, for now it does not support expiration of
      * keys below a given prefix
      */
-     if (cmd->is_prefix == 1) {
+    if (cmd->is_prefix == 1) {
         trie_prefix_set(db->data, (const char *) cmd->key, cmd->val, ttl);
     } else {
         struct node_data *nd =
@@ -969,7 +969,7 @@ static int accept_new_client(int fd, struct connection *conn) {
     if (!conn)
         return -1;
 
-     /* Accept the connection */
+    /* Accept the connection */
     int clientsock = accept_connection(fd);
 
     /* Abort if not accepted */

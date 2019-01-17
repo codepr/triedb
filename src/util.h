@@ -35,6 +35,8 @@
 
 #define MAX_LOG_SIZE 119
 
+#define RANDBETWEEN(A,B) A + rand()/(RAND_MAX/(B - A))
+
 
 enum { DEBUG, INFORMATION, WARNING, ERROR };
 

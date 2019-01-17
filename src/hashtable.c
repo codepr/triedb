@@ -44,7 +44,7 @@ const unsigned long KNUTH_PRIME = 2654435761;
 /*
  * Hashing function for a string
  */
-static uint32_t hashtable_hash_int(HashTable *m, const uint8_t *keystr) {
+static uint64_t hashtable_hash_int(HashTable *m, const uint8_t *keystr) {
 
     assert(m && keystr);
 
@@ -79,7 +79,7 @@ static int hashtable_hash(HashTable *table, const uint8_t *key) {
         return -HASHTABLE_FULL;
 
     /* Find the best index */
-    uint32_t curr = hashtable_hash_int(table, key);
+    uint64_t curr = hashtable_hash_int(table, key);
     char *k, *currk;
 
     /* Linear probing */
@@ -231,7 +231,7 @@ void *hashtable_get(HashTable *table, const char *key) {
     assert(table && key);
 
     /* Find data location */
-    uint32_t curr = hashtable_hash_int(table, (const uint8_t *) key);
+    uint64_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
     for (int i = 0; i < MAX_CHAIN_LENGTH; i++){
@@ -255,7 +255,7 @@ struct hashtable_entry *hashtable_get_entry(HashTable *table, const char *key) {
     assert(table && key);
 
     /* Find data location */
-    uint32_t curr = hashtable_hash_int(table, (const uint8_t *) key);
+    uint64_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
     for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {
@@ -280,7 +280,7 @@ int hashtable_del(HashTable *table, const char *key) {
     assert(table && key);
 
     /* Find key */
-    uint32_t curr = hashtable_hash_int(table, (const uint8_t *) key);
+    uint64_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
     for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {

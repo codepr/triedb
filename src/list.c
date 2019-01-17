@@ -281,26 +281,19 @@ static struct list_node *bisect_list(struct list_node *head) {
 }
 
 /*
- * Merges two list by using the head node of the two, sorting them according to
- * lexigraphical ordering of the node names.
+ * Merges two list by using a comparison function, sorting them according to
+ * the outcome of the given comparison func.
  */
-static struct list_node *merge_list(struct list_node *list1, struct list_node *list2) {
+static struct list_node *merge_list(struct list_node *list1,
+        struct list_node *list2, cmp cmp_func) {
 
     struct list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
 
-    unsigned long long now = time(NULL);
-    unsigned long long delta_l1, delta_l2;
-
     while (list1 && list2) {
 
-        /* cast to cluster_node */
-        const struct node_data *n1 = ((struct expiring_key *) list1->data)->nd;
-        const struct node_data *n2 = ((struct expiring_key *) list2->data)->nd;
+        int outcome = cmp_func(list1->data, list2->data);
 
-        delta_l1 = (n1->ctime + n1->ttl) - now;
-        delta_l2 = (n2->ctime + n2->ttl) - now;
-
-        struct list_node **min = delta_l1 <= delta_l2 ? &list1 : &list2;
+        struct list_node **min = outcome <= 0 ? &list1 : &list2;
         struct list_node *next = (*min)->next;
         tail = tail->next = *min;
         *min = next;
@@ -311,9 +304,10 @@ static struct list_node *merge_list(struct list_node *list1, struct list_node *l
 }
 
 /*
- * Merge sort for nodes list, based on the name field of every node
+ * Merge sort for nodes list, apply a given comparison function which return
+ * -1 0 or 1 based on the outcome of the comparison.
  */
-struct list_node *merge_sort(struct list_node *head) {
+struct list_node *list_merge_sort(struct list_node *head, cmp cmp_func) {
 
     struct list_node *list1 = head;
 
@@ -323,7 +317,8 @@ struct list_node *merge_sort(struct list_node *head) {
     /* find the middle */
     struct list_node *list2 = bisect_list(list1);
 
-    return merge_list(merge_sort(list1), merge_sort(list2));
+    return merge_list(list_merge_sort(list1, cmp_func),
+            list_merge_sort(list2, cmp_func), cmp_func);
 }
 
 /* Search for a given node based on a comparison of char stored in structure
@@ -345,7 +340,8 @@ struct list_node *linear_search(const List *list, int value) {
 }
 
 
-static struct list_node *merge_tnode_list(struct list_node *list1, struct list_node *list2) {
+static struct list_node *merge_tnode_list(struct list_node *list1,
+        struct list_node *list2) {
 
     struct list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
 

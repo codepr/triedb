@@ -32,6 +32,8 @@
 #include "../src/util.h"
 #include "../src/trie.h"
 #include "../src/list.h"
+#include "../src/server.h"
+#include "../src/cluster.h"
 #include "../src/ringbuf.h"
 #include "../src/vector.h"
 #include "../src/hashtable.h"
@@ -692,6 +694,105 @@ static char *test_hashtable_del(void) {
     return 0;
 }
 
+
+static char *test_cluster_add_node(void) {
+
+    struct cluster cluster = { list_init() };
+
+    struct client client = {
+        .ctype = SERVER,
+        .addr = "127.0.0.1",
+        .fd = -1,
+        .last_action_time = 0,
+        .ctx_handler = NULL,
+        .reply = NULL,
+        .request = NULL,
+        .db = NULL
+    };
+
+    cluster_add_node(&cluster, &client);
+
+    ASSERT("[! cluster_add_node]: cluster node not correctly added", cluster.nodes->len == 1);
+
+    cluster_add_node(&cluster, &client);
+    cluster_add_node(&cluster, &client);
+    cluster_add_node(&cluster, &client);
+
+    ASSERT("[! cluster_add_node]: cluster node not correctly added", cluster.nodes->len == 4);
+
+    for (struct list_node *ln = cluster.nodes->head; ln; ln = ln->next)
+        tfree(ln->data);
+
+    list_free(cluster.nodes, 0);
+
+    printf(" [cluster::cluster_add_node]: OK\n");
+
+    return 0;
+}
+
+
+static int compare_upper_bound(void *arg1, void *arg2) {
+
+    /* cast to cluster_node */
+    int16_t n1 = ((struct cluster_node *) arg1)->upper_bound;
+    int16_t n2 = ((struct cluster_node *) arg2)->upper_bound;
+
+    if (n1 == n2)
+        return 0;
+
+    return n1 < n2 ? -1 : 1;
+}
+
+
+static char *test_cluster_get_node(void) {
+
+    struct cluster cluster = { list_init() };
+
+    struct client client = {
+        .ctype = SERVER,
+        .addr = "127.0.0.1",
+        .fd = -1,
+        .last_action_time = 0,
+        .ctx_handler = NULL,
+        .reply = NULL,
+        .request = NULL,
+        .db = NULL
+    };
+
+    struct cluster_node node1 = { 1000, &client};
+    struct cluster_node node2 = { 1500, &client};
+    struct cluster_node node3 = { 2000, &client};
+    struct cluster_node node4 = { 2500, &client};
+
+    list_push(cluster.nodes, &node1);
+    list_push(cluster.nodes, &node2);
+    list_push(cluster.nodes, &node3);
+    list_push(cluster.nodes, &node4);
+
+    cluster.nodes->head =
+        list_merge_sort(cluster.nodes->head, compare_upper_bound);
+
+    struct cluster_node *ret1 = cluster_get_node(&cluster, 768);
+
+    struct cluster_node *ret2 = cluster_get_node(&cluster, 1400);
+
+    struct cluster_node *ret3 = cluster_get_node(&cluster, 2678);
+
+    struct cluster_node *ret4 = cluster_get_node(&cluster, 2000);
+
+    ASSERT("[! cluster_get_node]: did not retrieved the correct node",
+            ret1->upper_bound == 1000 &&
+            ret2->upper_bound == 1500 &&
+            ret3->upper_bound == 1000 &&
+            ret4->upper_bound == 2000);
+
+    list_free(cluster.nodes, 0);
+    printf(" [cluster::cluster_get_node]: OK\n");
+
+    return 0;
+}
+
+
 /*
  * All datastructure tests
  */
@@ -732,6 +833,8 @@ char *structures_test() {
     RUN_TEST(test_hashtable_get);
     RUN_TEST(test_hashtable_del);
     RUN_TEST(test_hashtable_release);
+    RUN_TEST(test_cluster_add_node);
+    RUN_TEST(test_cluster_get_node);
 
     return 0;
 }
