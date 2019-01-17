@@ -40,6 +40,7 @@ typedef struct {
     struct list_node *head;
     struct list_node *tail;
     unsigned long len;
+    int (*destructor)(struct list_node *);
 } List;
 
 
@@ -48,7 +49,7 @@ typedef struct {
 typedef int (*compare_func)(void *, void *);
 
 /* Create an empty list */
-List *list_init(void);
+List *list_init(int (*destructor)(struct list_node*));
 
 /* Release a list, accept a integer flag to control the depth of the free call
  * (e.g. going to free also data field of every node) */

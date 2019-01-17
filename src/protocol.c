@@ -180,7 +180,9 @@ static void pack_header(const struct header *h, struct buffer *b) {
 
     write_uint8(b, h->opcode);
     write_uint32(b, b->size);
-    write_uint8(b, h->is_bulk);
+    write_uint8(b, h->flags & F_BULKREQUEST ? 1 : 0);
+    write_uint8(b, h->flags & F_PREFIXREQUEST ? 1 : 0);
+    write_uint8(b, h->flags & F_FROMNODEREQUEST ? 1 : 0);
 }
 
 
@@ -188,9 +190,25 @@ static void unpack_header(struct buffer *b, struct header *h) {
 
     assert(b && h);
 
+    h->flags = 0;
+
+    uint8_t is_bulk = 0, is_prefix = 0, is_fromnode = 0;
+
     h->opcode = read_uint8(b);
     h->size = read_uint32(b);
-    h->is_bulk = read_uint8(b);
+
+    is_bulk = read_uint8(b);
+    is_prefix = read_uint8(b);
+    is_fromnode = read_uint8(b);
+
+    if (is_bulk)
+        h->flags |= F_BULKREQUEST;
+
+    if (is_prefix)
+        h->flags |= F_PREFIXREQUEST;
+
+    if (is_fromnode)
+        h->flags |= F_FROMNODEREQUEST;
 }
 
 // Refactoring
@@ -225,29 +243,25 @@ struct request *unpack_request(struct buffer *b) {
 
     unpack_header(b, header);
 
-    switch (header->is_bulk) {
-        case 0:
-            /* It's a single request, just unpack it into the request pointer */
-            request->reqtype = SINGLE_REQUEST;
-            request->command = unpack_command(b, header);
-            break;
-        case 1:
-            /* Unpack the Bulkstruct request format */
-            request->reqtype = BULK_REQUEST;
-            request->bulk_command = tmalloc(sizeof(struct bulk_command));
-            if (!request->bulk_command)
-                goto errnomem1;
+    if (!(header->flags & F_BULKREQUEST)) {
+        /* It's a single request, just unpack it into the request pointer */
+        request->reqtype = SINGLE_REQUEST;
+        request->command = unpack_command(b, header);
+    } else {
+        /* Unpack the Bulkstruct request format */
+        request->reqtype = BULK_REQUEST;
+        request->bulk_command = tmalloc(sizeof(struct bulk_command));
+        if (!request->bulk_command)
+            goto errnomem1;
 
-            uint32_t ncommands = read_uint32(b);
-            request->bulk_command->ncommands = ncommands;
-            request->bulk_command->commands =
-                tmalloc(ncommands * sizeof(struct command));
+        uint32_t ncommands = read_uint32(b);
+        request->bulk_command->ncommands = ncommands;
+        request->bulk_command->commands =
+            tmalloc(ncommands * sizeof(struct command));
 
-            /* Unpack each single packet into the array of requests */
-            for (uint32_t i = 0; i < ncommands; i++)
-                request->bulk_command->commands[i] = unpack_command(b, header);
-
-            break;
+        /* Unpack each single packet into the array of requests */
+        for (uint32_t i = 0; i < ncommands; i++)
+            request->bulk_command->commands[i] = unpack_command(b, header);
     }
 
     return request;
@@ -499,7 +513,7 @@ void pack_response(struct buffer *b, const union response *r, int restype) {
 }
 
 
-union response *make_ack_response(uint8_t code) {
+union response *make_ack_response(uint8_t code, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -515,7 +529,7 @@ union response *make_ack_response(uint8_t code) {
 
     response->ncontent->header->opcode = ACK;
     response->ncontent->header->size = HEADERLEN + sizeof(uint8_t);
-    response->ncontent->header->is_bulk = 0;
+    response->ncontent->header->flags |= flags;
 
     response->ncontent->code = code;
 
@@ -535,7 +549,7 @@ errnomem3:
 }
 
 
-union response *make_data_response(const uint8_t *data) {
+union response *make_data_response(const uint8_t *data, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -552,7 +566,7 @@ union response *make_data_response(const uint8_t *data) {
     response->dcontent->header->opcode = PUT;
     response->dcontent->header->size =
         HEADERLEN + sizeof(uint32_t) + strlen((char *) data);
-    response->dcontent->header->is_bulk = 0;
+    response->dcontent->header->flags |= flags;
 
     response->dcontent->datalen = strlen((char *) data);
     response->dcontent->data = (uint8_t *) tstrdup((const char *) data);
@@ -573,7 +587,7 @@ errnomem3:
 }
 
 
-union response *make_valuecontent_response(uint32_t value) {
+union response *make_valuecontent_response(uint32_t value, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -589,7 +603,7 @@ union response *make_valuecontent_response(uint32_t value) {
 
     response->vcontent->header->opcode = ACK;
     response->vcontent->header->size = HEADERLEN + sizeof(uint32_t);
-    response->vcontent->header->is_bulk = 0;
+    response->vcontent->header->flags |= flags;
 
     response->vcontent->val = value;
 
@@ -609,7 +623,7 @@ errnomem3:
 }
 
 
-union response *make_list_response(const List *content) {
+union response *make_list_response(const List *content, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -630,7 +644,7 @@ union response *make_list_response(const List *content) {
 
     response->lcontent->header->opcode = ACK;
     response->lcontent->header->size = HEADERLEN + sizeof(uint32_t);
-    response->lcontent->header->is_bulk = 0;
+    response->lcontent->header->flags |= flags;
 
     response->lcontent->len = content->len;
     response->lcontent->keys = tcalloc(content->len, sizeof(struct key));

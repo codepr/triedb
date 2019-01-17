@@ -50,11 +50,11 @@
  * code for responding to commands like PUT or DEL, stating the result of the
  * operation
  */
-#define set_ack_reply(c, o) do {                                            \
-    union response *response = make_ack_response((o));                      \
+#define set_ack_reply(c, o, f) do {                                         \
+    union response *response = make_ack_response((o), (f));                 \
     struct buffer *buffer = buffer_init(response->ncontent->header->size);  \
     pack_response(buffer, response, NO_CONTENT);                            \
-    set_reply((c), buffer, -1);                                                 \
+    set_reply((c), buffer, -1);                                             \
     free_response(response, NO_CONTENT);                                    \
 } while (0)
 
@@ -336,7 +336,7 @@ static int ping_handler(struct client *c) {
     tdebug("PING from %s", c->addr);
 
     // TODO send out a PONG
-    set_ack_reply(c, OK);
+    set_ack_reply(c, OK, F_NOFLAG);
 
     free_request(c->request, SINGLE_REQUEST);
 
@@ -360,7 +360,7 @@ static int keys_handler(struct client *c) {
 
     List *keys = trie_prefix_find(c->db->data, (const char *) cmd->key);
 
-    union response *response = make_list_response(keys);
+    union response *response = make_list_response(keys, F_NOFLAG);
 
     struct buffer *buffer = buffer_init(response->lcontent->header->size);
     pack_response(buffer, response, LIST_CONTENT);
@@ -469,7 +469,7 @@ static int put_handler(struct client *c) {
     }
 
     // For now just a single response
-    set_ack_reply(c, OK);
+    set_ack_reply(c, OK, F_NOFLAG);
 
     free_request(c->request, request->reqtype);
 
@@ -486,7 +486,7 @@ static int get_handler(struct client *c) {
     bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK);
+        set_ack_reply(c, NOK, F_NOFLAG);
     } else {
 
         struct node_data *nd = val;
@@ -497,7 +497,7 @@ static int get_handler(struct client *c) {
 
         if (nd->ttl != -NOTTL && delta <= 0) {
             trie_delete(c->db->data, (const char *) cmd->key);
-            set_ack_reply(c, NOK);
+            set_ack_reply(c, NOK, F_NOFLAG);
             // Update total keyspace counter
             tritedb.keyspace_size--;
         } else {
@@ -506,7 +506,7 @@ static int get_handler(struct client *c) {
             nd->latime = time(NULL);
 
             // and return it
-            union response *response = make_data_response(nd->data);
+            union response *response = make_data_response(nd->data, F_NOFLAG);
 
             struct buffer *buffer =
                 buffer_init(response->dcontent->header->size);
@@ -533,7 +533,7 @@ static int ttl_handler(struct client *c) {
     bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK);
+        set_ack_reply(c, NOK, F_NOFLAG);
     } else {
         struct node_data *nd = val;
         bool has_ttl = nd->ttl == -NOTTL ? false : true;
@@ -561,7 +561,7 @@ static int ttl_handler(struct client *c) {
         vector_qsort(tritedb.expiring_keys,
                 compare_ttl, sizeof(struct expiring_key));
 
-        set_ack_reply(c, OK);
+        set_ack_reply(c, OK, F_NOFLAG);
     }
 
     free_request(c->request, SINGLE_REQUEST);
@@ -611,7 +611,7 @@ static int del_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code);
+    set_ack_reply(c, code, F_NOFLAG);
     free_request(c->request, SINGLE_REQUEST);
 
     return OK;
@@ -660,7 +660,7 @@ static int inc_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code);
+    set_ack_reply(c, code, F_NOFLAG);
     free_request(c->request, SINGLE_REQUEST);
 
     return OK;
@@ -708,7 +708,7 @@ static int dec_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code);
+    set_ack_reply(c, code, F_NOFLAG);
     free_request(c->request, SINGLE_REQUEST);
 
     return OK;
@@ -717,7 +717,8 @@ static int dec_handler(struct client *c) {
 /* Get the current selected DB of the requesting client */
 static int db_handler(struct client *c) {
 
-    union response *response = make_data_response((uint8_t *) c->db->name);
+    union response *response =
+        make_data_response((uint8_t *) c->db->name, F_NOFLAG);
 
     struct buffer *buffer = buffer_init(response->dcontent->header->size);
     pack_response(buffer, response, DATA_CONTENT);
@@ -753,7 +754,7 @@ static int use_handler(struct client *c) {
         c->db = database;
     }
 
-    set_ack_reply(c, OK);
+    set_ack_reply(c, OK, F_NOFLAG);
 
     free_request(c->request, SINGLE_REQUEST);
 
@@ -771,7 +772,8 @@ static int count_handler(struct client *c) {
     count = !cnt->key ? c->db->data->size :
         trie_prefix_count(c->db->data, (const char *) cnt->key);
 
-    union response *res = make_valuecontent_response(count);
+    union response *res = make_valuecontent_response(count, F_NOFLAG);
+
     struct buffer *b = buffer_init(res->vcontent->header->size);
     pack_response(b, res, VALUE_CONTENT);
     set_reply(c, b, -1);
@@ -913,10 +915,11 @@ static int request_handler(struct client *client) {
         goto errclient;
 
     /*
-     * If the mode is cluster we should route the command to the correct node
-     * before handling it.
+     * If the mode is cluster and the requesting client is not a node nor a
+     * server but another node in the cluster, we should route the command to
+     * the correct node before handling it.
      */
-    if (conf->mode == CLUSTER)
+    if (client->ctype == CLIENT && conf->mode == CLUSTER)
         route_command(request, b, client);
 
     /* No more need of the byte buffer from now on */
@@ -1405,7 +1408,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
     tritedb.dbs = hashtable_create(database_free);
     tritedb.keyspace_size = 0LL;
     // TODO add free cluster
-    tritedb.cluster = &(struct cluster) { list_init() };
+    tritedb.cluster = &(struct cluster) { list_init(NULL) };
     tritedb.transactions = hashtable_create(client_free);
 
     /* Create default database */

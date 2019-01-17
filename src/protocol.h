@@ -41,6 +41,12 @@
 #define SINGLE_REQUEST          0x00
 #define BULK_REQUEST            0x01
 
+/* Header flags */
+#define F_NOFLAG                1 << 0
+#define F_BULKREQUEST           1 << 1
+#define F_PREFIXREQUEST         1 << 2
+#define F_FROMNODEREQUEST       1 << 3
+
 /* Command type */
 #define EMPTY_COMMAND           0x00
 #define KEY_COMMAND             0x01
@@ -73,9 +79,19 @@
 #define QUIT                    0xff
 
 
-/* 6 bytes to store the operation code (PUT, GET etc ...) the total length of
-   the packet and if it is a single command or a stream of sequential commands */
-#define HEADERLEN (2 * sizeof(uint8_t)) + sizeof(uint32_t)
+/*
+ * 8 bytes to store the operation code (PUT, GET etc ...) the total length of
+ * the packet and if it is a single command or a stream of sequential commands,
+ * a prefix command and the source of the request (being it from a client or
+ * from another node)
+ *
+ * [ 1 byte ] | [ 4 bytes ] | [ 1 byte ] | [ 1 byte ] | [1 byte ]
+ * ---------- | ----------- | ---------- | ---------- | ---------
+ *  opcode    | packet len  | bulk flag  | prefix flag| source
+ * ---------- | ----------- | ---------- | ---------- | ---------
+ *
+ */
+#define HEADERLEN (4 * sizeof(uint8_t)) + sizeof(uint32_t)
 
 
 /* struct buffer structure, provides a convenient way of handling byte string data.
@@ -132,13 +148,15 @@ void write_bytes(struct buffer *, uint8_t *);
 
 /*
  * Definition of the common header, for now it simply define the operation
- * code, the total size of the packet including the body and if it carries a
- * single command or a stream of sequential commands.
+ * code, the total size of the packet including the body and uses a bitflag to
+ * describe if it carries a single command or a stream of sequential commands,
+ * a prefix or a normal command and the source of the request, which can be
+ * either a normal client or another tritedb node.
  */
 struct header {
     uint8_t opcode;
+    uint8_t flags;
     uint32_t size;
-    uint8_t is_bulk;
 };
 
 /*
@@ -146,6 +164,7 @@ struct header {
  * treated as a prefix, in other words if the command which operates on it
  * have to be used as a glob style command e.g. DEL hello* deletes all keys
  * starting with hello
+ * TODO: remove is_prefix
  */
 struct key {
     uint16_t keysize;
@@ -153,7 +172,10 @@ struct key {
     uint8_t is_prefix;
 };
 
-/* Definition of a key-value pair, for the rest it is equal to Key */
+/*
+ * Definition of a key-value pair, for the rest it is equal to Key
+ * TODO: remve is_prefix
+ */
 struct keyval {
     uint16_t keysize;
     uint32_t valsize;
@@ -174,6 +196,7 @@ struct empty_command {
  * For all commands that does only need key field and some extra optionals
  * fields like the time to live (`ttl`) or the `is_prefix` flag
  * e.g. GET, TTL, INC, DEC.. etc
+ * TODO: remove is_prefix
  */
 struct key_command {
     struct header *header;
@@ -185,8 +208,8 @@ struct key_command {
 
 /*
  * For all commands that does need key and val fields with some extra optionals
- * fields like the time to live (`ttl`) or the `is_prefix` flag
- * e.g. PUT .. etc
+ * fields like the time to live (`ttl`) or the `is_prefix` flag e.g. PUT .. etc
+ * TODO: remove is_prefix
  */
 struct keyval_command {
     struct header *header;
@@ -200,8 +223,7 @@ struct keyval_command {
 
 /*
  * For all commands that does need a list of keys with some extra optionals
- * fields like the time to live (`ttl`) or the `is_prefix` flag
- * e.g. DEL .. etc
+ * fields like the time to live (`ttl`) or the `is_prefix` flag e.g. DEL .. etc
  */
 struct key_list_command {
     struct header *header;
@@ -294,13 +316,18 @@ union response {
     struct list_content *lcontent;
 };
 
+/*
+ * Response builder functions, accept a payload as first argument and header
+ * flags as second, passed in in order of activation by using | operator
+ */
+union response *make_ack_response(uint8_t, uint8_t);
+union response *make_data_response(const uint8_t *, uint8_t);
+union response *make_valuecontent_response(uint32_t, uint8_t);
+union response *make_list_response(const List *, uint8_t);
 
-union response *make_ack_response(uint8_t);
-union response *make_data_response(const uint8_t *);
-union response *make_valuecontent_response(uint32_t);
-union response *make_list_response(const List *);
-
+// Response -> byte buffer
 void pack_response(struct buffer *, const union response *, int);
+
 void free_response(union response *, int);
 
 

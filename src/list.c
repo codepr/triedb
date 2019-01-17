@@ -36,7 +36,7 @@ static struct list_node *list_node_remove(struct list_node *, struct list_node *
 /*
  * Create a list, initializing all fields
  */
-List *list_init(void) {
+List *list_init(int (*destructor)(struct list_node *)) {
 
     List *l = tmalloc(sizeof(List));
 
@@ -48,6 +48,8 @@ List *list_init(void) {
     // set default values to the List structure fields
     l->head = l->tail = NULL;
     l->len = 0L;
+    // TODO if NULL set default destructor
+    l->destructor = destructor;
 
     return l;
 }
@@ -68,9 +70,14 @@ void list_free(List *l, int deep) {
 
         tmp = h->next;
 
-        if (h) {
-            if (h->data && deep == 1) tfree(h->data);
-            tfree(h);
+        if (l->destructor)
+            l->destructor(h);
+        else {
+            if (h) {
+                if (h->data && deep == 1)
+                    tfree(h->data);
+                tfree(h);
+            }
         }
 
         h = tmp;

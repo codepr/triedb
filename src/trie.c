@@ -104,7 +104,7 @@ struct trie_node *trie_new_node(char c) {
 
         new_node->chr = c;
         new_node->ndata = NULL;
-        new_node->children = list_init();
+        new_node->children = list_init(NULL);
     }
 
     return new_node;
@@ -502,7 +502,7 @@ List *trie_prefix_find(const Trie *trie, const char *prefix) {
     if (!node)
         return NULL;
 
-    List *keys = list_init();
+    List *keys = list_init(NULL);
 
     // Check all possible sub-paths and add the resulting key to the result
     char *str = tmalloc(32);

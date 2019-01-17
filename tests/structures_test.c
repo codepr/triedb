@@ -204,7 +204,7 @@ static char *test_ringbuf_bulk_pop(void) {
  * Tests the init feature of the list
  */
 static char *test_list_init(void) {
-    List *l = list_init();
+    List *l = list_init(NULL);
     ASSERT("[! list_init]: list not created", l != NULL);
     list_free(l, 0);
     printf(" [list::list_init]: OK\n");
@@ -216,7 +216,7 @@ static char *test_list_init(void) {
  * Tests the free feature of the list
  */
 static char *test_list_free(void) {
-    List *l = list_init();
+    List *l = list_init(NULL);
     ASSERT("[! list_free]: list not created", l != NULL);
     list_free(l, 0);
     printf(" [list::list_free]: OK\n");
@@ -228,7 +228,7 @@ static char *test_list_free(void) {
  * Tests the push feature of the list
  */
 static char *test_list_push(void) {
-    List *l = list_init();
+    List *l = list_init(NULL);
     char *x = "abc";
     list_push(l, x);
     ASSERT("[! list_push]: item not pushed in", l->len == 1);
@@ -242,7 +242,7 @@ static char *test_list_push(void) {
  * Tests the push_back feature of the list
  */
 static char *test_list_push_back(void) {
-    List *l = list_init();
+    List *l = list_init(NULL);
     char *x = "abc";
     list_push_back(l, x);
     ASSERT("[! list_push_back]: item not pushed in", l->len == 1);
@@ -265,7 +265,7 @@ static int compare_str(void *arg1, void *arg2) {
 
 
 static char *test_list_remove_node(void) {
-    List *l = list_init();
+    List *l = list_init(NULL);
     char *x = "abc";
     l = list_push(l, x);
     ASSERT("[! list_remove_node :: list_push]: item not pushed in", l->len == 1);
@@ -697,7 +697,7 @@ static char *test_hashtable_del(void) {
 
 static char *test_cluster_add_node(void) {
 
-    struct cluster cluster = { list_init() };
+    struct cluster cluster = { list_init(NULL) };
 
     struct client client = {
         .ctype = SERVER,
@@ -746,7 +746,7 @@ static int compare_upper_bound(void *arg1, void *arg2) {
 
 static char *test_cluster_get_node(void) {
 
-    struct cluster cluster = { list_init() };
+    struct cluster cluster = { list_init(NULL) };
 
     struct client client = {
         .ctype = SERVER,
