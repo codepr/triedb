@@ -103,6 +103,7 @@ static int reply_handler(struct client *);
 static int accept_handler(struct client *);
 static int accept_node_handler(struct client *);
 static int request_handler(struct client *);
+static int route_command(struct request *, struct buffer *, struct client *);
 
 /* Specific handlers for commands that every client can request */
 static int put_handler(struct client *);
@@ -787,6 +788,66 @@ static int count_handler(struct client *c) {
 /**************************************/
 
 
+static int route_command(struct request *request,
+        struct buffer *buffer, struct client *client) {
+
+    int ret = 0;
+
+    if (request->reqtype == SINGLE_REQUEST) {
+
+        int16_t hashval = -1;
+
+        switch (request->command->cmdtype) {
+            case KEY_COMMAND:
+            case KEY_VAL_COMMAND:
+
+                /*
+                 * Compute a CRC32(key) % RING_POINTS, we get an index for a
+                 * position in the consistent hash ring and retrieve the node
+                 * in charge to handle the request
+                 */
+                hashval = hash((const char *) request->command->kcommand->key);
+
+                struct cluster_node *node =
+                    cluster_get_node(tritedb.cluster, hashval);
+
+                /*
+                 * Sent out all bytes. TODO: raise a EPOLLOUT event and handle
+                 * the operation in a cleaner way
+                 */
+                ssize_t sent;
+                if ((sendall(node->link->fd, buffer->data,
+                                buffer->size, &sent)) < 0) {
+                    perror("send(2): can't write on socket descriptor");
+                    ret = -1;
+                }
+
+                // Update information stats
+                info.noutputbytes += sent;
+
+                /*
+                 * Update cluster transactions in order to know who to answer to
+                 * when the other node will reply back with result
+                 */
+                const char *transaction_id = tmalloc(37);
+                uuid_t binuuid;
+                uuid_generate_random(binuuid);
+                uuid_unparse(binuuid, (char *) transaction_id);
+
+                hashtable_put(tritedb.transactions, transaction_id, client);
+
+                break;
+            default:
+                tdebug("Not implemented yet");
+                break;
+        }
+
+    } else {
+    }
+
+    return ret;
+}
+
 /* Handle incoming requests, after being accepted or after a reply */
 static int request_handler(struct client *client) {
 
@@ -844,6 +905,20 @@ static int request_handler(struct client *client) {
      */
     struct request *request = unpack_request(b);
 
+    /*
+     * If the packet couldn't be unpacket (e.g. we're OOM) we close the
+     * connection and release the client
+     */
+    if (!request)
+        goto errclient;
+
+    /*
+     * If the mode is cluster we should route the command to the correct node
+     * before handling it.
+     */
+    if (conf->mode == CLUSTER)
+        route_command(request, b, client);
+
     /* No more need of the byte buffer from now on */
     buffer_destroy(b);
 
@@ -852,13 +927,7 @@ static int request_handler(struct client *client) {
 
     tfree(buffer);
 
-    /*
-     * If the packet couldn't be unpacket (e.g. we're OOM) we close the
-     * connection and release the client
-     */
-    if (!request)
-        goto errclient;
-
+    // Update client last action time
     client->last_action_time = (uint64_t) time(NULL);
 
     /*
@@ -1335,6 +1404,9 @@ int start_server(const char *addr, const char *port, int node_fd) {
     tritedb.expiring_keys = vector_init();
     tritedb.dbs = hashtable_create(database_free);
     tritedb.keyspace_size = 0LL;
+    // TODO add free cluster
+    tritedb.cluster = &(struct cluster) { list_init() };
+    tritedb.transactions = hashtable_create(client_free);
 
     /* Create default database */
     struct database *default_db = tmalloc(sizeof(struct database));
@@ -1453,6 +1525,7 @@ cleanup:
     /* Free all resources allocated */
     hashtable_release(tritedb.nodes);
     hashtable_release(tritedb.clients);
+    hashtable_release(tritedb.transactions);
     hashtable_release(tritedb.dbs);
     free_expiring_keys(tritedb.expiring_keys);
 

@@ -31,6 +31,7 @@
 #include "trie.h"
 #include "list.h"
 #include "vector.h"
+#include "cluster.h"
 #include "protocol.h"
 #include "hashtable.h"
 
@@ -63,6 +64,10 @@ struct tritedb {
     HashTable *dbs;
     /* Total count of the database keys */
     size_t keyspace_size;
+    /* Cluster reference, only in CLUSTER mode */
+    struct cluster *cluster;
+    /* Cluster transactions, map UUID -> client */
+    HashTable *transactions;
 };
 
 

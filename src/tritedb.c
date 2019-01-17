@@ -88,12 +88,22 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Override default DEBUG mode
+    conf->loglevel = debug == 1 ? DEBUG : WARNING;
+
+    // Try to load a configuration, if found
+    config_load(confpath);
+
+
     if (optind < argc) {
         if (STREQ(argv[optind], "join", 4) == 0) {
 
             // Target is the pair target_host:port+10000
             char *target = argv[optind + 1];
             int tport = atoi(argv[optind + 2]) + 10000;
+
+            // Open bus port and set mode to CLUSTER
+            conf->mode = CLUSTER;
 
             tinfo("Connecting to %s:%d", target, tport);
             // Connect to the listening peer node
@@ -102,12 +112,6 @@ int main(int argc, char **argv) {
             set_tcp_nodelay(fd);
         }
     }
-
-    // Override default DEBUG mode
-    conf->loglevel = debug == 1 ? DEBUG : WARNING;
-
-    // Try to load a configuration, if found
-    config_load(confpath);
 
     // Initialize logging
     t_log_init(conf->logpath);

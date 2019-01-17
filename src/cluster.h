@@ -33,17 +33,21 @@
 
 #define KPRIME 2654435761
 
-
+/*
+ * Contains the max index in the ring size handled by the node and a link to
+ * the client referring to the node
+ */
 struct cluster_node {
     int16_t upper_bound;
     struct client *link;
 };
 
-
+/* Just a list of nodes for now */
 struct cluster {
     List *nodes;
 };
 
+/* Compute a hash of a string by using CRC32 function mod RING_POINTS */
 int16_t hash(const char *);
 
 /*
