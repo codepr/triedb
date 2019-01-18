@@ -34,7 +34,7 @@
 
 
 /* Borrowed from hashtable.c, TODO refactor */
-int16_t hash(const char *keystr) {
+uint16_t hash(const char *keystr) {
 
     if (!keystr)
         return -1;
@@ -61,8 +61,8 @@ int16_t hash(const char *keystr) {
 static int compare_upper_bound(void *arg1, void *arg2) {
 
     /* cast to cluster_node */
-    int16_t n1 = ((struct cluster_node *) arg1)->upper_bound;
-    int16_t n2 = ((struct cluster_node *) arg2)->upper_bound;
+    uint16_t n1 = ((struct cluster_node *) arg1)->upper_bound;
+    uint16_t n2 = ((struct cluster_node *) arg2)->upper_bound;
 
     if (n1 == n2)
         return 0;
@@ -72,21 +72,26 @@ static int compare_upper_bound(void *arg1, void *arg2) {
 
 /*
  * To create our consitent hash ring for now we just distribute randomly around
- * the circle our nodes by getting a random value in range [0, RING_POINTS).
+ * the circle our nodes by getting a random value in range [0, RING_POINTS),
+ * obtained by generating a hash with CRC32 of the node address:
+ *
+ *      uint16_t hash = CRC32(host + port) % RING_POINTS.
  *
  * Further development will make sure that nodes will be distributed more
  * evenly around by using virtual nodes, in other words by replicating each
  * node multiple times around the circle.
  */
-int cluster_add_node(struct cluster *cluster, struct client *client) {
+int cluster_add_new_node(struct cluster *cluster,
+        struct client *client, const char *addr) {
 
     // Get a ring point
-    int16_t upper_bound = RANDBETWEEN(0, RING_POINTS);
+    uint16_t upper_bound = hash(addr) % RING_POINTS;
 
     struct cluster_node *new_node = tmalloc(sizeof(*new_node));
     if (!new_node)
         return -1;
 
+    new_node->self = false;
     new_node->upper_bound = upper_bound;
     new_node->link = client;
 
@@ -112,7 +117,7 @@ int cluster_add_node(struct cluster *cluster, struct client *client) {
  * the consistent hash ring
  */
 struct cluster_node *cluster_get_node(struct cluster *cluster,
-        int16_t hash_value) {
+        uint16_t hash_value) {
 
     /*
      * Edge case, a list with a single node (very unlikely) should just return
@@ -139,7 +144,16 @@ struct cluster_node *cluster_get_node(struct cluster *cluster,
             ((struct cluster_node *) cur->data)->upper_bound < hash_value)
         return cluster->nodes->head->data;
 
-    int16_t upper_bound = ((struct cluster_node *) cur->data)->upper_bound;
+    uint16_t upper_bound = ((struct cluster_node *) cur->data)->upper_bound;
 
     return hash_value > upper_bound ? cur->next->data : cur->data;
+}
+
+/* Add an already created and assigned node to the circle */
+void cluster_add_node(struct cluster *cluster, struct cluster_node *node) {
+
+    list_push(cluster->nodes, node);
+
+    cluster->nodes->head =
+        list_merge_sort(cluster->nodes->head, compare_upper_bound);
 }

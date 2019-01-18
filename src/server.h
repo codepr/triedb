@@ -32,6 +32,7 @@
 #include "list.h"
 #include "vector.h"
 #include "cluster.h"
+#include "ringbuf.h"
 #include "protocol.h"
 #include "hashtable.h"
 
@@ -47,8 +48,10 @@
 
 enum client_type { CLIENT, SERVER, NODE };
 
-/* Global db instance, containing some connection data, clients, expiring keys
-   and databases */
+/*
+ * Global db instance, containing some connection data, clients, expiring keys
+ * and databases
+ */
 struct tritedb {
     /* Main epoll loop fd */
     int epollfd;
@@ -71,7 +74,8 @@ struct tritedb {
 };
 
 
-/* Basic client structure, represents a connected client, with his last reply
+/*
+ * Basic client structure, represents a connected client, with his last reply
  * and the command packet associated (PUT, GET, DEL etc...). It uses a function
  * pointer to define a context handler, modifying a unified interface of
  * handling based upon 3 common actions:
@@ -100,8 +104,10 @@ struct client {
 };
 
 
-/* Structure to represent a key with a TTL set which is not -NOTTL, e.g. has a
-   timeout after which the key will be deleted */
+/*
+ * Structure to represent a key with a TTL set which is not -NOTTL, e.g. has a
+ * timeout after which the key will be deleted
+ */
 struct expiring_key {
     Trie *data_ptr;
     const struct node_data *nd;
@@ -109,14 +115,16 @@ struct expiring_key {
 };
 
 
-/* Simple database abstraction, provide some namespacing to keyspace for each
-   client */
+/*
+ * Simple database abstraction, provide some namespacing to keyspace for each
+ * client
+ */
 struct database {
     const char *name;
     Trie *data;
 };
 
-
+/* Global informations statistics structure */
 struct informations {
     /* Number of clients currently connected */
     uint32_t nclients;
@@ -136,6 +144,8 @@ struct informations {
     uint64_t noutputbytes;
 };
 
+
+struct buffer *recv_packet(int , Ringbuffer *, uint8_t *, int *);
 
 int start_server(const char *, const char *, int);
 

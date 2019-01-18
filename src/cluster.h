@@ -38,7 +38,8 @@
  * the client referring to the node
  */
 struct cluster_node {
-    int16_t upper_bound;
+    bool self;
+    uint16_t upper_bound;
     struct client *link;
 };
 
@@ -48,19 +49,22 @@ struct cluster {
 };
 
 /* Compute a hash of a string by using CRC32 function mod RING_POINTS */
-int16_t hash(const char *);
+uint16_t hash(const char *);
 
 /*
  * Add new node into the cluster, create a new node to be inserted into the
  * list at the right index
  */
-int cluster_add_node(struct cluster *, struct client *);
+int cluster_add_new_node(struct cluster *, struct client *, const char *);
 
 /*
  * Retrieve a cluster node based on the index, cluster node list is sorted by
  * upper_bound limit of each node
  */
-struct cluster_node *cluster_get_node(struct cluster *, int16_t);
+struct cluster_node *cluster_get_node(struct cluster *, uint16_t);
+
+/* Add new node already assigned in the circle */
+void cluster_add_node(struct cluster *, struct cluster_node *);
 
 
 #endif

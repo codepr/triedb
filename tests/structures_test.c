@@ -695,7 +695,7 @@ static char *test_hashtable_del(void) {
 }
 
 
-static char *test_cluster_add_node(void) {
+static char *test_cluster_add_new_node(void) {
 
     struct cluster cluster = { list_init(NULL) };
 
@@ -710,22 +710,22 @@ static char *test_cluster_add_node(void) {
         .db = NULL
     };
 
-    cluster_add_node(&cluster, &client);
+    cluster_add_new_node(&cluster, &client, "127.0.0.18080");
 
-    ASSERT("[! cluster_add_node]: cluster node not correctly added", cluster.nodes->len == 1);
+    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 1);
 
-    cluster_add_node(&cluster, &client);
-    cluster_add_node(&cluster, &client);
-    cluster_add_node(&cluster, &client);
+    cluster_add_new_node(&cluster, &client, "127.0.0.18081");
+    cluster_add_new_node(&cluster, &client, "127.0.0.18082");
+    cluster_add_new_node(&cluster, &client, "127.0.0.18083");
 
-    ASSERT("[! cluster_add_node]: cluster node not correctly added", cluster.nodes->len == 4);
+    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 4);
 
     for (struct list_node *ln = cluster.nodes->head; ln; ln = ln->next)
         tfree(ln->data);
 
     list_free(cluster.nodes, 0);
 
-    printf(" [cluster::cluster_add_node]: OK\n");
+    printf(" [cluster::cluster_add_new_node]: OK\n");
 
     return 0;
 }
@@ -759,10 +759,10 @@ static char *test_cluster_get_node(void) {
         .db = NULL
     };
 
-    struct cluster_node node1 = { 1000, &client};
-    struct cluster_node node2 = { 1500, &client};
-    struct cluster_node node3 = { 2000, &client};
-    struct cluster_node node4 = { 2500, &client};
+    struct cluster_node node1 = { false, 1000, &client};
+    struct cluster_node node2 = { false, 1500, &client};
+    struct cluster_node node3 = { false, 2000, &client};
+    struct cluster_node node4 = { false, 2500, &client};
 
     list_push(cluster.nodes, &node1);
     list_push(cluster.nodes, &node2);
@@ -833,7 +833,7 @@ char *structures_test() {
     RUN_TEST(test_hashtable_get);
     RUN_TEST(test_hashtable_del);
     RUN_TEST(test_hashtable_release);
-    RUN_TEST(test_cluster_add_node);
+    RUN_TEST(test_cluster_add_new_node);
     RUN_TEST(test_cluster_get_node);
 
     return 0;

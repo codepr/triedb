@@ -33,6 +33,8 @@
 #include <stdbool.h>
 
 
+#define UUID_LEN     37
+
 #define MAX_LOG_SIZE 119
 
 #define RANDBETWEEN(A,B) A + rand()/(RAND_MAX/(B - A))
@@ -45,6 +47,7 @@ void oom(const char *);
 bool is_integer(const char *);
 int parse_int(const char *);
 int number_len(size_t);
+int generate_uuid(char *);
 
 /* Logging */
 void t_log_init(const char *);

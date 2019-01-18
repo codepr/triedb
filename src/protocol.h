@@ -61,7 +61,7 @@
 #define VALUE_CONTENT           0x02
 #define LIST_CONTENT            0x03
 
-#define COMMAND_COUNT           13
+#define COMMAND_COUNT           14
 
 /* Operation codes */
 #define ACK                     0x00
@@ -74,6 +74,7 @@
 #define COUNT                   0x07
 #define KEYS                    0x08
 #define USE                     0x09
+#define CLUSTER_JOIN            0x0a
 #define PING                    0xfc
 #define DB                      0xfd
 #define INFO                    0xfe
@@ -180,7 +181,7 @@ struct key {
 
 /*
  * Definition of a key-value pair, for the rest it is equal to Key
- * TODO: remve is_prefix
+ * TODO: remove is_prefix
  */
 struct keyval {
     uint16_t keysize;
@@ -333,10 +334,16 @@ union response *make_data_response(const uint8_t *, const uint8_t *, uint8_t);
 union response *make_valuecontent_response(uint32_t, const uint8_t *, uint8_t);
 union response *make_list_response(const List *, const uint8_t *, uint8_t);
 
+/* Request builder functions, essentially mirroring of response builders */
+struct request *make_key_request(const uint8_t *,
+        uint8_t, uint8_t, uint16_t, uint8_t);
+
 // Response -> byte buffer
 void pack_response(struct buffer *, const union response *, int);
 
 void free_response(union response *, int);
+
+void pack_request(struct buffer *, const struct request *, int);
 
 
 #endif

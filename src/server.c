@@ -41,7 +41,6 @@
 #include "util.h"
 #include "server.h"
 #include "config.h"
-#include "ringbuf.h"
 #include "network.h"
 #include "protocol.h"
 
@@ -113,6 +112,7 @@ static int ttl_handler(struct client *);
 static int inc_handler(struct client *);
 static int dec_handler(struct client *);
 static int use_handler(struct client *);
+static int cluster_join_handler(struct client *);
 static int ping_handler(struct client *);
 static int db_handler(struct client *);
 static int count_handler(struct client *);
@@ -139,14 +139,17 @@ static struct command_handler commands_map[COMMAND_COUNT] = {
     {COUNT, count_handler},
     {KEYS, keys_handler},
     {USE, use_handler},
+    {CLUSTER_JOIN, cluster_join_handler},
     {PING, ping_handler},
     {DB, db_handler},
     {INFO, info_handler},
     {QUIT, quit_handler}
 };
 
-/* Parse header, require at least the first 5 bytes in order to read packet
-   type and total length that we need to recv to complete the packet */
+/*
+ * Parse header, require at least the first 5 bytes in order to read packet
+ * type and total length that we need to recv to complete the packet
+ */
 struct buffer *recv_packet(int clientfd,
         Ringbuffer *rbuf, uint8_t *opcode, int *rc) {
 
@@ -184,8 +187,10 @@ struct buffer *recv_packet(int clientfd,
     /* Read the total length of the packet */
     uint32_t tlen = ntohl(*((uint32_t *) (tmp + sizeof(uint8_t))));
 
-    /* Set return code to -ERRMAXREQSIZE in case of total packet len exceed
-       the configuration limit `max_request_size` */
+    /*
+     * Set return code to -ERRMAXREQSIZE in case of total packet len exceed
+     * the configuration limit `max_request_size`
+     */
     if (tlen > conf->max_request_size) {
         *rc = -ERRMAXREQSIZE;
         goto err;
@@ -595,10 +600,14 @@ static int del_handler(struct client *c) {
             if (cmd->keys[i]->is_prefix == 1) {
 
                 currsize = c->db->data->size;
-                // We are dealing with a wildcard, so we apply the deletion to
-                // all keys below the wildcard
+
+                /*
+                 * We are dealing with a wildcard, so we apply the deletion to
+                 * all keys below the wildcard
+                 */
                 trie_prefix_delete(c->db->data,
                         (const char *) cmd->keys[i]->key);
+
                 // Update total keyspace counter
                 tritedb.keyspace_size -= currsize - c->db->data->size;
             } else {
@@ -606,6 +615,7 @@ static int del_handler(struct client *c) {
                         (const char *) cmd->keys[i]->key);
                 if (found == false)
                     code = NOK;
+
                 // Update total keyspace counter
                 tritedb.keyspace_size--;
             }
@@ -618,10 +628,12 @@ static int del_handler(struct client *c) {
     return OK;
 }
 
-/* Increment an integer value by 1. If the string value doesn't contain a
-   proper integer return a NOK.
-
-   XXX check for bounds */
+/*
+ * Increment an integer value by 1. If the string value doesn't contain a
+ * proper integer return a NOK.
+ *
+ * XXX check for bounds
+ */
 static int inc_handler(struct client *c) {
 
     int code = OK, n = 0;
@@ -634,10 +646,14 @@ static int inc_handler(struct client *c) {
         if (inc->keys[i]->is_prefix == 1) {
             trie_prefix_inc(c->db->data, (const char *) inc->keys[i]->key);
         } else {
-            // For each key in the keys array, check for presence and increment
-            // it by one
+
+            /*
+             * For each key in the keys array, check for presence and increment
+             * it by one
+             */
             found = trie_find(c->db->data,
                     (const char *) inc->keys[i]->key, &val);
+
             if (found == false || !val) {
                 code = NOK;
             } else {
@@ -667,10 +683,12 @@ static int inc_handler(struct client *c) {
     return OK;
 }
 
-/* Decrement an integer value by 1. If the string value doesn't contain a
-   proper integer return a NOK.
-
-   XXX check for bounds */
+/*
+ * Decrement an integer value by 1. If the string value doesn't contain a
+ * proper integer return a NOK.
+ *
+ * XXX check for bounds
+ */
 static int dec_handler(struct client *c) {
 
     int code = OK, n = 0;
@@ -684,8 +702,10 @@ static int dec_handler(struct client *c) {
             trie_prefix_dec(c->db->data, (const char *) dec->keys[i]->key);
         } else {
 
-            // For each key in the keys array, check for presence and increment
-            // it by one
+            /*
+             * For each key in the keys array, check for presence and increment
+             * it by one
+             */
             found = trie_find(c->db->data,
                     (const char *) dec->keys[i]->key, &val);
             if (found == false || !val) {
@@ -697,8 +717,11 @@ static int dec_handler(struct client *c) {
                 } else {
                     n = parse_int(nd->data);
                     --n;
-                    // Check for realloc if the new value is "smaller" then
-                    // previous
+
+                    /*
+                     * Check for realloc if the new value is "smaller" then
+                     * previous
+                     */
                     char tmp[number_len(n)];
                     sprintf(tmp, "%d", n);
                     size_t len = strlen(tmp);
@@ -741,8 +764,10 @@ static int use_handler(struct client *c) {
     struct database *database =
         hashtable_get(tritedb.dbs, (const char *) cmd->key);
 
-    /* It doesn't exist, we create a new database with the given name,
-       otherwise just assign it to the current db of the client */
+    /*
+     * It doesn't exist, we create a new database with the given name,
+     * otherwise just assign it to the current db of the client
+     */
     if (!database) {
         // TODO check for OOM
         database = tmalloc(sizeof(*database));
@@ -768,8 +793,10 @@ static int count_handler(struct client *c) {
     int count = 0;
     struct key_command *cnt = c->request->command->kcommand;
 
-    // Get the size of each key below the requested one, glob operation or the
-    // entire trie size in case of NULL key
+    /*
+     * Get the size of each key below the requested one, glob operation or the
+     * entire trie size in case of NULL key
+     */
     count = !cnt->key ? c->db->data->size :
         trie_prefix_count(c->db->data, (const char *) cnt->key);
 
@@ -779,6 +806,28 @@ static int count_handler(struct client *c) {
     pack_response(b, res, VALUE_CONTENT);
     set_reply(c, b, -1);
     free_response(res, VALUE_CONTENT);
+
+    free_request(c->request, SINGLE_REQUEST);
+
+    return OK;
+}
+
+
+static int cluster_join_handler(struct client *c) {
+
+    struct key_command *command = c->request->command->kcommand;
+
+    /* Only other nodes are enabled to send this request */
+    if (!(command->header->flags & F_FROMNODEREQUEST))
+        return -1;
+
+    /*
+     * Add new node to the hashring of this instance, key field of the command
+     * structure should carry the host+port string joined together
+     */
+    cluster_add_new_node(tritedb.cluster, c, (const char *) command->key);
+
+    set_ack_reply(c, OK, NULL, F_NOFLAG);
 
     free_request(c->request, SINGLE_REQUEST);
 
@@ -899,6 +948,12 @@ static int request_handler(struct client *client) {
     if (!b)
         goto freebuf;
 
+    /* Directly reset in case of ACK */
+    if (opcode == ACK) {
+        tdebug("ACK received");
+        goto reset;
+    }
+
     // Update information stats
     info.ninputbytes += b->size;
 
@@ -941,12 +996,12 @@ static int request_handler(struct client *client) {
     client->request = request;
 
     int executed = 0;
-    int dc = 0;
+    int err = 0;
 
     // Loop through commands_hashmap array to find the correct handler
     for (int i = 0; i < COMMAND_COUNT; i++) {
         if (commands_map[i].ctype == opcode) {
-            dc = commands_map[i].handler(client);
+            err = commands_map[i].handler(client);
             executed = 1;
         }
     }
@@ -962,7 +1017,7 @@ static int request_handler(struct client *client) {
      * A disconnection happened, we close the handler, the file descriptor
      * have been already removed from the event loop
      */
-    if (dc == -1)
+    if (err == -1)
         goto exit;
 
     // Set reply handler as the current context handler
@@ -1027,9 +1082,10 @@ static int reply_handler(struct client *client) {
     free_reply(client->reply);
     client->reply = NULL;
 
-    /* Set up EPOLL event for read fds */
+    /* Set up EPOLL event on EPOLLIN to read fds */
     client->ctx_handler = request_handler;
     mod_epoll(tritedb.epollfd, client->fd, EPOLLIN, client);
+
     return ret;
 }
 
@@ -1199,8 +1255,10 @@ static void free_expiring_keys(Vector *ekeys) {
     tfree(ekeys);
 }
 
-/* Cycle through sorted list of expiring keys and remove those which are
-   elegible */
+/*
+ * Cycle through sorted list of expiring keys and remove those which are
+ * elegible
+ */
 static void expire_keys(void) {
 
     if (vector_size(tritedb.expiring_keys) == 0)
@@ -1218,8 +1276,10 @@ static void expire_keys(void) {
         if (delta > 0)
             break;
 
-        /* ek->data_ptr points to the trie of the client which stores the given
-           key */
+        /*
+         * ek->data_ptr points to the trie of the client which stores the given
+         * key
+         */
         trie_delete(ek->data_ptr, ek->key);
 
         vector_delete(tritedb.expiring_keys, i);
@@ -1248,8 +1308,10 @@ static inline void log_stats(void) {
     tfree((char *) memory);
 }
 
-/* Temporary auxiliary function till the network::epoll_loop is ready, add a
-   periodic task to the epoll loop */
+/*
+ * Temporary auxiliary function till the network::epoll_loop is ready, add a
+ * periodic task to the epoll loop
+ */
 static int add_cron_task(int epollfd, struct itimerspec timervalue) {
 
     int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
@@ -1336,20 +1398,21 @@ static void run_server(void) {
                  */
                 struct client *client = evs[i].data.ptr;
 
-                terror("Dropping client on %s", client->addr);
+                terror("Dropping client on %s: event polling error",
+                        client->addr);
 
                 /*
                  * Clean out from global tables, from clients or from nodes
                  * based on the client type
+                 * TODO: unify with if below
                  */
-                hashtable_del(client->ctype == NODE ?
-                        tritedb.nodes : tritedb.clients, client->uuid);
-
-                // TODO: unify with if above
                 if (client->ctype == NODE)
                     info.nnodes--;
                 else
                     info.nclients--;
+
+                hashtable_del(client->ctype == NODE ?
+                        tritedb.nodes : tritedb.clients, client->uuid);
 
                 close(evs[i].data.fd);
 
@@ -1430,8 +1493,10 @@ int start_server(const char *addr, const char *port, int node_fd) {
     /* Initialize the sockets, first the server one */
     int fd = make_listen(addr, port, conf->socket_family);
 
-    /* Add eventfd to the loop, this time only in LT in order to wake up all
-       threads */
+    /*
+     * Add eventfd to the loop, this time only in LT in order to wake up all
+     * threads
+     */
     struct epoll_event ev;
     ev.data.fd = conf->run;
     ev.events = EPOLLIN;
@@ -1447,12 +1512,14 @@ int start_server(const char *addr, const char *port, int node_fd) {
         .ctype = SERVER,
         .addr = addr,
         .fd = fd,
-        .last_action_time = 0,
+        .last_action_time = time(NULL),
         .ctx_handler = accept_handler,
         .reply = NULL,
         .request = NULL,
         .db = NULL
     };
+
+    generate_uuid((char *) server.uuid);
 
     /* Set socket in EPOLLIN flag mode, ready to read data */
     add_epoll(epollfd, fd, &server);
@@ -1469,13 +1536,37 @@ int start_server(const char *addr, const char *port, int node_fd) {
         node.ctype = NODE;
         node.addr = addr;
         node.fd = node_fd;
-        node.last_action_time = 0;
+        node.last_action_time = time(NULL);
         node.ctx_handler = request_handler;
         node.reply = NULL;
         node.request = NULL;
         node.db = NULL;
 
+        generate_uuid((char *) node.uuid);
+
         add_epoll(epollfd, node_fd, &node);
+
+        // 22 magic value, the max length + 1 for nul
+        char fulladdr[22];
+
+        strcpy(fulladdr, addr);
+
+        // Send CLUSTER_JOIN request
+        // XXX Obnoxious
+        struct request *request =
+            make_key_request((const uint8_t *) strcat(fulladdr, port),
+                    CLUSTER_JOIN, 0x00, 0x00, F_FROMNODEREQUEST);
+
+        struct buffer *buffer =
+            buffer_init(request->command->kcommand->header->size);
+
+        pack_request(buffer, request, KEY_COMMAND);
+
+        if ((sendall(node_fd, buffer->data,
+                        buffer->size, &(ssize_t){ 0 })) < 0)
+            perror("send(2): can't write on socket descriptor");
+
+        free_request(request, SINGLE_REQUEST);
     }
 
     tritedb.epollfd = epollfd;
@@ -1499,7 +1590,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
         bus_server.ctype = SERVER;
         bus_server.addr = addr;
         bus_server.fd = bfd;
-        bus_server.last_action_time = 0;
+        bus_server.last_action_time = time(NULL);
         bus_server.ctx_handler = accept_node_handler;
         bus_server.reply = NULL;
         bus_server.request = NULL;
@@ -1509,7 +1600,8 @@ int start_server(const char *addr, const char *port, int node_fd) {
         add_epoll(tritedb.epollfd, bfd, &bus_server);
     }
 
-    tinfo("struct tritedb v%s", conf->version);
+    tinfo("TriteDB v%s", conf->version);
+
     if (conf->socket_family == UNIX)
         tinfo("Starting server on %s", addr);
     else

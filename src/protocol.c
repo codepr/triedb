@@ -217,6 +217,9 @@ static void unpack_header(struct buffer *b, struct header *h) {
 
     if (is_fromnoderes)
         h->flags |= F_FROMNODERESPONSE;
+
+    if (is_fromnodereq || is_fromnoderes)
+        strcpy(h->transaction_id, (const char *) read_bytes(b, UUID_LEN-1));
 }
 
 // Refactoring
@@ -230,6 +233,7 @@ static const int opcode_req_map[COMMAND_COUNT][2] = {
     {COUNT, KEY_COMMAND},
     {KEYS, KEY_COMMAND},
     {USE, KEY_COMMAND},
+    {CLUSTER_JOIN, KEY_COMMAND},
     {PING, EMPTY_COMMAND},
     {DB, EMPTY_COMMAND},
     {INFO, EMPTY_COMMAND},
@@ -732,4 +736,85 @@ void free_response(union response *response, int restype) {
     }
 
     tfree(response);
+}
+
+
+struct request *make_key_request(const uint8_t *key, uint8_t opcode,
+        uint8_t is_prefix, uint16_t ttl, uint8_t flags) {
+
+    struct request *request = tmalloc(sizeof(*request));
+    if (!request)
+        goto err;
+
+    request->reqtype = SINGLE_REQUEST;
+    request->command = tmalloc(sizeof(struct command));
+    if (!request->command)
+        goto errnomem1;
+
+    request->command->cmdtype = KEY_COMMAND;
+    request->command->kcommand = tmalloc(sizeof(struct key_command));
+    if (!request->command->kcommand)
+        goto errnomem2;
+
+    request->command->kcommand->header = tmalloc(sizeof(struct header));
+    if (!request->command->kcommand->header)
+        goto errnomem3;
+
+    request->command->kcommand->header->size = HEADERLEN +
+        (2 * sizeof(uint16_t)) + strlen((const char *) key) + sizeof(uint8_t);
+
+    request->command->kcommand->header->flags = 0 | flags;
+
+    if (flags & F_FROMNODEREQUEST) {
+        char uuid[UUID_LEN];
+        generate_uuid(uuid);
+        strcpy(request->command->kcommand->header->transaction_id, uuid);
+        request->command->kcommand->header->size += UUID_LEN;
+    }
+
+    request->command->kcommand->header->opcode = opcode;
+
+    request->command->kcommand->keysize = strlen((const char *) key);
+    request->command->kcommand->key = (uint8_t *) tstrdup((const char *) key);
+
+    request->command->kcommand->ttl = ttl;
+    request->command->kcommand->is_prefix = is_prefix;
+
+    return request;
+
+errnomem3:
+
+    tfree(request->command->kcommand);
+
+errnomem2:
+
+    tfree(request->command);
+
+errnomem1:
+
+    tfree(request);
+
+err:
+
+    return NULL;
+}
+
+
+void pack_request(struct buffer *buffer,
+        const struct request *request, int reqtype) {
+
+    assert(buffer && request);
+
+    switch (reqtype) {
+        case KEY_COMMAND:
+            pack_header(request->command->kcommand->header, buffer);
+            write_uint16(buffer, request->command->kcommand->keysize);
+            write_bytes(buffer, request->command->kcommand->key);
+            write_uint8(buffer, request->command->kcommand->is_prefix);
+            write_uint16(buffer, request->command->kcommand->ttl);
+            break;
+        default:
+            fprintf(stderr, "Not implemented yet\n");
+            break;
+    }
 }

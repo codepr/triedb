@@ -32,6 +32,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <uuid/uuid.h>
 #include "util.h"
 #include "config.h"
 
@@ -115,8 +116,10 @@ int parse_int(const char *string) {
     return n;
 }
 
-/* Return the 'length' of a positive number, as the number of chars it would
- * take in a string */
+/*
+ * Return the 'length' of a positive number, as the number of chars it would
+ * take in a string
+ */
 int number_len(size_t number) {
     int len = 1;
     while (number) {
@@ -126,6 +129,17 @@ int number_len(size_t number) {
     return len;
 }
 
+
+int generate_uuid(char *uuid_placeholder) {
+
+    /* Generate random uuid */
+    uuid_t binuuid;
+    uuid_generate_random(binuuid);
+    uuid_unparse(binuuid, uuid_placeholder);
+
+    return 0;
+}
+
 /* Out of memory print, for now it just output on stderr and exit */
 void oom(const char *msg) {
     fprintf(stderr, "malloc(3) failed: %s %s\n", strerror(errno), msg);
@@ -133,11 +147,13 @@ void oom(const char *msg) {
     exit(EXIT_FAILURE);
 }
 
-/* Custom malloc function, allocate a defined size of bytes plus 8, the size
-   of an unsigned long long, and append the length choosen at the beginning of
-   the memory chunk as an unsigned long long, returning the memory chunk
-   allocated just 8 bytes after the start; this way it is possible to track
-   the memory usage at every allocation */
+/*
+ * Custom malloc function, allocate a defined size of bytes plus 8, the size
+ * of an unsigned long long, and append the length choosen at the beginning of
+ * the memory chunk as an unsigned long long, returning the memory chunk
+ * allocated just 8 bytes after the start; this way it is possible to track
+ * the memory usage at every allocation
+ */
 void *tmalloc(size_t size) {
 
     assert(size > 0);
@@ -154,8 +170,10 @@ void *tmalloc(size_t size) {
     return (char *) ptr + sizeof(size_t);
 }
 
-/* Same as tmalloc, but with calloc, creating chunk o zero'ed memory.
-   TODO: still a suboptimal solution */
+/*
+ * Same as tmalloc, but with calloc, creating chunk o zero'ed memory.
+ * TODO: still a suboptimal solution
+ */
 void *tcalloc(size_t len, size_t size) {
 
     assert(len > 0 && size > 0);
@@ -172,8 +190,10 @@ void *tcalloc(size_t len, size_t size) {
     return (char *) ptr + sizeof(size_t);
 }
 
-/* Same of tmalloc but with realloc, resize a chunk of memory pointed by a
-   given pointer, again appends the new size in front of the byte array */
+/*
+ * Same of tmalloc but with realloc, resize a chunk of memory pointed by a
+ * given pointer, again appends the new size in front of the byte array
+ */
 void *trealloc(void *ptr, size_t size) {
 
     assert(size > 0);
@@ -201,10 +221,12 @@ void *trealloc(void *ptr, size_t size) {
 
 }
 
-/* Custom free function, must be used on memory chunks allocated with t*
-   functions, it move the pointer 8 position backward by the starting address
-   of memory pointed by `ptr`, this way it knows how many bytes will be
-   free'ed by the call */
+/*
+ * Custom free function, must be used on memory chunks allocated with t*
+ * functions, it move the pointer 8 position backward by the starting address
+ * of memory pointed by `ptr`, this way it knows how many bytes will be
+ * free'ed by the call
+ */
 void tfree(void *ptr) {
 
     if (!ptr)
@@ -225,9 +247,11 @@ void tfree(void *ptr) {
     free(realptr);
 }
 
-/* Retrieve the bytes allocated by t* functions by backwarding the pointer of
-   8 positions, the size of an unsigned long long in order to read the number
-   of allcated bytes */
+/*
+ * Retrieve the bytes allocated by t* functions by backwarding the pointer of
+ * 8 positions, the size of an unsigned long long in order to read the number
+ * of allcated bytes
+ */
 size_t malloc_size(void *ptr) {
 
     if (!ptr)
@@ -243,9 +267,11 @@ size_t malloc_size(void *ptr) {
     return ptr_size;
 }
 
-/* As strdup but using tmalloc instead of malloc, to track the number of bytes
-   allocated and to enable use of tfree on duplicated strings without having to
-   care when to use a normal free or a tfree */
+/*
+ * As strdup but using tmalloc instead of malloc, to track the number of bytes
+ * allocated and to enable use of tfree on duplicated strings without having to
+ * care when to use a normal free or a tfree
+ */
 char *tstrdup(const char *s) {
 
     char *ds = tmalloc(strlen(s) + 1);
