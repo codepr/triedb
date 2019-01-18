@@ -183,6 +183,10 @@ static void pack_header(const struct header *h, struct buffer *b) {
     write_uint8(b, h->flags & F_BULKREQUEST ? 1 : 0);
     write_uint8(b, h->flags & F_PREFIXREQUEST ? 1 : 0);
     write_uint8(b, h->flags & F_FROMNODEREQUEST ? 1 : 0);
+    write_uint8(b, h->flags & F_FROMNODERESPONSE ? 1 : 0);
+
+    if ((h->flags & F_FROMNODEREQUEST) || (h->flags & F_FROMNODERESPONSE))
+        write_bytes(b, (uint8_t *) h->transaction_id);
 }
 
 
@@ -192,14 +196,15 @@ static void unpack_header(struct buffer *b, struct header *h) {
 
     h->flags = 0;
 
-    uint8_t is_bulk = 0, is_prefix = 0, is_fromnode = 0;
+    uint8_t is_bulk = 0, is_prefix = 0, is_fromnodereq = 0, is_fromnoderes = 0;
 
     h->opcode = read_uint8(b);
     h->size = read_uint32(b);
 
     is_bulk = read_uint8(b);
     is_prefix = read_uint8(b);
-    is_fromnode = read_uint8(b);
+    is_fromnodereq = read_uint8(b);
+    is_fromnoderes = read_uint8(b);
 
     if (is_bulk)
         h->flags |= F_BULKREQUEST;
@@ -207,8 +212,11 @@ static void unpack_header(struct buffer *b, struct header *h) {
     if (is_prefix)
         h->flags |= F_PREFIXREQUEST;
 
-    if (is_fromnode)
+    if (is_fromnodereq)
         h->flags |= F_FROMNODEREQUEST;
+
+    if (is_fromnoderes)
+        h->flags |= F_FROMNODERESPONSE;
 }
 
 // Refactoring
@@ -513,7 +521,8 @@ void pack_response(struct buffer *b, const union response *r, int restype) {
 }
 
 
-union response *make_ack_response(uint8_t code, uint8_t flags) {
+union response *make_ack_response(uint8_t code,
+        const uint8_t *transaction_id, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -529,7 +538,13 @@ union response *make_ack_response(uint8_t code, uint8_t flags) {
 
     response->ncontent->header->opcode = ACK;
     response->ncontent->header->size = HEADERLEN + sizeof(uint8_t);
-    response->ncontent->header->flags |= flags;
+    response->ncontent->header->flags = 0 | flags;
+
+    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
+        strncpy(response->ncontent->header->transaction_id,
+                (const char *) transaction_id, 37);
+        response->ncontent->header->size += 37;
+    }
 
     response->ncontent->code = code;
 
@@ -549,7 +564,8 @@ errnomem3:
 }
 
 
-union response *make_data_response(const uint8_t *data, uint8_t flags) {
+union response *make_data_response(const uint8_t *data,
+        const uint8_t *transaction_id, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -566,7 +582,13 @@ union response *make_data_response(const uint8_t *data, uint8_t flags) {
     response->dcontent->header->opcode = PUT;
     response->dcontent->header->size =
         HEADERLEN + sizeof(uint32_t) + strlen((char *) data);
-    response->dcontent->header->flags |= flags;
+    response->dcontent->header->flags = 0 | flags;
+
+    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
+        strncpy(response->dcontent->header->transaction_id,
+                (const char *) transaction_id, 37);
+        response->dcontent->header->size += 37;
+    }
 
     response->dcontent->datalen = strlen((char *) data);
     response->dcontent->data = (uint8_t *) tstrdup((const char *) data);
@@ -587,7 +609,8 @@ errnomem3:
 }
 
 
-union response *make_valuecontent_response(uint32_t value, uint8_t flags) {
+union response *make_valuecontent_response(uint32_t value,
+        const uint8_t *transaction_id, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -603,7 +626,13 @@ union response *make_valuecontent_response(uint32_t value, uint8_t flags) {
 
     response->vcontent->header->opcode = ACK;
     response->vcontent->header->size = HEADERLEN + sizeof(uint32_t);
-    response->vcontent->header->flags |= flags;
+    response->vcontent->header->flags = 0 | flags;
+
+    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
+        strncpy(response->vcontent->header->transaction_id,
+                (const char *) transaction_id, 37);
+        response->vcontent->header->size += 37;
+    }
 
     response->vcontent->val = value;
 
@@ -623,7 +652,8 @@ errnomem3:
 }
 
 
-union response *make_list_response(const List *content, uint8_t flags) {
+union response *make_list_response(const List *content,
+        const uint8_t *transaction_id, uint8_t flags) {
 
     union response *response = tmalloc(sizeof(*response));
     if (!response)
@@ -644,7 +674,13 @@ union response *make_list_response(const List *content, uint8_t flags) {
 
     response->lcontent->header->opcode = ACK;
     response->lcontent->header->size = HEADERLEN + sizeof(uint32_t);
-    response->lcontent->header->flags |= flags;
+    response->lcontent->header->flags = 0 | flags;
+
+    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
+        strncpy(response->lcontent->header->transaction_id,
+                (const char *) transaction_id, 37);
+        response->lcontent->header->size += 37;
+    }
 
     response->lcontent->len = content->len;
     response->lcontent->keys = tcalloc(content->len, sizeof(struct key));

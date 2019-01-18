@@ -37,9 +37,10 @@ class TriteDBTest(unittest.TestCase):
 
         if not ttl:
             put = struct.pack(
-                f'=BIBBBHI{keylen}s{vallen}sB',
+                f'=BIBBBBHI{keylen}s{vallen}sB',
                 0x01,
-                htonl(15 + keylen + vallen),
+                htonl(16 + keylen + vallen),
+                0x00,
                 0x00,
                 0x00,
                 0x00,
@@ -51,9 +52,10 @@ class TriteDBTest(unittest.TestCase):
             )
         else:
             put = struct.pack(
-                f'=BIBBBHI{keylen}s{vallen}sBH',
+                f'=BIBBBBHI{keylen}s{vallen}sBH',
                 0x01,
-                htonl(17 + keylen + vallen),
+                htonl(18 + keylen + vallen),
+                0x00,
                 0x00,
                 0x00,
                 0x00,
@@ -66,8 +68,8 @@ class TriteDBTest(unittest.TestCase):
             )
 
         self.connection.send(put)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         _ = struct.unpack('=B', self.connection.recv(1))
 
@@ -76,9 +78,10 @@ class TriteDBTest(unittest.TestCase):
     def _send_get(self, key):
         keylen = len(key)
         get = struct.pack(
-        f'=BIBBBH{keylen}s',
+        f'=BIBBBBH{keylen}s',
             0x02,
-            htonl(10 + keylen),
+            htonl(11 + keylen),
+            0x00,
             0x00,
             0x00,
             0x00,
@@ -86,11 +89,11 @@ class TriteDBTest(unittest.TestCase):
             key.encode()
         )
         self.connection.send(get)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         if code == 0x00:
-            payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+            payload = struct.unpack('=B', self.connection.recv(total_len - 9))
             data = code
         else:
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
@@ -101,9 +104,9 @@ class TriteDBTest(unittest.TestCase):
     def _send_del(self, keys):
         is_prefix = False
         totlen = sum(len(k) for k in keys)
-        fmtinit = '=BIBBBI'
+        fmtinit = '=BIBBBBI'
         fmt = ''.join(f'H{len(key)}sB' for key in keys)
-        totlen += 12 + 3 * len(keys)
+        totlen += 13 + 3 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
         fmt = fmtinit + fmt
         delete = struct.pack(
@@ -113,14 +116,15 @@ class TriteDBTest(unittest.TestCase):
             0x00,
             0x00,
             0x00,
+            0x00,
             htonl(len(keys)),
             *keys_to_net
         )
         self.connection.send(delete)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
-        payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+        payload = struct.unpack('=B', self.connection.recv(total_len - 9))
 
         return code
 
@@ -139,9 +143,10 @@ class TriteDBTest(unittest.TestCase):
         key = "test-key-1"
         keylen = len(key)
         get = struct.pack(
-        f'=BIBBBH{keylen}s',
+        f'=BIBBBBH{keylen}s',
             0x02,
-            htonl(10 + keylen),
+            htonl(11 + keylen),
+            0x00,
             0x00,
             0x00,
             0x00,
@@ -149,11 +154,11 @@ class TriteDBTest(unittest.TestCase):
             key.encode()
         )
         self.connection.send(get)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         if code == 0x00:
-            payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+            payload = struct.unpack('=B', self.connection.recv(total_len - 9))
             data = code
         else:
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
@@ -165,11 +170,12 @@ class TriteDBTest(unittest.TestCase):
 
     def test_count(self):
         key = "key"
-        fmt = f'=BIBBBH{len(key)}s'
+        fmt = f'=BIBBBBH{len(key)}s'
         count = struct.pack(
             fmt,
             0x07,
-            htonl(10 + len(key)),
+            htonl(11 + len(key)),
+            0x00,
             0x00,
             0x00,
             0x00,
@@ -177,10 +183,10 @@ class TriteDBTest(unittest.TestCase):
             key.encode()
         )
         self.connection.send(count)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
-        payload = ntohl(struct.unpack('=I', self.connection.recv(total_len - 8))[0])
+        payload = ntohl(struct.unpack('=I', self.connection.recv(total_len - 9))[0])
 
         self.assertEqual(code, 0x00)
         self.assertEqual(payload, 0)
@@ -190,14 +196,14 @@ class TriteDBTest(unittest.TestCase):
         keys = ['key']
         is_prefix = True
         totlen = sum(len(k) for k in keys)
-        fmtinit = '=BIBBBI'
+        fmtinit = '=BIBBBBI'
         if is_prefix:
             fmt = ''.join(f'H{len(key)}sB' for key in keys)
-            totlen += 12 + 3 * len(keys)
+            totlen += 13 + 3 * len(keys)
             keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
         else:
             fmt = ''.join(f'H{len(key)}s' for key in keys)
-            totlen += 12 + 2 * len(keys)
+            totlen += 13 + 2 * len(keys)
             keys_to_net = [x for t in [(htons(len(key)), key.encode()) for key in keys] for x in t]
         fmt = fmtinit + fmt
         delete = struct.pack(
@@ -207,14 +213,15 @@ class TriteDBTest(unittest.TestCase):
             0x00,
             0x00,
             0x00,
+            0x00,
             htonl(len(keys)),
             *keys_to_net
         )
         self.connection.send(delete)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
-        payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+        payload = struct.unpack('=B', self.connection.recv(total_len - 9))
 
         self.assertEqual(code, 0x00)
 
@@ -223,11 +230,12 @@ class TriteDBTest(unittest.TestCase):
         self._send_put('key2', 'value2')
         self._send_put('key3', 'value3')
         key = 'key'
-        fmt = f'=BIBBBH{len(key)}s'
+        fmt = f'=BIBBBBH{len(key)}s'
         keys = struct.pack(
             fmt,
             0x08,
-            htonl(10 + len(key)),
+            htonl(11 + len(key)),
+            0x00,
             0x00,
             0x00,
             0x00,
@@ -235,8 +243,8 @@ class TriteDBTest(unittest.TestCase):
             key.encode()
         )
         self.connection.send(keys)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         key_len = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
         keys = []
@@ -257,9 +265,10 @@ class TriteDBTest(unittest.TestCase):
         ttl = 2
         keylen = len(key)
         ttl = struct.pack(
-            f'=BIBBBH{keylen}sBH',
+            f'=BIBBBBH{keylen}sBH',
             0x04,
-            htonl(13 + keylen),
+            htonl(14 + keylen),
+            0x00,
             0x00,
             0x00,
             0x00,
@@ -269,11 +278,11 @@ class TriteDBTest(unittest.TestCase):
             htons(ttl)
         )
         self.connection.send(ttl)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         if code == 0x00:
-            payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+            payload = struct.unpack('=B', self.connection.recv(total_len - 9))
         else:
             klen, vlen = struct.unpack('=HI', self.connection.recv(6))
             klen, vlen = ntohs(klen), ntohl(vlen)
@@ -297,10 +306,10 @@ class TriteDBTest(unittest.TestCase):
         self._send_put('inc-key', '9')
         keys = ['inc-key']
         totlen = sum(len(k) for k in keys)
-        fmtinit = '=BIBBBI'
+        fmtinit = '=BIBBBBI'
         is_prefix = False
         fmt = ''.join(f'H{len(key)}sB' for key in keys)
-        totlen += 12 + 3 * len(keys)
+        totlen += 13 + 3 * len(keys)
         keys_to_net = [x for t in [(htons(len(key)), key.encode(), is_prefix) for key in keys] for x in t]
         fmt = fmtinit + fmt
         inc = struct.pack(
@@ -310,14 +319,15 @@ class TriteDBTest(unittest.TestCase):
             0x00,
             0x00,
             0x00,
+            0x00,
             htonl(len(keys)),
             *keys_to_net
         )
         self.connection.send(inc)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
-        payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+        payload = struct.unpack('=B', self.connection.recv(total_len - 9))
 
         self.assertEqual(code, 0x00)
 
@@ -343,13 +353,14 @@ class TriteDBTest(unittest.TestCase):
 
         keysval = [x for t in [(htons(len(k)), htonl(len(v)), k.encode(), v.encode(), prefix, htons(0)) for k, v in kvs.items()] for x in t]
 
-        totlen = 12 + 9 * len(kvs) + sum(len(k) + len(v) for k, v in kvs.items())
+        totlen = 13 + 9 * len(kvs) + sum(len(k) + len(v) for k, v in kvs.items())
 
         put = struct.pack(
-            f'=BIBBBI' + fmt,
+            f'=BIBBBBI' + fmt,
             0x01,
             htonl(totlen),
             0x01,
+            0x00,
             0x00,
             0x00,
             htonl(len(kvs)),
@@ -357,8 +368,8 @@ class TriteDBTest(unittest.TestCase):
         )
 
         self.connection.send(put)
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         _ = struct.unpack('=B', self.connection.recv(1))
 
@@ -370,14 +381,14 @@ class TriteDBTest(unittest.TestCase):
 
     def test_use(self):
 
-        db = struct.pack('=BIBBB', 0xfd, htonl(8), 0x00, 0x00, 0x00)
+        db = struct.pack('=BIBBBB', 0xfd, htonl(9), 0x00, 0x00, 0x00, 0x00)
         self.connection.send(db)
 
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         if code == 0x00:
-            payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+            payload = struct.unpack('=B', self.connection.recv(total_len - 9))
             payload = code
         else:
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
@@ -389,9 +400,10 @@ class TriteDBTest(unittest.TestCase):
         dbname = "test-database"
 
         use = struct.pack(
-            f'=BIBBBH{len(dbname)}s',
+            f'=BIBBBBH{len(dbname)}s',
             0x09,
-            htonl(10 + len(dbname)),
+            htonl(11 + len(dbname)),
+            0x00,
             0x00,
             0x00,
             0x00,
@@ -401,21 +413,21 @@ class TriteDBTest(unittest.TestCase):
 
         self.connection.send(use)
 
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         _ = struct.unpack('=B', self.connection.recv(1))
 
         self.assertEqual(code, 0x00)
 
-        db = struct.pack('=BIBBB', 0xfd, htonl(8), 0x00, 0x00, 0x00)
+        db = struct.pack('=BIBBBB', 0xfd, htonl(9), 0x00, 0x00, 0x00, 0x00)
         self.connection.send(db)
 
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         if code == 0x00:
-            payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+            payload = struct.unpack('=B', self.connection.recv(total_len - 9))
             payload = code
         else:
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
@@ -427,9 +439,10 @@ class TriteDBTest(unittest.TestCase):
         defaultdb = "db0"
 
         use = struct.pack(
-            f'=BIBBBH{len(defaultdb)}s',
+            f'=BIBBBBH{len(defaultdb)}s',
             0x09,
-            htonl(10 + len(defaultdb)),
+            htonl(11 + len(defaultdb)),
+            0x00,
             0x00,
             0x00,
             0x00,
@@ -439,21 +452,21 @@ class TriteDBTest(unittest.TestCase):
 
         self.connection.send(use)
 
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         _ = struct.unpack('=B', self.connection.recv(1))
 
         self.assertEqual(code, 0x00)
 
-        db = struct.pack('=BIBBB', 0xfd, htonl(8), 0x00, 0x00, 0x00)
+        db = struct.pack('=BIBBBB', 0xfd, htonl(9), 0x00, 0x00, 0x00, 0x00)
         self.connection.send(db)
 
-        header = self.connection.recv(8)
-        code, total_len, _, _, _ = struct.unpack('=BIBBB', header)
+        header = self.connection.recv(9)
+        code, total_len, *_ = struct.unpack('=BIBBBB', header)
         total_len = ntohl(total_len)
         if code == 0x00:
-            payload = struct.unpack('=B', self.connection.recv(total_len - 8))
+            payload = struct.unpack('=B', self.connection.recv(total_len - 9))
             payload = code
         else:
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])

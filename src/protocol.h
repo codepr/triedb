@@ -46,6 +46,7 @@
 #define F_BULKREQUEST           1 << 1
 #define F_PREFIXREQUEST         1 << 2
 #define F_FROMNODEREQUEST       1 << 3
+#define F_FROMNODERESPONSE      1 << 4
 
 /* Command type */
 #define EMPTY_COMMAND           0x00
@@ -85,13 +86,13 @@
  * a prefix command and the source of the request (being it from a client or
  * from another node)
  *
- * [ 1 byte ] | [ 4 bytes ] | [ 1 byte ] | [ 1 byte ] | [1 byte ]
- * ---------- | ----------- | ---------- | ---------- | ---------
- *  opcode    | packet len  | bulk flag  | prefix flag| source
- * ---------- | ----------- | ---------- | ---------- | ---------
+ * [ 1 byte ] | [ 4 bytes ] | [ 1 byte ] | [ 1 byte ] | [1 byte ] | [ 1 byte ]
+ * ---------- | ----------- | ---------- | ---------- | --------- | ----------
+ *  opcode    | packet len  | bulk flag  | prefix flag| source req| source res
+ * ---------- | ----------- | ---------- | ---------- | --------- | ----------
  *
  */
-#define HEADERLEN (4 * sizeof(uint8_t)) + sizeof(uint32_t)
+#define HEADERLEN (5 * sizeof(uint8_t)) + sizeof(uint32_t)
 
 
 /* struct buffer structure, provides a convenient way of handling byte string data.
@@ -150,13 +151,18 @@ void write_bytes(struct buffer *, uint8_t *);
  * Definition of the common header, for now it simply define the operation
  * code, the total size of the packet including the body and uses a bitflag to
  * describe if it carries a single command or a stream of sequential commands,
- * a prefix or a normal command and the source of the request, which can be
- * either a normal client or another tritedb node.
+ * a prefix or a normal command and the source of the request or response,
+ * which can be either a normal client or another tritedb node.
+ *
+ * In the second case, when another node send a request it communicates also a
+ * transaction ID, which will be used to send a response to the requesting
+ * client.
  */
 struct header {
     uint8_t opcode;
     uint8_t flags;
     uint32_t size;
+    char transaction_id[37];
 };
 
 /*
@@ -318,12 +324,14 @@ union response {
 
 /*
  * Response builder functions, accept a payload as first argument and header
- * flags as second, passed in in order of activation by using | operator
+ * flags as third, passed in in order of activation by using | operator.
+ *
+ * Second argument is a transaction_id in case of F_FROMNODERESPONSE flag on.
  */
-union response *make_ack_response(uint8_t, uint8_t);
-union response *make_data_response(const uint8_t *, uint8_t);
-union response *make_valuecontent_response(uint32_t, uint8_t);
-union response *make_list_response(const List *, uint8_t);
+union response *make_ack_response(uint8_t, const uint8_t *, uint8_t);
+union response *make_data_response(const uint8_t *, const uint8_t *, uint8_t);
+union response *make_valuecontent_response(uint32_t, const uint8_t *, uint8_t);
+union response *make_list_response(const List *, const uint8_t *, uint8_t);
 
 // Response -> byte buffer
 void pack_response(struct buffer *, const union response *, int);

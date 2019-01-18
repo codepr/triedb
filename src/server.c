@@ -50,8 +50,8 @@
  * code for responding to commands like PUT or DEL, stating the result of the
  * operation
  */
-#define set_ack_reply(c, o, f) do {                                         \
-    union response *response = make_ack_response((o), (f));                 \
+#define set_ack_reply(c, o, t, f) do {                                      \
+    union response *response = make_ack_response((o), (t), (f));            \
     struct buffer *buffer = buffer_init(response->ncontent->header->size);  \
     pack_response(buffer, response, NO_CONTENT);                            \
     set_reply((c), buffer, -1);                                             \
@@ -336,7 +336,7 @@ static int ping_handler(struct client *c) {
     tdebug("PING from %s", c->addr);
 
     // TODO send out a PONG
-    set_ack_reply(c, OK, F_NOFLAG);
+    set_ack_reply(c, OK, NULL, F_NOFLAG);
 
     free_request(c->request, SINGLE_REQUEST);
 
@@ -360,7 +360,7 @@ static int keys_handler(struct client *c) {
 
     List *keys = trie_prefix_find(c->db->data, (const char *) cmd->key);
 
-    union response *response = make_list_response(keys, F_NOFLAG);
+    union response *response = make_list_response(keys, NULL, F_NOFLAG);
 
     struct buffer *buffer = buffer_init(response->lcontent->header->size);
     pack_response(buffer, response, LIST_CONTENT);
@@ -469,7 +469,7 @@ static int put_handler(struct client *c) {
     }
 
     // For now just a single response
-    set_ack_reply(c, OK, F_NOFLAG);
+    set_ack_reply(c, OK, NULL, F_NOFLAG);
 
     free_request(c->request, request->reqtype);
 
@@ -486,7 +486,7 @@ static int get_handler(struct client *c) {
     bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK, F_NOFLAG);
+        set_ack_reply(c, NOK, NULL, F_NOFLAG);
     } else {
 
         struct node_data *nd = val;
@@ -497,7 +497,7 @@ static int get_handler(struct client *c) {
 
         if (nd->ttl != -NOTTL && delta <= 0) {
             trie_delete(c->db->data, (const char *) cmd->key);
-            set_ack_reply(c, NOK, F_NOFLAG);
+            set_ack_reply(c, NOK, NULL, F_NOFLAG);
             // Update total keyspace counter
             tritedb.keyspace_size--;
         } else {
@@ -506,7 +506,8 @@ static int get_handler(struct client *c) {
             nd->latime = time(NULL);
 
             // and return it
-            union response *response = make_data_response(nd->data, F_NOFLAG);
+            union response *response =
+                make_data_response(nd->data, NULL, F_NOFLAG);
 
             struct buffer *buffer =
                 buffer_init(response->dcontent->header->size);
@@ -533,7 +534,7 @@ static int ttl_handler(struct client *c) {
     bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK, F_NOFLAG);
+        set_ack_reply(c, NOK, NULL, F_NOFLAG);
     } else {
         struct node_data *nd = val;
         bool has_ttl = nd->ttl == -NOTTL ? false : true;
@@ -561,7 +562,7 @@ static int ttl_handler(struct client *c) {
         vector_qsort(tritedb.expiring_keys,
                 compare_ttl, sizeof(struct expiring_key));
 
-        set_ack_reply(c, OK, F_NOFLAG);
+        set_ack_reply(c, OK, NULL, F_NOFLAG);
     }
 
     free_request(c->request, SINGLE_REQUEST);
@@ -611,7 +612,7 @@ static int del_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code, F_NOFLAG);
+    set_ack_reply(c, code, NULL, F_NOFLAG);
     free_request(c->request, SINGLE_REQUEST);
 
     return OK;
@@ -660,7 +661,7 @@ static int inc_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code, F_NOFLAG);
+    set_ack_reply(c, code, NULL, F_NOFLAG);
     free_request(c->request, SINGLE_REQUEST);
 
     return OK;
@@ -708,7 +709,7 @@ static int dec_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code, F_NOFLAG);
+    set_ack_reply(c, code, NULL, F_NOFLAG);
     free_request(c->request, SINGLE_REQUEST);
 
     return OK;
@@ -718,7 +719,7 @@ static int dec_handler(struct client *c) {
 static int db_handler(struct client *c) {
 
     union response *response =
-        make_data_response((uint8_t *) c->db->name, F_NOFLAG);
+        make_data_response((uint8_t *) c->db->name, NULL, F_NOFLAG);
 
     struct buffer *buffer = buffer_init(response->dcontent->header->size);
     pack_response(buffer, response, DATA_CONTENT);
@@ -754,7 +755,7 @@ static int use_handler(struct client *c) {
         c->db = database;
     }
 
-    set_ack_reply(c, OK, F_NOFLAG);
+    set_ack_reply(c, OK, NULL, F_NOFLAG);
 
     free_request(c->request, SINGLE_REQUEST);
 
@@ -772,7 +773,7 @@ static int count_handler(struct client *c) {
     count = !cnt->key ? c->db->data->size :
         trie_prefix_count(c->db->data, (const char *) cnt->key);
 
-    union response *res = make_valuecontent_response(count, F_NOFLAG);
+    union response *res = make_valuecontent_response(count, NULL, F_NOFLAG);
 
     struct buffer *b = buffer_init(res->vcontent->header->size);
     pack_response(b, res, VALUE_CONTENT);
