@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "list.h"
+#include "util.h"
 
 /* Error codes */
 #define OK                      0x00
@@ -163,7 +164,7 @@ struct header {
     uint8_t opcode;
     uint8_t flags;
     uint32_t size;
-    char transaction_id[37];
+    char transaction_id[UUID_LEN];
 };
 
 /*

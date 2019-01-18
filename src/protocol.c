@@ -219,7 +219,7 @@ static void unpack_header(struct buffer *b, struct header *h) {
         h->flags |= F_FROMNODERESPONSE;
 
     if (is_fromnodereq || is_fromnoderes)
-        strcpy(h->transaction_id, (const char *) read_bytes(b, UUID_LEN-1));
+        strcpy(h->transaction_id, (const char *) read_bytes(b, UUID_LEN - 1));
 }
 
 // Refactoring
@@ -769,7 +769,7 @@ struct request *make_key_request(const uint8_t *key, uint8_t opcode,
         char uuid[UUID_LEN];
         generate_uuid(uuid);
         strcpy(request->command->kcommand->header->transaction_id, uuid);
-        request->command->kcommand->header->size += UUID_LEN;
+        request->command->kcommand->header->size += UUID_LEN - 1;
     }
 
     request->command->kcommand->header->opcode = opcode;

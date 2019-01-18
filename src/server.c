@@ -1567,6 +1567,23 @@ int start_server(const char *addr, const char *port, int node_fd) {
             perror("send(2): can't write on socket descriptor");
 
         free_request(request, SINGLE_REQUEST);
+
+        uint8_t *buf = tmalloc(conf->max_request_size);
+
+        // Just read the response
+        Ringbuffer *rbuf = ringbuf_init(buf, conf->max_request_size);
+
+        int rc = 0;
+
+        struct buffer *b = recv_packet(node_fd, rbuf, &(uint8_t){0}, &rc);
+
+        tdebug("%d", rc);
+
+        if (b)
+            buffer_destroy(b);
+
+        ringbuf_free(rbuf);
+        tfree(buf);
     }
 
     tritedb.epollfd = epollfd;
