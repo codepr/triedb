@@ -85,7 +85,7 @@ int epoll_loop_wait(EpollLoop *);
 void epoll_register_callback(EpollLoop *, Callback *);
 void epoll_register_periodic_task(EpollLoop *, int, Callback *);
 void epoll_delete_callback(EpollLoop *, int);
-int add_epoll(int, int, void *);
+int add_epoll(int, int, int, void *);
 int mod_epoll(int, int, int, void *);
 int del_epoll(int, int);
 

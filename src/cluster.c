@@ -82,7 +82,7 @@ static int compare_upper_bound(void *arg1, void *arg2) {
  * node multiple times around the circle.
  */
 int cluster_add_new_node(struct cluster *cluster,
-        struct client *client, const char *addr) {
+        struct client *client, const char *addr, bool self) {
 
     // Get a ring point
     uint16_t upper_bound = hash(addr) % RING_POINTS;
@@ -91,7 +91,7 @@ int cluster_add_new_node(struct cluster *cluster,
     if (!new_node)
         return -1;
 
-    new_node->self = false;
+    new_node->self = self;
     new_node->upper_bound = upper_bound;
     new_node->link = client;
 

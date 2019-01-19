@@ -710,13 +710,13 @@ static char *test_cluster_add_new_node(void) {
         .db = NULL
     };
 
-    cluster_add_new_node(&cluster, &client, "127.0.0.18080");
+    cluster_add_new_node(&cluster, &client, "127.0.0.18080", false);
 
     ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 1);
 
-    cluster_add_new_node(&cluster, &client, "127.0.0.18081");
-    cluster_add_new_node(&cluster, &client, "127.0.0.18082");
-    cluster_add_new_node(&cluster, &client, "127.0.0.18083");
+    cluster_add_new_node(&cluster, &client, "127.0.0.18081", false);
+    cluster_add_new_node(&cluster, &client, "127.0.0.18082", false);
+    cluster_add_new_node(&cluster, &client, "127.0.0.18083", false);
 
     ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 4);
 

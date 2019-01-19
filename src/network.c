@@ -361,7 +361,7 @@ void epoll_loop_free(EpollLoop *loop) {
 
 
 void epoll_register_callback(EpollLoop *loop, Callback *cb) {
-    if (add_epoll(loop->epollfd, cb->fd, cb) < 0)
+    if (add_epoll(loop->epollfd, cb->fd, EPOLLIN, cb) < 0)
         perror("Epoll register callback: ");
 }
 
@@ -450,7 +450,7 @@ int epoll_loop_wait(EpollLoop *el) {
 }
 
 
-int add_epoll(int efd, int fd, void *data) {
+int add_epoll(int efd, int fd, int evs, void *data) {
 
     struct epoll_event ev;
     ev.data.fd = fd;
@@ -459,7 +459,7 @@ int add_epoll(int efd, int fd, void *data) {
     if (data)
         ev.data.ptr = data;
 
-    ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+    ev.events = evs | EPOLLET | EPOLLONESHOT;
 
     return epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev);
 }

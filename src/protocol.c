@@ -546,8 +546,8 @@ union response *make_ack_response(uint8_t code,
 
     if (transaction_id && (flags & F_FROMNODERESPONSE)) {
         strncpy(response->ncontent->header->transaction_id,
-                (const char *) transaction_id, 37);
-        response->ncontent->header->size += 37;
+                (const char *) transaction_id, UUID_LEN - 1);
+        response->ncontent->header->size += UUID_LEN - 1;
     }
 
     response->ncontent->code = code;
@@ -590,8 +590,8 @@ union response *make_data_response(const uint8_t *data,
 
     if (transaction_id && (flags & F_FROMNODERESPONSE)) {
         strncpy(response->dcontent->header->transaction_id,
-                (const char *) transaction_id, 37);
-        response->dcontent->header->size += 37;
+                (const char *) transaction_id, UUID_LEN - 1);
+        response->dcontent->header->size += UUID_LEN - 1;
     }
 
     response->dcontent->datalen = strlen((char *) data);
@@ -634,8 +634,8 @@ union response *make_valuecontent_response(uint32_t value,
 
     if (transaction_id && (flags & F_FROMNODERESPONSE)) {
         strncpy(response->vcontent->header->transaction_id,
-                (const char *) transaction_id, 37);
-        response->vcontent->header->size += 37;
+                (const char *) transaction_id, UUID_LEN - 1);
+        response->vcontent->header->size += UUID_LEN - 1;
     }
 
     response->vcontent->val = value;
@@ -682,8 +682,8 @@ union response *make_list_response(const List *content,
 
     if (transaction_id && (flags & F_FROMNODERESPONSE)) {
         strncpy(response->lcontent->header->transaction_id,
-                (const char *) transaction_id, 37);
-        response->lcontent->header->size += 37;
+                (const char *) transaction_id, UUID_LEN - 1);
+        response->lcontent->header->size += UUID_LEN - 1;
     }
 
     response->lcontent->len = content->len;

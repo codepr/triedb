@@ -144,10 +144,18 @@ struct informations {
     uint64_t noutputbytes;
 };
 
+/* Auxiliary structure to pass in the seed node during cluster formation */
+struct seed_node {
+    int fd;
+    const char addr[17];
+    const char fulladdr[22];  // Magic value, the max size of a ip address+port
+    const char target[22];
+};
+
 
 struct buffer *recv_packet(int , Ringbuffer *, uint8_t *, int *);
 
-int start_server(const char *, const char *, int);
+int start_server(const char *, const char *, struct seed_node *);
 
 
 #endif

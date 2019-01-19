@@ -126,7 +126,7 @@ static int quit_handler(struct client *);
  * the total length in bytes of the packet and the is_bulk flag which tell if
  * the packet contains a stream of commands or a single one
  */
-static const int HEADLEN = (2 * sizeof(uint8_t)) + sizeof(uint32_t);
+static const int HEADLEN = sizeof(uint8_t) + sizeof(uint32_t);
 
 /* Static command map, simple as it seems: OPCODE -> handler func */
 static struct command_handler commands_map[COMMAND_COUNT] = {
@@ -157,7 +157,7 @@ struct buffer *recv_packet(int clientfd,
     uint8_t read_all = 0;
 
     while (n < HEADLEN) {
-        /* Read first 6 bytes to get the total len of the packet */
+        /* Read first 5 bytes to get the total len of the packet */
         n += recvbytes(clientfd, rbuf, read_all, HEADLEN);
         if (n <= 0) {
             *rc = -ERRCLIENTDC;
@@ -177,8 +177,8 @@ struct buffer *recv_packet(int clientfd,
 
     /* If opcode is not known close the connection */
     bool ok = false;
-    for (int i = 0; i < COMMAND_COUNT; i++)
-        if (*opc == commands_map[i].ctype)
+    for (int i = 0; i < COMMAND_COUNT && !ok; i++)
+        if (*opc == commands_map[i].ctype || *opc == ACK)
             ok = true;
 
     if (!ok)
@@ -825,7 +825,10 @@ static int cluster_join_handler(struct client *c) {
      * Add new node to the hashring of this instance, key field of the command
      * structure should carry the host+port string joined together
      */
-    cluster_add_new_node(tritedb.cluster, c, (const char *) command->key);
+    cluster_add_new_node(tritedb.cluster, c,
+            (const char *) command->key, false);
+
+    tdebug("Added %s", command->key);
 
     set_ack_reply(c, OK, NULL, F_NOFLAG);
 
@@ -949,10 +952,8 @@ static int request_handler(struct client *client) {
         goto freebuf;
 
     /* Directly reset in case of ACK */
-    if (opcode == ACK) {
-        tdebug("ACK received");
+    if (opcode == ACK)
         goto reset;
-    }
 
     // Update information stats
     info.ninputbytes += b->size;
@@ -1166,7 +1167,7 @@ static int accept_handler(struct client *server) {
     hashtable_put(tritedb.clients, client->uuid, client);
 
     /* Add it to the epoll loop */
-    add_epoll(tritedb.epollfd, conn.fd, client);
+    add_epoll(tritedb.epollfd, conn.fd, EPOLLIN, client);
 
     /* Rearm server fd to accept new connections */
     mod_epoll(tritedb.epollfd, server->fd, EPOLLIN, server);
@@ -1216,7 +1217,7 @@ static int accept_node_handler(struct client *bus_server) {
     hashtable_put(tritedb.nodes, new_node->uuid, new_node);
 
     /* Add it to the epoll loop */
-    add_epoll(tritedb.epollfd, conn.fd, new_node);
+    add_epoll(tritedb.epollfd, conn.fd, EPOLLIN, new_node);
 
     /* Rearm server fd to accept new connections */
     mod_epoll(tritedb.epollfd, bus_server->fd, EPOLLIN, bus_server);
@@ -1398,8 +1399,8 @@ static void run_server(void) {
                  */
                 struct client *client = evs[i].data.ptr;
 
-                terror("Dropping client on %s: event polling error",
-                        client->addr);
+                terror("Dropping client on %s: event polling error %s",
+                        client->addr, strerror(errno));
 
                 /*
                  * Clean out from global tables, from clients or from nodes
@@ -1463,7 +1464,8 @@ exit:
  * domain socket, addr represents the path on the FS where the socket fd is
  * located, port will be ignored.
  */
-int start_server(const char *addr, const char *port, int node_fd) {
+int start_server(const char *addr,
+        const char *port, struct seed_node *seednode) {
 
     /* Initialize SizigyDB server object */
     tritedb.clients = hashtable_create(client_free);
@@ -1522,7 +1524,7 @@ int start_server(const char *addr, const char *port, int node_fd) {
     generate_uuid((char *) server.uuid);
 
     /* Set socket in EPOLLIN flag mode, ready to read data */
-    add_epoll(epollfd, fd, &server);
+    add_epoll(epollfd, fd, EPOLLIN, &server);
 
     /*
      * Add socket for bus communication if accepted by a seed node
@@ -1530,31 +1532,35 @@ int start_server(const char *addr, const char *port, int node_fd) {
      * structure like if it was accepted as a new connection, cause actually
      * it crashes the server by having NULL ptr
      */
+
     struct client node;
-    if (node_fd > 0) {
+
+    if (seednode->fd > 0) {
+
+        if (set_nonblocking(seednode->fd) < 0)
+            perror("set_nonblocking: ");
+
+        if (set_tcp_nodelay(seednode->fd) < 0)
+            perror("set_tcp_nodelay: ");
 
         node.ctype = NODE;
-        node.addr = addr;
-        node.fd = node_fd;
+        node.addr = seednode->addr;
+        node.fd = seednode->fd;
         node.last_action_time = time(NULL);
-        node.ctx_handler = request_handler;
+        node.ctx_handler = reply_handler;
         node.reply = NULL;
         node.request = NULL;
-        node.db = NULL;
+        node.db = hashtable_get(tritedb.dbs, "db0");
 
         generate_uuid((char *) node.uuid);
 
-        add_epoll(epollfd, node_fd, &node);
-
-        // 22 magic value, the max length + 1 for nul
-        char fulladdr[22];
-
-        strcpy(fulladdr, addr);
+        if (add_epoll(epollfd, seednode->fd, EPOLLOUT, &node) < 0)
+            perror("epoll_add: ");
 
         // Send CLUSTER_JOIN request
         // XXX Obnoxious
         struct request *request =
-            make_key_request((const uint8_t *) strcat(fulladdr, port),
+            make_key_request((const uint8_t *) seednode->fulladdr,
                     CLUSTER_JOIN, 0x00, 0x00, F_FROMNODEREQUEST);
 
         struct buffer *buffer =
@@ -1562,28 +1568,18 @@ int start_server(const char *addr, const char *port, int node_fd) {
 
         pack_request(buffer, request, KEY_COMMAND);
 
-        if ((sendall(node_fd, buffer->data,
-                        buffer->size, &(ssize_t){ 0 })) < 0)
-            perror("send(2): can't write on socket descriptor");
+        set_reply(&node, buffer, -1);
 
         free_request(request, SINGLE_REQUEST);
 
-        uint8_t *buf = tmalloc(conf->max_request_size);
+        // Update informations
+        info.nconnections++;
+        info.nnodes++;
 
-        // Just read the response
-        Ringbuffer *rbuf = ringbuf_init(buf, conf->max_request_size);
+        // Add target node as cluster node
+        cluster_add_new_node(tritedb.cluster, &node, seednode->target, false);
 
-        int rc = 0;
-
-        struct buffer *b = recv_packet(node_fd, rbuf, &(uint8_t){0}, &rc);
-
-        tdebug("%d", rc);
-
-        if (b)
-            buffer_destroy(b);
-
-        ringbuf_free(rbuf);
-        tfree(buf);
+        tdebug("Added %s", seednode->target);
     }
 
     tritedb.epollfd = epollfd;
@@ -1614,7 +1610,17 @@ int start_server(const char *addr, const char *port, int node_fd) {
         bus_server.db = NULL;
 
         /* Set bus socket in EPOLLIN too */
-        add_epoll(tritedb.epollfd, bfd, &bus_server);
+        add_epoll(tritedb.epollfd, bfd, EPOLLIN, &bus_server);
+
+        // Add to cluster the new node as myself
+        char fulladdr[22];
+
+        strcpy(fulladdr, addr);
+
+        cluster_add_new_node(tritedb.cluster, &bus_server,
+                (const char *) strcat(fulladdr, port), true);
+
+        tdebug("Added %s", strcat(fulladdr, port));
     }
 
     tinfo("TriteDB v%s", conf->version);

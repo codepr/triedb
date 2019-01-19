@@ -55,7 +55,7 @@ uint16_t hash(const char *);
  * Add new node into the cluster, create a new node to be inserted into the
  * list at the right index
  */
-int cluster_add_new_node(struct cluster *, struct client *, const char *);
+int cluster_add_new_node(struct cluster *, struct client *, const char *, bool);
 
 /*
  * Retrieve a cluster node based on the index, cluster node list is sorted by

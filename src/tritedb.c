@@ -94,6 +94,17 @@ int main(int argc, char **argv) {
     // Try to load a configuration, if found
     config_load(confpath);
 
+    // 22 magic value, the max length + 1 for nul
+    char fulladdr[22];
+
+    strcpy(fulladdr, addr);
+
+    struct seed_node seednode;
+    seednode.fd = -1;
+
+    strcpy((char *) seednode.addr, addr);
+
+    strcpy((char *) seednode.fulladdr, strcat(fulladdr, port));
 
     if (optind < argc) {
         if (STREQ(argv[optind], "join", 4) == 0) {
@@ -109,42 +120,15 @@ int main(int argc, char **argv) {
 
             // Connect to the listening peer node
             fd = open_connection(target, tport);
-            set_nonblocking(fd);
-            set_tcp_nodelay(fd);
 
-            // 22 magic value, the max length + 1 for nul
-            /* char fulladdr[22]; */
-            /*  */
-            /* strcpy(fulladdr, addr); */
-            /*  */
-            /* // Send CLUSTER_JOIN request */
-            /* // XXX Obnoxious */
-            /* struct request *request = */
-            /*     make_key_request((const uint8_t *) strcat(fulladdr, port), */
-            /*             CLUSTER_JOIN, 0x00, 0x00, F_FROMNODEREQUEST); */
-            /*  */
-            /* struct buffer *buffer = */
-            /*     buffer_init(request->command->kcommand->header->size); */
-            /*  */
-            /* pack_request(buffer, request, KEY_COMMAND); */
-            /*  */
-            /* if ((sendall(fd, buffer->data, buffer->size, &(ssize_t){ 0 })) < 0) */
-            /*     perror("send(2): can't write on socket descriptor"); */
-            /*  */
-            /* free_request(request, SINGLE_REQUEST); */
-            /*  */
-            /* uint8_t *buf = tmalloc(conf->max_request_size); */
-            /*  */
-            /* // Just read the response */
-            /* Ringbuffer *rbuf = ringbuf_init(buf, conf->max_request_size); */
-            /*  */
-            /* struct buffer *b = recv_packet(fd, rbuf, &(uint8_t){0}, &(int){0}); */
-            /*  */
-            /* if (b) */
-            /*     buffer_destroy(b); */
-            /*  */
-            /* ringbuf_free(rbuf); */
-            /* tfree(buf); */
+            seednode.fd = fd;
+
+            char fulladdr[22];
+
+            strcpy(fulladdr, target);
+
+            strcpy((char *) seednode.target,
+                    strcat(fulladdr, argv[optind + 2]));
         }
     }
 
@@ -154,7 +138,7 @@ int main(int argc, char **argv) {
     config_print();
 
     // Start
-    start_server(conf->hostname, conf->port, fd);
+    start_server(conf->hostname, conf->port, &seednode);
 
     // Close logger
     t_log_close();
