@@ -32,6 +32,7 @@
 #include "../src/util.h"
 #include "../src/trie.h"
 #include "../src/list.h"
+#include "../src/queue.h"
 #include "../src/server.h"
 #include "../src/cluster.h"
 #include "../src/ringbuf.h"
@@ -707,16 +708,17 @@ static char *test_cluster_add_new_node(void) {
         .ctx_handler = NULL,
         .reply = NULL,
         .request = NULL,
+        .response = NULL,
         .db = NULL
     };
 
-    cluster_add_new_node(&cluster, &client, "127.0.0.18080", false);
+    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8080", false);
 
     ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 1);
 
-    cluster_add_new_node(&cluster, &client, "127.0.0.18081", false);
-    cluster_add_new_node(&cluster, &client, "127.0.0.18082", false);
-    cluster_add_new_node(&cluster, &client, "127.0.0.18083", false);
+    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8081", false);
+    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8082", false);
+    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8083", false);
 
     ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 4);
 
@@ -759,10 +761,10 @@ static char *test_cluster_get_node(void) {
         .db = NULL
     };
 
-    struct cluster_node node1 = { false, 1000, &client};
-    struct cluster_node node2 = { false, 1500, &client};
-    struct cluster_node node3 = { false, 2000, &client};
-    struct cluster_node node4 = { false, 2500, &client};
+    struct cluster_node node1 = { false, 1000, "127.0.0.1", "8080", &client};
+    struct cluster_node node2 = { false, 1500, "127.0.0.1", "8080", &client};
+    struct cluster_node node3 = { false, 2000, "127.0.0.1", "8080", &client};
+    struct cluster_node node4 = { false, 2500, "127.0.0.1", "8080", &client};
 
     list_push(cluster.nodes, &node1);
     list_push(cluster.nodes, &node2);
@@ -788,6 +790,26 @@ static char *test_cluster_get_node(void) {
 
     list_free(cluster.nodes, 0);
     printf(" [cluster::cluster_get_node]: OK\n");
+
+    return 0;
+}
+
+
+static char *test_queue_get(void) {
+
+    Queue *q = queue_create(NULL);
+
+    queue_push(q, "test");
+
+    ASSERT("[! queue_push]: Queue push didn't push item in queue", queue_size(q) == 1);
+
+    char *ret = queue_get(q);
+
+    ASSERT("[! queue_get]: Queue get didn't returned the correct data", STREQ(ret, "test", 5));
+
+    queue_release(q);
+
+    printf(" [queue::queue_get]: OK\n");
 
     return 0;
 }
@@ -835,6 +857,7 @@ char *structures_test() {
     RUN_TEST(test_hashtable_release);
     RUN_TEST(test_cluster_add_new_node);
     RUN_TEST(test_cluster_get_node);
+    RUN_TEST(test_queue_get);
 
     return 0;
 }

@@ -82,16 +82,22 @@ static int compare_upper_bound(void *arg1, void *arg2) {
  * node multiple times around the circle.
  */
 int cluster_add_new_node(struct cluster *cluster,
-        struct client *client, const char *addr, bool self) {
+        struct client *client, const char *addr, const char *port, bool self) {
+
+    char fulladdr[22];
+
+    strcpy(fulladdr, addr);
 
     // Get a ring point
-    uint16_t upper_bound = hash(addr) % RING_POINTS;
+    uint16_t upper_bound = hash(strcat(fulladdr, port)) % RING_POINTS;
 
     struct cluster_node *new_node = tmalloc(sizeof(*new_node));
     if (!new_node)
         return -1;
 
     new_node->self = self;
+    strcpy((char *) new_node->host, addr);
+    strcpy((char *) new_node->port, port);
     new_node->upper_bound = upper_bound;
     new_node->link = client;
 

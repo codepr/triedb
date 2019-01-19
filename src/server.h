@@ -30,6 +30,7 @@
 
 #include "trie.h"
 #include "list.h"
+#include "queue.h"
 #include "vector.h"
 #include "cluster.h"
 #include "ringbuf.h"
@@ -71,6 +72,8 @@ struct tritedb {
     struct cluster *cluster;
     /* Cluster transactions, map UUID -> client */
     HashTable *transactions;
+    /* Cluster nodes awaiting for membership in the hash ring */
+    Queue *pending_members;
 };
 
 
@@ -100,6 +103,7 @@ struct client {
     int (*ctx_handler)(struct client *);
     struct reply *reply;
     struct request *request;
+    union response *response;
     struct database *db;
 };
 
@@ -148,6 +152,7 @@ struct informations {
 struct seed_node {
     int fd;
     const char addr[17];
+    const char port[5];
     const char fulladdr[22];  // Magic value, the max size of a ip address+port
     const char target[22];
 };

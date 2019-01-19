@@ -25,50 +25,34 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CLUSTER_H
-#define CLUSTER_H
+#ifndef QUEUE_H
+#define QUEUE_H
 
-#include <arpa/inet.h>
 
-#define RING_POINTS 4096
+#include <stdlib.h>
 
-#define KPRIME 2654435761
 
-/*
- * Contains the max index in the ring size handled by the node and a link to
- * the client referring to the node
- */
-struct cluster_node {
-    bool self;
-    uint16_t upper_bound;
-    const char host[INET_ADDRSTRLEN + 1];
-    const char port[5];
-    struct client *link;
+struct queue_item {
+    void *data;
+    struct queue_item *next;
 };
 
-/* Just a list of nodes for now */
-struct cluster {
-    List *nodes;
-};
+typedef int destructor(struct queue_item *);
 
-/* Compute a hash of a string by using CRC32 function mod RING_POINTS */
-uint16_t hash(const char *);
+typedef struct queue {
+    size_t len;
+    struct queue_item *front;
+    struct queue_item *rear;
+    destructor *destr;
+} Queue;
 
-/*
- * Add new node into the cluster, create a new node to be inserted into the
- * list at the right index
- */
-int cluster_add_new_node(struct cluster *,
-        struct client *, const char *, const char *, bool);
 
-/*
- * Retrieve a cluster node based on the index, cluster node list is sorted by
- * upper_bound limit of each node
- */
-struct cluster_node *cluster_get_node(struct cluster *, uint16_t);
-
-/* Add new node already assigned in the circle */
-void cluster_add_node(struct cluster *, struct cluster_node *);
+Queue *queue_create(destructor *);
+void queue_release(Queue *);
+size_t queue_size(Queue *);
+bool queue_empty(Queue *);
+void queue_push(Queue *, void *);
+void *queue_get(Queue *);
 
 
 #endif

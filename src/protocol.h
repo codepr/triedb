@@ -48,6 +48,7 @@
 #define F_PREFIXREQUEST         1 << 2
 #define F_FROMNODEREQUEST       1 << 3
 #define F_FROMNODERESPONSE      1 << 4
+#define F_JOINREQUEST           1 << 5
 
 /* Command type */
 #define EMPTY_COMMAND           0x00
@@ -61,8 +62,9 @@
 #define DATA_CONTENT            0x01
 #define VALUE_CONTENT           0x02
 #define LIST_CONTENT            0x03
+#define KVLIST_CONTENT          0x04
 
-#define COMMAND_COUNT           14
+#define COMMAND_COUNT           16
 
 /* Operation codes */
 #define ACK                     0x00
@@ -76,6 +78,7 @@
 #define KEYS                    0x08
 #define USE                     0x09
 #define CLUSTER_JOIN            0x0a
+#define CLUSTER_MEMBERS         0x0b
 #define PING                    0xfc
 #define DB                      0xfd
 #define INFO                    0xfe
@@ -83,18 +86,21 @@
 
 
 /*
- * 8 bytes to store the operation code (PUT, GET etc ...) the total length of
+ * 6 bytes to store the operation code (PUT, GET etc ...) the total length of
  * the packet and if it is a single command or a stream of sequential commands,
  * a prefix command and the source of the request (being it from a client or
- * from another node)
+ * from another node).
+ * In case of packet incoming from another node it optionally store a
+ * transaction id of 36 bytes length, a UUID representing univocally the
+ * operation in progress.
  *
- * [ 1 byte ] | [ 4 bytes ] | [ 1 byte ] | [ 1 byte ] | [1 byte ] | [ 1 byte ]
- * ---------- | ----------- | ---------- | ---------- | --------- | ----------
- *  opcode    | packet len  | bulk flag  | prefix flag| source req| source res
- * ---------- | ----------- | ---------- | ---------- | --------- | ----------
+ * [ 1 byte ] | [ 4 bytes ] | [ 1 byte ] | [ 36 bytes (opt) ]
+ * ---------- | ----------- | ---------- | ------------------
+ *   opcode   | packet len  |   flags    |   transaction id
+ * ---------- | ----------- | ---------- | ------------------
  *
  */
-#define HEADERLEN (5 * sizeof(uint8_t)) + sizeof(uint32_t)
+#define HEADERLEN (2 * sizeof(uint8_t)) + sizeof(uint32_t)
 
 
 /* struct buffer structure, provides a convenient way of handling byte string data.
@@ -316,12 +322,20 @@ struct list_content {
     struct key **keys;
 };
 
+// Response with key-val pairs list
+struct kvlist_content {
+    struct header *header;
+    uint16_t len;
+    struct keyval **pairs;
+};
+
 
 union response {
     struct no_content *ncontent;
     struct data_content *dcontent;
     struct value_content *vcontent;
     struct list_content *lcontent;
+    struct kvlist_content *kvlcontent;
 };
 
 /*
@@ -334,13 +348,17 @@ union response *make_ack_response(uint8_t, const uint8_t *, uint8_t);
 union response *make_data_response(const uint8_t *, const uint8_t *, uint8_t);
 union response *make_valuecontent_response(uint32_t, const uint8_t *, uint8_t);
 union response *make_list_response(const List *, const uint8_t *, uint8_t);
+union response *make_kvlist_response(const List *, const uint8_t *, uint8_t);
 
 /* Request builder functions, essentially mirroring of response builders */
-struct request *make_key_request(const uint8_t *,
-        uint8_t, uint8_t, uint16_t, uint8_t);
+struct request *make_key_request(const uint8_t *, uint8_t, uint16_t, uint8_t);
+struct request *make_keyval_request(const uint8_t *,
+        const uint8_t *, uint8_t, uint16_t, uint8_t);
 
 // Response -> byte buffer
 void pack_response(struct buffer *, const union response *, int);
+
+union response *unpack_response(struct buffer *);
 
 void free_response(union response *, int);
 
