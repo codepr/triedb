@@ -31,7 +31,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#define VECTOR_INIT_CAPACITY 4
+#define vector_create_CAPACITY 4
 
 
 typedef struct {
@@ -44,9 +44,9 @@ typedef struct {
 typedef bool (*qsort_func)(void *, void *);
 
 
-Vector *vector_init(void);
+Vector *vector_create(void);
 
-void vector_free(Vector *);
+void vector_release(Vector *);
 
 size_t vector_size(const Vector *);
 

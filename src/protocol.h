@@ -57,7 +57,7 @@
 #define KEY_LIST_COMMAND        0x03
 #define KEY_VAL_LIST_COMMAND    0x04
 
-/* union response type */
+/* struct response type */
 #define NO_CONTENT              0x00
 #define DATA_CONTENT            0x01
 #define VALUE_CONTENT           0x02
@@ -291,31 +291,31 @@ struct request *unpack_request(struct buffer *);
 struct command *unpack_command(struct buffer *, struct header *);
 
 /* Cleanup functions */
-void free_request(struct request *, uint8_t);
+void free_request(struct request *);
 
 void free_command(struct command *, bool);
 
 
-// union response structure without body, like ACK etc.
+// struct response structure without body, like ACK etc.
 struct no_content {
     struct header *header;
     uint8_t code;
 };
 
-// union response with data, like GET etc.
+// struct response with data, like GET etc.
 struct data_content {
     struct header *header;
     uint32_t datalen;
     uint8_t *data;
 };
 
-// union response with values, like COUNT etc.
+// struct response with values, like COUNT etc.
 struct value_content {
     struct header *header;
     uint32_t val;
 };
 
-// union response with list, like glob GET etc.
+// struct response with list, like glob GET etc.
 struct list_content {
     struct header *header;
     uint16_t len;
@@ -330,12 +330,15 @@ struct kvlist_content {
 };
 
 
-union response {
-    struct no_content *ncontent;
-    struct data_content *dcontent;
-    struct value_content *vcontent;
-    struct list_content *lcontent;
-    struct kvlist_content *kvlcontent;
+struct response {
+    uint8_t restype;
+    union {
+        struct no_content *ncontent;
+        struct data_content *dcontent;
+        struct value_content *vcontent;
+        struct list_content *lcontent;
+        struct kvlist_content *kvlcontent;
+    };
 };
 
 /*
@@ -344,11 +347,11 @@ union response {
  *
  * Second argument is a transaction_id in case of F_FROMNODERESPONSE flag on.
  */
-union response *make_ack_response(uint8_t, const uint8_t *, uint8_t);
-union response *make_data_response(const uint8_t *, const uint8_t *, uint8_t);
-union response *make_valuecontent_response(uint32_t, const uint8_t *, uint8_t);
-union response *make_list_response(const List *, const uint8_t *, uint8_t);
-union response *make_kvlist_response(const List *, const uint8_t *, uint8_t);
+struct response *make_ack_response(uint8_t, const uint8_t *, uint8_t);
+struct response *make_data_response(const uint8_t *, const uint8_t *, uint8_t);
+struct response *make_valuecontent_response(uint32_t, const uint8_t *, uint8_t);
+struct response *make_list_response(const List *, const uint8_t *, uint8_t);
+struct response *make_kvlist_response(const List *, const uint8_t *, uint8_t);
 
 /* Request builder functions, essentially mirroring of response builders */
 struct request *make_key_request(const uint8_t *, uint8_t, uint16_t, uint8_t);
@@ -356,11 +359,11 @@ struct request *make_keyval_request(const uint8_t *,
         const uint8_t *, uint8_t, uint16_t, uint8_t);
 
 // Response -> byte buffer
-void pack_response(struct buffer *, const union response *, int);
+void pack_response(struct buffer *, const struct response *);
 
-union response *unpack_response(struct buffer *);
+struct response *unpack_response(struct buffer *);
 
-void free_response(union response *, int);
+void free_response(struct response *);
 
 void pack_request(struct buffer *, const struct request *, int);
 

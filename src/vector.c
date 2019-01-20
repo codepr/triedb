@@ -30,11 +30,11 @@
 #include "vector.h"
 
 
-Vector *vector_init(void) {
+Vector *vector_create(void) {
 
     Vector *v = tmalloc(sizeof(*v));
 
-    v->maxsize = VECTOR_INIT_CAPACITY;
+    v->maxsize = vector_create_CAPACITY;
     v->size = 0L;
     v->items = tmalloc(v->maxsize * sizeof(void *));
 
@@ -45,7 +45,7 @@ Vector *vector_init(void) {
 }
 
 
-void vector_free(Vector *v) {
+void vector_release(Vector *v) {
     tfree(v->items);
     tfree(v);
 }

@@ -96,7 +96,7 @@ static int trie_node_count(const struct trie_node *node) {
 
 
 // Returns new trie node (initialized to NULL)
-struct trie_node *trie_new_node(char c) {
+struct trie_node *trie_create_node(char c) {
 
     struct trie_node *new_node = tmalloc(sizeof(*new_node));
 
@@ -104,16 +104,16 @@ struct trie_node *trie_new_node(char c) {
 
         new_node->chr = c;
         new_node->ndata = NULL;
-        new_node->children = list_init(NULL);
+        new_node->children = list_create(NULL);
     }
 
     return new_node;
 }
 
 // Returns new Trie, with a NULL root and 0 size
-Trie *trie_new(void) {
+Trie *trie_create(void) {
     Trie *trie = tmalloc(sizeof(*trie));
-    trie->root = trie_new_node(' ');
+    trie->root = trie_create_node(' ');
     trie->size = 0;
     return trie;
 }
@@ -157,7 +157,7 @@ static struct node_data *trie_node_insert(struct trie_node *root,
 
         // No match, we add a new node and sort the list with the new added link
         if (!tmp) {
-            cur_node = trie_new_node(*key);
+            cur_node = trie_create_node(*key);
             cursor->children = list_push(cursor->children, cur_node);
             cursor->children->head = merge_sort_tnode(cursor->children->head);
         } else {
@@ -502,7 +502,7 @@ List *trie_prefix_find(const Trie *trie, const char *prefix) {
     if (!node)
         return NULL;
 
-    List *keys = list_init(NULL);
+    List *keys = list_create(NULL);
 
     // Check all possible sub-paths and add the resulting key to the result
     char *str = tmalloc(32);
@@ -567,7 +567,7 @@ void trie_node_free(struct trie_node *node, size_t *size) {
     if (node->children) {
         for (struct list_node *cur = node->children->head; cur; cur = cur->next)
             trie_node_free(cur->data, size);
-        list_free(node->children, 0);
+        list_release(node->children, 0);
         node->children = NULL;
     }
 
@@ -588,7 +588,7 @@ void trie_node_free(struct trie_node *node, size_t *size) {
 }
 
 
-void trie_free(Trie *trie) {
+void trie_release(Trie *trie) {
 
     if (!trie)
         return;

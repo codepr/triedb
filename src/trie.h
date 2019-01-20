@@ -68,10 +68,10 @@ struct Trie {
 };
 
 // Returns new trie node (initialized to NULLs)
-struct trie_node *trie_new_node(char);
+struct trie_node *trie_create_node(char);
 
 // Returns a new Trie, which is formed by a root node and a size
-struct Trie *trie_new(void);
+struct Trie *trie_create(void);
 
 // Return the size of the trie
 size_t trie_size(const Trie *);
@@ -102,7 +102,7 @@ bool trie_find(const Trie *, const char *, void **);
 
 void trie_node_free(struct trie_node *, size_t *);
 
-void trie_free(Trie *);
+void trie_release(Trie *);
 
 /* Remove all keys matching a given prefix in a less than linear time
    complexity */

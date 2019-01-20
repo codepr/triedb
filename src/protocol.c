@@ -199,8 +199,11 @@ static void unpack_header(struct buffer *b, struct header *h) {
 
     h->flags = read_uint8(b);
 
-    if (h->flags & F_FROMNODEREQUEST || h->flags & F_FROMNODERESPONSE)
-        strcpy(h->transaction_id, (const char *) read_bytes(b, UUID_LEN - 1));
+    if (h->flags & F_FROMNODEREQUEST || h->flags & F_FROMNODERESPONSE) {
+        const char *transaction_id = (const char *) read_bytes(b, UUID_LEN - 1);
+        strcpy(h->transaction_id, transaction_id);
+        tfree((char *) transaction_id);
+    }
 }
 
 // Refactoring
@@ -390,39 +393,47 @@ errnomem3:
 }
 
 
-static void free_header(struct command *command) {
+static void free_header(struct header *header) {
+    /* if ((header->flags & F_FROMNODEREQUEST) || */
+    /*         (header->flags & F_FROMNODERESPONSE)) */
+    /*     tfree(header->transaction_id); */
+    tfree(header);
+}
+
+
+static void free_command_header(struct command *command) {
 
     if (!command)
         return;
 
     switch (command->cmdtype) {
         case EMPTY_COMMAND:
-            tfree(command->ecommand->header);
+            free_header(command->ecommand->header);
             break;
         case KEY_COMMAND:
-            tfree(command->kcommand->header);
+            free_header(command->kcommand->header);
             break;
         case KEY_VAL_COMMAND:
-            tfree(command->kvcommand->header);
+            free_header(command->kvcommand->header);
             break;
         case KEY_LIST_COMMAND:
-            tfree(command->klcommand->header);
+            free_header(command->klcommand->header);
             break;
     }
 }
 
 
-void free_request(struct request *request, uint8_t cmdtype) {
+void free_request(struct request *request) {
 
     if (!request)
         return;
 
-    if (cmdtype == 0) {
+    if (request->reqtype == SINGLE_REQUEST) {
         free_command(request->command, true);
     } else {
 
         // FIXME hack, free the first pointer
-        free_header(request->bulk_command->commands[0]);
+        free_command_header(request->bulk_command->commands[0]);
         for (int i = 0; i < request->bulk_command->ncommands; i++)
             free_command(request->bulk_command->commands[i], false);
 
@@ -442,25 +453,25 @@ void free_command(struct command *command, bool with_header) {
     switch (command->cmdtype) {
         case EMPTY_COMMAND:
             if (with_header)
-                tfree(command->ecommand->header);
+                free_header(command->ecommand->header);
             tfree(command->ecommand);
             break;
         case KEY_COMMAND:
             if (with_header)
-                tfree(command->kcommand->header);
+                free_header(command->kcommand->header);
             tfree(command->kcommand->key);
             tfree(command->kcommand);
             break;
         case KEY_VAL_COMMAND:
             if (with_header)
-                tfree(command->kvcommand->header);
+                free_header(command->kvcommand->header);
             tfree(command->kvcommand->key);
             tfree(command->kvcommand->val);
             tfree(command->kvcommand);
             break;
         case KEY_LIST_COMMAND:
             if (with_header)
-                tfree(command->klcommand->header);
+                free_header(command->klcommand->header);
             for (int i = 0; i < command->klcommand->len; i++) {
                 tfree(command->klcommand->keys[i]->key);
                 tfree(command->klcommand->keys[i]);
@@ -474,11 +485,11 @@ void free_command(struct command *command, bool with_header) {
 }
 
 
-void pack_response(struct buffer *b, const union response *r, int restype) {
+void pack_response(struct buffer *b, const struct response *r) {
 
     assert(b && r);
 
-    switch (restype) {
+    switch (r->restype) {
         case NO_CONTENT:
             pack_header(r->ncontent->header, b);
             write_uint8(b, r->ncontent->code);
@@ -523,13 +534,14 @@ void pack_response(struct buffer *b, const union response *r, int restype) {
 }
 
 
-union response *make_ack_response(uint8_t code,
+struct response *make_ack_response(uint8_t code,
         const uint8_t *transaction_id, uint8_t flags) {
 
-    union response *response = tmalloc(sizeof(*response));
+    struct response *response = tmalloc(sizeof(*response));
     if (!response)
         goto errnomem3;
 
+    response->restype = NO_CONTENT;
     response->ncontent = tmalloc(sizeof(struct no_content));
     if (!response->ncontent)
         goto errnomem2;
@@ -567,13 +579,14 @@ errnomem3:
 }
 
 
-union response *make_data_response(const uint8_t *data,
+struct response *make_data_response(const uint8_t *data,
         const uint8_t *transaction_id, uint8_t flags) {
 
-    union response *response = tmalloc(sizeof(*response));
+    struct response *response = tmalloc(sizeof(*response));
     if (!response)
         goto errnomem3;
 
+    response->restype = DATA_CONTENT;
     response->dcontent = tmalloc(sizeof(struct data_content));
     if (!response->dcontent)
         goto errnomem2;
@@ -612,13 +625,14 @@ errnomem3:
 }
 
 
-union response *make_valuecontent_response(uint32_t value,
+struct response *make_valuecontent_response(uint32_t value,
         const uint8_t *transaction_id, uint8_t flags) {
 
-    union response *response = tmalloc(sizeof(*response));
+    struct response *response = tmalloc(sizeof(*response));
     if (!response)
         goto errnomem3;
 
+    response->restype = VALUE_CONTENT;
     response->vcontent = tmalloc(sizeof(struct value_content));
     if (!response->vcontent)
         goto errnomem2;
@@ -655,13 +669,14 @@ errnomem3:
 }
 
 
-union response *make_list_response(const List *content,
+struct response *make_list_response(const List *content,
         const uint8_t *transaction_id, uint8_t flags) {
 
-    union response *response = tmalloc(sizeof(*response));
+    struct response *response = tmalloc(sizeof(*response));
     if (!response)
         return NULL;
 
+    response->restype = LIST_CONTENT;
     response->lcontent = tmalloc(sizeof(struct list_content));
     if (!response->lcontent) {
         tfree(response);
@@ -704,13 +719,14 @@ union response *make_list_response(const List *content,
 }
 
 
-union response *make_kvlist_response(const List *content,
+struct response *make_kvlist_response(const List *content,
         const uint8_t *transaction_id, uint8_t flags) {
 
-    union response *response = tmalloc(sizeof(*response));
+    struct response *response = tmalloc(sizeof(*response));
     if (!response)
         return NULL;
 
+    response->restype = KEY_VAL_LIST_COMMAND;
     response->kvlcontent = tmalloc(sizeof(struct kvlist_content));
     if (!response->kvlcontent) {
         tfree(response);
@@ -759,12 +775,12 @@ union response *make_kvlist_response(const List *content,
 }
 
 
-void free_response(union response *response, int restype) {
+void free_response(struct response *response) {
 
     if (!response)
         return;
 
-    switch (restype) {
+    switch (response->restype) {
         case NO_CONTENT:
             tfree(response->ncontent->header);
             tfree(response->ncontent);
@@ -937,11 +953,11 @@ err:
 }
 
 
-union response *unpack_response(struct buffer *b) {
+struct response *unpack_response(struct buffer *b) {
 
     assert(b);
 
-    union response *response = tmalloc(sizeof(*response));
+    struct response *response = tmalloc(sizeof(*response));
     if (!response)
         return NULL;
 
@@ -961,6 +977,8 @@ union response *unpack_response(struct buffer *b) {
     for (int i = 0; i < COMMAND_COUNT; i++)
         if (opcode_req_map[i][0] == header->opcode)
             code = opcode_req_map[i][1];
+
+    response->restype = code;
 
     switch (code) {
 
@@ -1014,6 +1032,7 @@ void pack_request(struct buffer *buffer,
 
     assert(buffer && request);
 
+    // FIXME make it consistent with the rest
     switch (reqtype) {
         case KEY_COMMAND:
             pack_header(request->command->kcommand->header, buffer);

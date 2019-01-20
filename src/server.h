@@ -103,7 +103,7 @@ struct client {
     int (*ctx_handler)(struct client *);
     struct reply *reply;
     struct request *request;
-    union response *response;
+    struct response *response;
     struct database *db;
 };
 

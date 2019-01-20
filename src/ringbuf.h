@@ -35,11 +35,11 @@
 typedef struct ringbuf Ringbuffer;
 
 /* Initialize the structure by associating a byte buffer, alloc on the heap so
-   it has to be freed with ringbuf_free */
-Ringbuffer *ringbuf_init(uint8_t *, size_t);
+   it has to be freed with ringbuf_release */
+Ringbuffer *ringbuf_create(uint8_t *, size_t);
 
 /* Free the circular buffer */
-void ringbuf_free(Ringbuffer *);
+void ringbuf_release(Ringbuffer *);
 
 /* Make tail = head and full to false (an empty ringbuf) */
 void ringbuf_reset(Ringbuffer *);

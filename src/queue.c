@@ -36,7 +36,7 @@ static int queue_free(struct queue_item *qitem) {
     if (!qitem)
         return -1;
 
-    while (queue_free(qitem->next) > 0);
+    queue_free(qitem->next);
 
     if (qitem->data)
         tfree(qitem->data);

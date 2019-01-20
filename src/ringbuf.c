@@ -40,7 +40,7 @@ struct ringbuf {
 };
 
 
-Ringbuffer *ringbuf_init(uint8_t *buffer, size_t size) {
+Ringbuffer *ringbuf_create(uint8_t *buffer, size_t size) {
 
     assert(buffer && size);
 
@@ -67,7 +67,7 @@ void ringbuf_reset(Ringbuffer *rbuf) {
 }
 
 
-void ringbuf_free(Ringbuffer *rbuf) {
+void ringbuf_release(Ringbuffer *rbuf) {
     assert(rbuf);
     tfree(rbuf);
     rbuf = NULL;

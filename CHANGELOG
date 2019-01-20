@@ -1,3 +1,10 @@
+0.4.6 - 2019/01/20
+==================
+
+- Started implementation of distribution through consistent hash ring
+- Fixed some memory leaks
+
+
 0.4.5 - 2019/01/15
 ==================
 

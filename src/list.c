@@ -31,12 +31,13 @@
 #include "server.h"
 
 
-static struct list_node *list_node_remove(struct list_node *, struct list_node *, compare_func, int *);
+static struct list_node *list_node_remove(struct list_node *,
+        struct list_node *, compare_func, int *);
 
 /*
  * Create a list, initializing all fields
  */
-List *list_init(int (*destructor)(struct list_node *)) {
+List *list_create(int (*destructor)(struct list_node *)) {
 
     List *l = tmalloc(sizeof(List));
 
@@ -58,7 +59,7 @@ List *list_init(int (*destructor)(struct list_node *)) {
 /*
  * Destroy a list, releasing all allocated memory
  */
-void list_free(List *l, int deep) {
+void list_release(List *l, int deep) {
 
     if (!l) return;
 
