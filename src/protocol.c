@@ -39,151 +39,14 @@ static void pack_header(const struct header *, struct buffer *);
 static void unpack_header(struct buffer *, struct header *);
 
 
-/* Host-to-network (native endian to big endian) */
-void htonll(uint8_t *block, uint_least64_t num) {
-    block[0] = num >> 56 & 0xFF;
-    block[1] = num >> 48 & 0xFF;
-    block[2] = num >> 40 & 0xFF;
-    block[3] = num >> 32 & 0xFF;
-    block[4] = num >> 24 & 0xFF;
-    block[5] = num >> 16 & 0xFF;
-    block[6] = num >> 8 & 0xFF;
-    block[7] = num >> 0 & 0xFF;
-}
-
-/* Network-to-host (big endian to native endian) */
-uint_least64_t ntohll(const uint8_t *block) {
-    return (uint_least64_t) block[0] << 56 |
-        (uint_least64_t) block[1] << 48 |
-        (uint_least64_t) block[2] << 40 |
-        (uint_least64_t) block[3] << 32 |
-        (uint_least64_t) block[4] << 24 |
-        (uint_least64_t) block[5] << 16 |
-        (uint_least64_t) block[6] << 8 |
-        (uint_least64_t) block[7] << 0;
-}
-
-/* Init struct buffer data structure, to ease byte arrays handling */
-struct buffer *buffer_init(size_t len) {
-    struct buffer *b = tmalloc(sizeof(struct buffer));
-    b->data = tmalloc(len);
-    if (!b || !b->data)
-        oom("allocating memory for new buffer");
-    b->size = len;
-    b->pos = 0;
-    return b;
-}
-
-
-/* Destroy a previously allocated struct buffer structure */
-void buffer_destroy(struct buffer *b) {
-    assert(b && b->data);
-    b->size = b->pos = 0;
-    tfree(b->data);
-    tfree(b);
-}
-
-
-// Reading data
-uint8_t read_uint8(struct buffer *b) {
-    if ((b->pos + sizeof(uint8_t)) > b->size)
-        return 0;
-    uint8_t val = *(b->data + b->pos);
-    b->pos += sizeof(uint8_t);
-    return val;
-}
-
-
-uint16_t read_uint16(struct buffer *b) {
-    if ((b->pos + sizeof(uint16_t)) > b->size)
-        return 0;
-    uint16_t val = ntohs(*((uint16_t *) (b->data + b->pos)));
-    b->pos += sizeof(uint16_t);
-    return val;
-}
-
-
-uint32_t read_uint32(struct buffer *b) {
-    if ((b->pos + sizeof(uint32_t)) > b->size)
-        return 0;
-    uint32_t val = ntohl(*((uint32_t *) (b->data + b->pos)));
-    b->pos += sizeof(uint32_t);
-    return val;
-}
-
-
-uint64_t read_uint64(struct buffer *b) {
-    if ((b->pos + sizeof(uint64_t)) > b->size)
-        return 0;
-    uint64_t val = ntohll(b->data + b->pos);
-    b->pos += sizeof(uint64_t);
-    return val;
-}
-
-
-uint8_t *read_bytes(struct buffer *b, size_t len) {
-    if ((b->pos + len) > b->size)
-        return NULL;
-    uint8_t *str = tmalloc(len + 1);
-    memcpy(str, b->data + b->pos, len);
-    str[len] = '\0';
-    b->pos += len;
-    return str;
-}
-
-
-// Write data
-void write_uint8(struct buffer *b, uint8_t val) {
-    if ((b->pos + sizeof(uint8_t)) > b->size)
-        return;
-    *(b->data + b->pos) = val;
-    b->pos += sizeof(uint8_t);
-}
-
-
-void write_uint16(struct buffer *b, uint16_t val) {
-    if ((b->pos + sizeof(uint16_t)) > b->size)
-        return;
-    *((uint16_t *) (b->data + b->pos)) = htons(val);
-    b->pos += sizeof(uint16_t);
-}
-
-
-void write_uint32(struct buffer *b, uint32_t val) {
-    if ((b->pos + sizeof(uint32_t)) > b->size)
-        return;
-    *((uint32_t *) (b->data + b->pos)) = htonl(val);
-    b->pos += sizeof(uint32_t);
-}
-
-
-void write_uint64(struct buffer *b, uint64_t val) {
-    if ((b->pos + sizeof(uint64_t)) > b->size)
-        return;
-    htonll(b->data + b->pos, val);
-    b->pos += sizeof(uint64_t);
-}
-
-
-void write_bytes(struct buffer *b, uint8_t *str) {
-    size_t len = strlen((char *) str);
-    if ((b->pos + len) > b->size)
-        return;
-    memcpy(b->data + b->pos, str, len);
-    b->pos += len;
-}
-
-
 static void pack_header(const struct header *h, struct buffer *b) {
 
     assert(b && h);
 
-    write_uint8(b, h->opcode);
-    write_uint32(b, b->size);
-    write_uint8(b, h->flags);
+    pack(b, "BIB", h->opcode, b->size, h->flags);
 
     if ((h->flags & F_FROMNODEREQUEST) || (h->flags & F_FROMNODERESPONSE))
-        write_bytes(b, (uint8_t *) h->transaction_id);
+        pack(b, "s", h->transaction_id);
 
 }
 
@@ -192,17 +55,14 @@ static void unpack_header(struct buffer *b, struct header *h) {
 
     assert(b && h);
 
-    h->flags = 0;
-
-    h->opcode = read_uint8(b);
-    h->size = read_uint32(b);
-
-    h->flags = read_uint8(b);
+    unpack(b, "BIB", &h->opcode, &h->size, &h->flags);
 
     if (h->flags & F_FROMNODEREQUEST || h->flags & F_FROMNODERESPONSE) {
-        const char *transaction_id = (const char *) read_bytes(b, UUID_LEN - 1);
+        const char transaction_id[UUID_LEN];
+        char fmt[4];
+        snprintf(fmt, 4, "%ds", UUID_LEN - 1);
+        unpack(b, fmt, transaction_id);
         strcpy(h->transaction_id, transaction_id);
-        tfree((char *) transaction_id);
     }
 }
 

@@ -163,3 +163,8 @@ void cluster_add_node(struct cluster *cluster, struct cluster_node *node) {
     cluster->nodes->head =
         list_merge_sort(cluster->nodes->head, compare_upper_bound);
 }
+
+
+size_t cluster_size(struct cluster *cluster) {
+    return cluster->nodes->len;
+}

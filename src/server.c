@@ -60,7 +60,7 @@
  */
 #define set_ack_reply(c, o, t, f) do {                                      \
     struct response *response = make_ack_response((o), (t), (f));           \
-    struct buffer *buffer = buffer_init(response->ncontent->header->size);  \
+    struct buffer *buffer = buffer_create(response->ncontent->header->size);  \
     pack_response(buffer, response);                                        \
     set_reply((c), buffer, -1);                                             \
     free_response(response);                                                \
@@ -220,7 +220,7 @@ struct buffer *recv_packet(int clientfd,
             goto errrecv;
 
     /* Allocate a buffer to fit the entire packet */
-    struct buffer *b = buffer_init(tlen);
+    struct buffer *b = buffer_create(tlen);
 
     /* Copy previous read part of the header (first 6 bytes) */
     memcpy(b->data, tmp, HEADLEN);
@@ -284,7 +284,7 @@ static inline void free_reply(struct reply *r) {
         return;
 
     if (r->payload)
-        buffer_destroy(r->payload);
+        buffer_release(r->payload);
 
     tfree(r);
 }
@@ -439,7 +439,7 @@ static int ack_handler(struct client *c) {
             make_join_request(conf->hostname, conf->port, F_FROMNODEREQUEST);
 
         struct buffer *buffer =
-            buffer_init(request->command->kvcommand->header->size);
+            buffer_create(request->command->kvcommand->header->size);
 
         pack_request(buffer, request, KEY_VAL_COMMAND);
 
@@ -515,7 +515,7 @@ static int keys_handler(struct client *c) {
 
     struct response *response = make_list_response(keys, NULL, F_NOFLAG);
 
-    struct buffer *buffer = buffer_init(response->lcontent->header->size);
+    struct buffer *buffer = buffer_create(response->lcontent->header->size);
     pack_response(buffer, response);
 
     set_reply(c, buffer, -1);
@@ -649,8 +649,23 @@ static int get_handler(struct client *c) {
         int64_t delta = (nd->ctime + nd->ttl) - now;
 
         if (nd->ttl != -NOTTL && delta <= 0) {
+
+            /* Delete from the trie */
             trie_delete(c->db->data, (const char *) cmd->key);
+
+            /* Find index of the key in the expiring_keys vector */
+            for (size_t i = 0; i < vector_size(tritedb.expiring_keys); i++) {
+                struct expiring_key *ek = vector_get(tritedb.expiring_keys, i);
+                if (ek->nd == nd) {
+                    vector_delete(tritedb.expiring_keys, i);
+                    tfree((char *) ek->key);
+                    tfree(ek);
+                    break;
+                }
+            }
+
             set_ack_reply(c, NOK, NULL, F_NOFLAG);
+
             // Update total keyspace counter
             tritedb.keyspace_size--;
         } else {
@@ -663,7 +678,7 @@ static int get_handler(struct client *c) {
                 make_data_response(nd->data, NULL, F_NOFLAG);
 
             struct buffer *buffer =
-                buffer_init(response->dcontent->header->size);
+                buffer_create(response->dcontent->header->size);
 
             pack_response(buffer, response);
 
@@ -892,7 +907,7 @@ static int db_handler(struct client *c) {
     struct response *response =
         make_data_response((uint8_t *) c->db->name, NULL, F_NOFLAG);
 
-    struct buffer *buffer = buffer_init(response->dcontent->header->size);
+    struct buffer *buffer = buffer_create(response->dcontent->header->size);
     pack_response(buffer, response);
 
     set_reply(c, buffer, -1);
@@ -950,7 +965,7 @@ static int count_handler(struct client *c) {
 
     struct response *res = make_valuecontent_response(count, NULL, F_NOFLAG);
 
-    struct buffer *b = buffer_init(res->vcontent->header->size);
+    struct buffer *b = buffer_create(res->vcontent->header->size);
     pack_response(b, res);
     set_reply(c, b, -1);
     free_response(res);
@@ -1001,7 +1016,7 @@ static int cluster_join_handler(struct client *c) {
                     (const uint8_t *) uuid, F_FROMNODERESPONSE | F_BULKREQUEST);
 
             struct buffer *buffer =
-                buffer_init(response->kvlcontent->header->size);
+                buffer_create(response->kvlcontent->header->size);
 
             pack_response(buffer, response);
 
@@ -1026,7 +1041,7 @@ static int cluster_join_handler(struct client *c) {
     cluster_add_new_node(tritedb.cluster, c,
             (const char *) command->key, (const char *) command->val, false);
 
-    tdebug("[JOIN] Added %s:%s", command->key, command->val);
+    tdebug("New node on %s:%s joined", command->key, command->val);
 
     free_request(c->request);
 
@@ -1089,7 +1104,7 @@ static int cluster_members_handler(struct client *c) {
     /* Track the new connected node */
     hashtable_put(tritedb.nodes, new_node->uuid, new_node);
 
-    tdebug("[MEMBER] Added %s:%s", pair->key, pair->val);
+    tdebug("New node on %s:%s joined", pair->key, pair->val);
 
     // Send CLUSTER_JOIN request
     // XXX Obnoxious
@@ -1097,7 +1112,7 @@ static int cluster_members_handler(struct client *c) {
         make_join_request(conf->hostname, conf->port, F_FROMNODEREQUEST);
 
     struct buffer *buffer =
-        buffer_init(request->command->kvcommand->header->size);
+        buffer_create(request->command->kvcommand->header->size);
 
     pack_request(buffer, request, KEY_VAL_COMMAND);
 
@@ -1289,7 +1304,7 @@ static int request_handler(struct client *client) {
     }
 
     /* No more need of the byte buffer from now on */
-    buffer_destroy(b);
+    buffer_release(b);
 
     /* Free ring buffer as we alredy have all needed informations in memory */
     ringbuf_release(rbuf);
@@ -1871,7 +1886,7 @@ int start_server(const char *addr,
             make_join_request(addr, port, F_FROMNODEREQUEST | F_JOINREQUEST);
 
         struct buffer *buffer =
-            buffer_init(request->command->kvcommand->header->size);
+            buffer_create(request->command->kvcommand->header->size);
 
         pack_request(buffer, request, KEY_VAL_COMMAND);
 
@@ -1890,7 +1905,7 @@ int start_server(const char *addr,
         /* Track the new connected node on the cluster */
         hashtable_put(tritedb.nodes, node->uuid, node);
 
-        tdebug("Added %s:%s", seednode->addr, seednode->port);
+        tdebug("New node on %s:%s joined", seednode->addr, seednode->port);
     }
 
     /*
@@ -1928,7 +1943,7 @@ int start_server(const char *addr,
         /* Track the new connected node on the cluster */
         hashtable_put(tritedb.nodes, bus_server->uuid, bus_server);
 
-        tdebug("Added %s:%s [self]", addr, port);
+        tdebug("Joined a cluster");
     }
 
     tinfo("TriteDB v%s", conf->version);

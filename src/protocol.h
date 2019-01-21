@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include "list.h"
 #include "util.h"
+#include "pack.h"
 
 /* Error codes */
 #define OK                      0x00
@@ -101,58 +102,6 @@
  *
  */
 #define HEADERLEN (2 * sizeof(uint8_t)) + sizeof(uint32_t)
-
-
-/* struct buffer structure, provides a convenient way of handling byte string data.
-   It is essentially an unsigned char pointer that track the position of the
-   last written byte and the total size of the bystestring */
-struct buffer {
-    size_t size;
-    size_t pos;
-    uint8_t *data;
-};
-
-/* Host to network byteorder for unsigned long long values, it is achieved by
-   treating a single u64 as two u32 numbers */
-void htonll(uint8_t *, uint_least64_t);
-
-/* Network to host byteorder for unsigned long long values, it is achieved by
-   treating a single u64 as two u32 numbers */
-uint_least64_t ntohll(const uint8_t *);
-
-/*
- * struct buffer constructor, it require a size cause we use a bounded buffer,
- * e.g. no resize over a defined size
- */
-struct buffer *buffer_init(size_t);
-
-void buffer_destroy(struct buffer *);
-
-
-/* Reading data on struct buffer pointer */
-// bytes -> uint8_t
-uint8_t read_uint8(struct buffer *);
-// bytes -> uint16_t
-uint16_t read_uint16(struct buffer *);
-// bytes -> uint32_t
-uint32_t read_uint32(struct buffer *);
-// bytes -> uint64_t
-uint64_t read_uint64(struct buffer *);
-// read a defined len of bytes
-uint8_t *read_bytes(struct buffer *, size_t);
-
-
-/* Write data on struct buffer pointer */
-// append a uint8_t -> bytes into the buffer
-void write_uint8(struct buffer *, uint8_t);
-// append a uint16_t -> bytes into the buffer
-void write_uint16(struct buffer *, uint16_t);
-// append a uint32_t -> bytes into the buffer
-void write_uint32(struct buffer *, uint32_t);
-// append a uint64_t -> bytes into the buffer
-void write_uint64(struct buffer *, uint64_t);
-// append len bytes into the buffer
-void write_bytes(struct buffer *, uint8_t *);
 
 
 /*

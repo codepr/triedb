@@ -16,7 +16,7 @@ set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 
 file(GLOB SOURCES src/*.c)
-file(GLOB TEST src/queue.c src/hashtable.c src/vector.c src/config.c src/list.c src/trie.c src/util.c src/cluster.c src/server.c src/network.c src/protocol.c src/ringbuf.c tests/*.c)
+file(GLOB TEST src/pack.c src/queue.c src/hashtable.c src/vector.c src/config.c src/list.c src/trie.c src/util.c src/cluster.c src/server.c src/network.c src/protocol.c src/ringbuf.c tests/*.c)
 
 list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/tritedbcli.c)
 

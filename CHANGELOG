@@ -1,8 +1,11 @@
-0.4.6 - 2019/01/20
+0.4.7 - 2019/01/20
 ==================
 
 - Started implementation of distribution through consistent hash ring
 - Fixed some memory leaks
+- Splitted protocol.h into pack.h to move some responsibilities of
+  serialization and deserialization and let protocol to only handle structure
+  of packets and communication
 
 
 0.4.5 - 2019/01/15

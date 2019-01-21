@@ -70,5 +70,8 @@ struct cluster_node *cluster_get_node(struct cluster *, uint16_t);
 /* Add new node already assigned in the circle */
 void cluster_add_node(struct cluster *, struct cluster_node *);
 
+/* Return the size of the hash ring */
+size_t cluster_size(struct cluster *);
+
 
 #endif
