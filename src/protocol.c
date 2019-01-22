@@ -37,6 +37,7 @@
 
 static void pack_header(const struct header *, struct buffer *);
 static void unpack_header(struct buffer *, struct header *);
+static void header_init(struct header *, uint8_t, uint32_t, uint8_t, const char *);
 
 
 static void pack_header(const struct header *h, struct buffer *b) {
@@ -254,9 +255,6 @@ errnomem3:
 
 
 static void free_header(struct header *header) {
-    /* if ((header->flags & F_FROMNODEREQUEST) || */
-    /*         (header->flags & F_FROMNODERESPONSE)) */
-    /*     tfree(header->transaction_id); */
     tfree(header);
 }
 
@@ -401,7 +399,6 @@ struct response *make_ack_response(uint8_t code,
     if (!response)
         goto errnomem3;
 
-    response->restype = NO_CONTENT;
     response->ncontent = tmalloc(sizeof(struct no_content));
     if (!response->ncontent)
         goto errnomem2;
@@ -410,18 +407,7 @@ struct response *make_ack_response(uint8_t code,
     if (!response->ncontent->header)
         goto errnomem1;
 
-    response->ncontent->header->opcode = ACK;
-    response->ncontent->header->size = HEADERLEN + sizeof(uint8_t);
-    response->ncontent->header->flags = 0 | flags;
-
-    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
-        strncpy(response->ncontent->header->transaction_id,
-                (const char *) transaction_id, UUID_LEN - 1);
-        response->ncontent->header->transaction_id[UUID_LEN - 1] = '\0';
-        response->ncontent->header->size += UUID_LEN - 1;
-    }
-
-    response->ncontent->code = code;
+    ack_response_init(response, code, flags, (const char *) transaction_id);
 
     return response;
 
@@ -446,7 +432,6 @@ struct response *make_data_response(const uint8_t *data,
     if (!response)
         goto errnomem3;
 
-    response->restype = DATA_CONTENT;
     response->dcontent = tmalloc(sizeof(struct data_content));
     if (!response->dcontent)
         goto errnomem2;
@@ -455,19 +440,7 @@ struct response *make_data_response(const uint8_t *data,
     if (!response->dcontent->header)
         goto errnomem1;
 
-    response->dcontent->header->opcode = PUT;
-    response->dcontent->header->size =
-        HEADERLEN + sizeof(uint32_t) + strlen((char *) data);
-    response->dcontent->header->flags = 0 | flags;
-
-    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
-        strncpy(response->dcontent->header->transaction_id,
-                (const char *) transaction_id, UUID_LEN - 1);
-        response->dcontent->header->size += UUID_LEN - 1;
-    }
-
-    response->dcontent->datalen = strlen((char *) data);
-    response->dcontent->data = (uint8_t *) tstrdup((const char *) data);
+    data_response_init(response, data, flags, (const char *) transaction_id);
 
     return response;
 
@@ -492,7 +465,6 @@ struct response *make_valuecontent_response(uint32_t value,
     if (!response)
         goto errnomem3;
 
-    response->restype = VALUE_CONTENT;
     response->vcontent = tmalloc(sizeof(struct value_content));
     if (!response->vcontent)
         goto errnomem2;
@@ -501,17 +473,7 @@ struct response *make_valuecontent_response(uint32_t value,
     if (!response->vcontent->header)
         goto errnomem1;
 
-    response->vcontent->header->opcode = ACK;
-    response->vcontent->header->size = HEADERLEN + sizeof(uint32_t);
-    response->vcontent->header->flags = 0 | flags;
-
-    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
-        strncpy(response->vcontent->header->transaction_id,
-                (const char *) transaction_id, UUID_LEN - 1);
-        response->vcontent->header->size += UUID_LEN - 1;
-    }
-
-    response->vcontent->val = value;
+    value_response_init(response, value, flags, (const char *) transaction_id);
 
     return response;
 
@@ -550,15 +512,8 @@ struct response *make_list_response(const List *content,
         return NULL;
     }
 
-    response->lcontent->header->opcode = ACK;
-    response->lcontent->header->size = HEADERLEN + sizeof(uint16_t);
-    response->lcontent->header->flags = 0 | flags;
-
-    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
-        strncpy(response->lcontent->header->transaction_id,
-                (const char *) transaction_id, UUID_LEN - 1);
-        response->lcontent->header->size += UUID_LEN - 1;
-    }
+    header_init(response->lcontent->header, ACK,
+            HEADERLEN + sizeof(uint16_t), flags, (const char *) transaction_id);
 
     response->lcontent->len = content->len;
     response->lcontent->keys = tcalloc(content->len, sizeof(struct key));
@@ -600,16 +555,8 @@ struct response *make_kvlist_response(const List *content,
         return NULL;
     }
 
-    response->kvlcontent->header->opcode = CLUSTER_MEMBERS;
-    response->kvlcontent->header->size = HEADERLEN + sizeof(uint16_t);
-    response->kvlcontent->header->flags = 0 | flags;
-
-    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
-        strncpy(response->kvlcontent->header->transaction_id,
-                (const char *) transaction_id, UUID_LEN - 1);
-        response->kvlcontent->header->transaction_id[UUID_LEN - 1] = '\0';
-        response->kvlcontent->header->size += UUID_LEN - 1;
-    }
+    header_init(response->kvlcontent->header, CLUSTER_MEMBERS,
+            HEADERLEN + sizeof(uint16_t), flags, (const char *) transaction_id);
 
     response->kvlcontent->len = content->len;
     response->kvlcontent->pairs =
@@ -827,9 +774,6 @@ struct response *unpack_response(struct buffer *b) {
 
     unpack_header(b, header);
 
-    if (!(header->flags & F_FROMNODERESPONSE))
-        goto errnomem1;
-
     // XXX not implemented all responses yet
     // TODO write a more efficient solution for this hack
     int code = 0;
@@ -846,6 +790,15 @@ struct response *unpack_response(struct buffer *b) {
             response->ncontent = tmalloc(sizeof(struct no_content));
             response->ncontent->header = header;
             response->ncontent->code = read_uint8(b);
+            break;
+
+        case KEY_COMMAND:
+            tdebug("KEYCOMMAND");
+            response->dcontent = tmalloc(sizeof(struct data_content));
+            response->dcontent->header = header;
+            response->dcontent->datalen = read_uint32(b);
+            response->dcontent->data =
+                read_bytes(b, response->dcontent->datalen);
             break;
 
         case KEY_VAL_COMMAND:
@@ -910,8 +863,71 @@ void pack_request(struct buffer *buffer,
             write_uint8(buffer, request->command->kvcommand->is_prefix);
             write_uint16(buffer, request->command->kvcommand->ttl);
             break;
+        case KEY_LIST_COMMAND:
+            pack_header(request->command->klcommand->header, buffer);
+            write_uint16(buffer, request->klcommand->len);
+            for (int i = 0; i < r->lcontent->len; i++) {
+                write_uint16(b, r->lcontent->keys[i]->keysize);
+                write_bytes(b, r->lcontent->keys[i]->key);
+                write_uint8(b, r->lcontent->keys[i]->is_prefix);
+            }
+
+            break;
         default:
             fprintf(stderr, "Not implemented yet\n");
             break;
     }
+}
+
+
+static void header_init(struct header *header, uint8_t opcode,
+        uint32_t size, uint8_t flags, const char *transaction_id) {
+
+    header->opcode = opcode;
+    header->size = size;
+    header->flags = 0 | flags;
+
+    if (transaction_id && (flags & F_FROMNODERESPONSE)) {
+        strncpy(header->transaction_id,
+                (const char *) transaction_id, UUID_LEN - 1);
+        header->transaction_id[UUID_LEN - 1] = '\0';
+        header->size += UUID_LEN - 1;
+    }
+}
+
+
+void ack_response_init(struct response *response,
+        uint8_t code, int flags, const char *transaction_id) {
+
+    response->restype = NO_CONTENT;
+
+    header_init(response->ncontent->header,
+            ACK, HEADERLEN + sizeof(uint8_t), flags, transaction_id);
+
+    response->ncontent->code = code;
+}
+
+
+void data_response_init(struct response *response,
+        const uint8_t *data, uint8_t flags, const char *transaction_id) {
+
+    response->restype = DATA_CONTENT;
+
+    uint32_t len = HEADERLEN + sizeof(uint32_t) + strlen((char *) data);
+    header_init(response->dcontent->header, GET, len, flags, transaction_id);
+
+    response->dcontent->datalen = strlen((char *) data);
+    response->dcontent->data = (uint8_t *) tstrdup((const char *) data);
+}
+
+
+void value_response_init(struct response *response,
+        uint32_t value, uint8_t flags, const char *transaction_id) {
+
+    response->restype = VALUE_CONTENT;
+
+    header_init(response->vcontent->header, ACK,
+            HEADERLEN + sizeof(uint32_t), flags, transaction_id);
+
+    response->vcontent->val = value;
 }

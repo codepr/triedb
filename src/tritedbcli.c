@@ -29,6 +29,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
+#include "config.h"
+#include "server.h"
+#include "ringbuf.h"
+#include "network.h"
+#include "protocol.h"
 
 
 typedef enum {
@@ -37,38 +42,38 @@ typedef enum {
     DEL_COMMAND,
     TTL_COMMAND,
     UNKNOWN_COMMAND
-} CommandType;
+} command_type;
 
 
-typedef struct {
+struct kv_command {
     char key[0xff];
     char val[0xff];
     int ttl;
-} KeyValCommand;
+};
 
-typedef struct {
+struct k_command{
     char key[0xff];
     int ttl;
-} KeyCommand;
+};
 
 
-typedef struct {
+struct cli_command {
     union {
-        KeyCommand *kc;
-        KeyValCommand *kvc;
+        struct k_command *kc;
+        struct kv_command *kvc;
     };
-} Command;
+};
 
 
-typedef struct {
+struct input_buffer {
     char *buffer;
     size_t buflen;
     size_t inputlen;
-} InputBuffer;
+} ;
 
 
-InputBuffer *input_buffer_new() {
-    InputBuffer *input_buffer = tmalloc(sizeof(*input_buffer));
+struct input_buffer *input_buffer_create() {
+    struct input_buffer *input_buffer = tmalloc(sizeof(*input_buffer));
     input_buffer->buffer = NULL;
     input_buffer->buflen = 0;
     input_buffer->inputlen = 0;
@@ -77,7 +82,7 @@ InputBuffer *input_buffer_new() {
 }
 
 
-void read_line(InputBuffer *input_buffer) {
+void read_line(struct input_buffer *input_buffer) {
     size_t bytes_read =
         getline(&(input_buffer->buffer), &(input_buffer->buflen), stdin);
 
@@ -92,30 +97,33 @@ void read_line(InputBuffer *input_buffer) {
 }
 
 
-CommandType prepare_command(const InputBuffer *buffer, Command *command) {
+command_type prepare_command(const struct input_buffer *buffer,
+        struct cli_command *command) {
 
     int args;
 
     if (STREQ(buffer->buffer, "put", 3)) {
-        command->kvc = tmalloc(sizeof(KeyValCommand));
-        args = sscanf(buffer->buffer, "put %s %s", command->kvc->key, command->kvc->val);
+        command->kvc = tmalloc(sizeof(struct kv_command));
+        args = sscanf(buffer->buffer, "put %s %s",
+                command->kvc->key, command->kvc->val);
+        command->kvc->ttl = 0;
         if (args < 2)
             return UNKNOWN_COMMAND;
         return PUT_COMMAND;
     } else if (STREQ(buffer->buffer, "get", 3)) {
-        command->kc = tmalloc(sizeof(KeyCommand));
+        command->kc = tmalloc(sizeof(struct k_command));
         args = sscanf(buffer->buffer, "get %s", command->kc->key);
         if (args < 1)
             return UNKNOWN_COMMAND;
         return GET_COMMAND;
     } else if (STREQ(buffer->buffer, "del", 3)) {
-        command->kc = tmalloc(sizeof(KeyCommand));
+        command->kc = tmalloc(sizeof(struct k_command));
         args = sscanf(buffer->buffer, "del %s", command->kc->key);
         if (args < 1)
             return UNKNOWN_COMMAND;
         return DEL_COMMAND;
     } else if (STREQ(buffer->buffer, "ttl", 3)) {
-        command->kc = tmalloc(sizeof(KeyCommand));
+        command->kc = tmalloc(sizeof(struct k_command));
         args = sscanf(buffer->buffer, "ttl %s", command->kc->key);
         if (args < 1)
             return UNKNOWN_COMMAND;
@@ -125,19 +133,81 @@ CommandType prepare_command(const InputBuffer *buffer, Command *command) {
 }
 
 
-void execute_command(CommandType command, Command *c) {
+static ssize_t send_request(int fd, struct request *request, size_t size) {
+
+    struct buffer *buffer = buffer_create(size);
+
+    pack_request(buffer, request, request->command->cmdtype);
+
+    ssize_t sent;
+
+    if ((sendall(fd, buffer->data, buffer->size, &sent)) < 0)
+        perror("send(2): can't write on socket descriptor");
+
+    buffer_release(buffer);
+
+    return sent;
+}
+
+
+static struct response *recv_data(int fd) {
+
+    uint8_t *buf = tmalloc(conf->max_request_size);
+    Ringbuffer *rbuffer = ringbuf_create(buf, conf->max_request_size);
+    struct buffer *buffer = recv_packet(fd, rbuffer, &(uint8_t){0}, &(int){0});
+    struct response *response = unpack_response(buffer);
+    ringbuf_release(rbuffer);
+    buffer_release(buffer);
+    tfree(buf);
+    return response;
+}
+
+
+void execute_command(int fd, command_type command, struct cli_command *c) {
+    /* Request placeholder */
+    struct request *request = NULL;
+    struct response *response = NULL;
+    ssize_t sent = 0LL;
     switch (command) {
         case PUT_COMMAND:
+            request = make_keyval_request((const uint8_t *) c->kvc->key,
+                    (const uint8_t *) c->kvc->val, PUT, c->kvc->ttl, F_NOFLAG);
+            sent = send_request(fd, request,
+                    request->command->kvcommand->header->size);
+            printf("%ld bytes sent\n", sent);
+            response = recv_data(fd);
+            printf("%d bytes received\n", response->ncontent->header->size);
             tfree(c->kvc);
-            puts("PUT");
             break;
         case GET_COMMAND:
+            request = make_key_request((const uint8_t *) c->kc->key,
+                    GET, 0x00, F_NOFLAG);
+            sent = send_request(fd, request,
+                    request->command->kcommand->header->size);
+            printf("%ld bytes sent\n", sent);
+            response = recv_data(fd);
+            if (response->restype == DATA_CONTENT) {
+                printf("%d bytes received\n", response->dcontent->header->size);
+                printf("%s\n", response->dcontent->data);
+            } else {
+                printf("%d bytes received\n", response->ncontent->header->size);
+                printf("(nil)\n");
+            }
             tfree(c->kc);
-            puts("GET");
             break;
         case DEL_COMMAND:
+            request = make_key_request((const uint8_t *) c->kc->key,
+                    DEL, 0x00, F_NOFLAG);
+            sent = send_request(fd, request,
+                    request->command->kcommand->header->size);
+            printf("%ld bytes sent\n", sent);
+            response = recv_data(fd);
+            printf("%d bytes received\n", response->ncontent->header->size);
+            if (response->ncontent->code == 0x00)
+                printf("ok\n");
+            else
+                printf("(nil)\n");
             tfree(c->kc);
-            puts("DEL");
             break;
         case TTL_COMMAND:
             tfree(c->kc);
@@ -152,9 +222,14 @@ void execute_command(CommandType command, Command *c) {
 
 int main(int argc, char **argv) {
 
-    InputBuffer *input_buffer = input_buffer_new();
+    struct input_buffer *input_buffer = input_buffer_create();
 
-    Command *c = tmalloc(sizeof(Command));
+    struct cli_command *c = tmalloc(sizeof(*c));
+
+    config_set_default();
+
+    // Connect to the listening peer node
+    int fd = open_connection("127.0.0.1", 9090);
 
     while (1) {
 
@@ -162,9 +237,9 @@ int main(int argc, char **argv) {
 
         read_line(input_buffer);
 
-        CommandType command = prepare_command(input_buffer, c);
+        command_type command = prepare_command(input_buffer, c);
 
-        execute_command(command, c);
+        execute_command(fd, command, c);
     }
 
     return 0;

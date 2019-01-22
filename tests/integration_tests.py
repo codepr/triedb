@@ -361,7 +361,7 @@ class TriteDBTest(unittest.TestCase):
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
             payload = struct.unpack(f'={datalen}s', self.connection.recv(datalen))[0]
 
-        self.assertEqual(code, 0x01)
+        self.assertEqual(code, 0x02)
         self.assertEqual(payload, b'db0')
 
         dbname = "test-database"
@@ -397,7 +397,7 @@ class TriteDBTest(unittest.TestCase):
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
             payload = struct.unpack(f'={datalen}s', self.connection.recv(datalen))[0]
 
-        self.assertEqual(code, 0x01)
+        self.assertEqual(code, 0x02)
         self.assertEqual(payload, dbname.encode())
 
         defaultdb = "db0"
@@ -433,5 +433,5 @@ class TriteDBTest(unittest.TestCase):
             datalen = ntohl(struct.unpack('=I', self.connection.recv(4))[0])
             payload = struct.unpack(f'={datalen}s', self.connection.recv(datalen))[0]
 
-        self.assertEqual(code, 0x01)
+        self.assertEqual(code, 0x02)
         self.assertEqual(payload, defaultdb.encode())

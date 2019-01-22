@@ -26,7 +26,9 @@ set(LICENSE "BSD2 license")
 # Executable
 add_executable(tritedb_test ${TEST})
 add_executable(tritedb ${SOURCES})
-add_executable(tritedbcli src/config.c src/util.c src/tritedbcli.c)
+add_executable(tritedbcli src/hashtable.c src/vector.c src/server.c src/ringbuf.c
+    src/network.c src/trie.c src/list.c src/queue.c src/cluster.c src/pack.c
+    src/protocol.c src/config.c src/util.c src/tritedbcli.c)
 
 add_custom_command(
     TARGET tritedb

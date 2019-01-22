@@ -58,12 +58,18 @@
  * code for responding to commands like PUT or DEL, stating the result of the
  * operation
  */
-#define set_ack_reply(c, o, t, f) do {                                      \
-    struct response *response = make_ack_response((o), (t), (f));           \
-    struct buffer *buffer = buffer_create(response->ncontent->header->size);  \
-    pack_response(buffer, response);                                        \
-    set_reply((c), buffer, -1);                                             \
-    free_response(response);                                                \
+#define set_ack_reply(c, o, t, f) do {                                  \
+    struct header hdr;                                                  \
+    struct response resp = {                                            \
+        .ncontent = &(struct no_content) {                              \
+            .header = &hdr,                                             \
+            .code = o                                                   \
+        }                                                               \
+    };                                                                  \
+    ack_response_init(&resp, o, f, (const char *) t);                   \
+    struct buffer *buffer = buffer_create(resp.ncontent->header->size); \
+    pack_response(buffer, &resp);                                       \
+    set_reply((c), buffer, -1);                                         \
 } while (0)
 
 /* Global information structure */
@@ -107,11 +113,11 @@ struct connection {
  * execution, being them ACCEPT -> REQUST -> REPLY
  */
 static void free_reply(struct reply *);
-static int reply_handler(struct client *);
 static int accept_handler(struct client *);
 static int accept_node_handler(struct client *);
-static int request_handler(struct client *);
-static int route_command(struct request *, struct buffer *, struct client *);
+static int read_handler(struct client *);
+static int write_handler(struct client *);
+static int route_command(struct request *, struct client *);
 
 /* Specific handlers for commands that every client can request */
 static int ack_handler(struct client *);
@@ -410,7 +416,7 @@ static int ack_handler(struct client *c) {
         new_node->addr = tstrdup((const char *) pair->key);
         new_node->fd = fd;
         new_node->last_action_time = time(NULL);
-        new_node->ctx_handler = reply_handler;
+        new_node->ctx_handler = write_handler;
         new_node->reply = NULL;
         new_node->request = NULL;
         new_node->response = NULL;
@@ -542,8 +548,10 @@ static bool compare_ttl(void *arg1, void *arg2) {
     return delta_l1 <= delta_l2;
 }
 
-/* Private function, insert or update values into the the trie database,
-   updating, if any present, expiring keys vector */
+/*
+ * Private function, insert or update values into the the trie database,
+ * updating, if any present, expiring keys vector
+ */
 static void put_data_into_trie(struct database *db,
         struct keyval_command *cmd) {
 
@@ -604,10 +612,18 @@ static void put_data_into_trie(struct database *db,
 static int put_handler(struct client *c) {
 
     struct request *request = c->request;
+    int flags = 0;
+    // Transaction id placeholder
+    char *tid = NULL;
 
     if (request->reqtype == SINGLE_REQUEST) {
 
         struct keyval_command *cmd = request->command->kvcommand;
+
+        flags = cmd->header->flags;
+
+        if (flags & F_FROMNODEREQUEST)
+            tid = cmd->header->transaction_id;
 
         // Insert data into the trie
         put_data_into_trie(c->db, cmd);
@@ -616,13 +632,20 @@ static int put_handler(struct client *c) {
 
         struct bulk_command *bcmd = request->bulk_command;
 
+        // TODO check
+        flags = bcmd->commands[0]->kvcommand->header->flags;
+
+        if (flags & F_FROMNODEREQUEST)
+            tid = bcmd->commands[0]->kvcommand->header->transaction_id;
+
         // Apply insertion for each command
         for (uint32_t i = 0; i < bcmd->ncommands; i++)
             put_data_into_trie(c->db, bcmd->commands[i]->kvcommand);
     }
 
     // For now just a single response
-    set_ack_reply(c, OK, NULL, F_NOFLAG);
+    set_ack_reply(c, OK, (const uint8_t *) tid,
+            flags & F_FROMNODEREQUEST ? F_FROMNODERESPONSE : F_NOFLAG);
 
     free_request(c->request);
 
@@ -634,12 +657,17 @@ static int get_handler(struct client *c) {
 
     struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
+    int flags = cmd->header->flags & F_FROMNODEREQUEST ?
+        F_FROMNODERESPONSE : F_NOFLAG;
+
+    char *tid = flags & F_FROMNODEREQUEST ?
+        cmd->header->transaction_id : NULL;
 
     // Test for the presence of the key in the trie structure
     bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK, NULL, F_NOFLAG);
+        set_ack_reply(c, NOK, (const uint8_t *) tid, flags);
     } else {
 
         struct node_data *nd = val;
@@ -664,10 +692,11 @@ static int get_handler(struct client *c) {
                 }
             }
 
-            set_ack_reply(c, NOK, NULL, F_NOFLAG);
+            set_ack_reply(c, NOK, (const uint8_t *) tid, flags);
 
             // Update total keyspace counter
             tritedb.keyspace_size--;
+
         } else {
 
             // Update the last access time
@@ -675,7 +704,7 @@ static int get_handler(struct client *c) {
 
             // and return it
             struct response *response =
-                make_data_response(nd->data, NULL, F_NOFLAG);
+                make_data_response(nd->data, (const uint8_t *) tid, flags);
 
             struct buffer *buffer =
                 buffer_create(response->dcontent->header->size);
@@ -697,15 +726,20 @@ static int ttl_handler(struct client *c) {
 
     struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
+    int flags = cmd->header->flags & F_FROMNODEREQUEST ?
+        F_FROMNODERESPONSE : F_NOFLAG;
+
+    char *tid = cmd->header->flags & F_FROMNODEREQUEST ?
+        cmd->header->transaction_id : NULL;
 
     // Check for key presence in the trie structure
     bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
 
     if (found == false || val == NULL) {
-        set_ack_reply(c, NOK, NULL, F_NOFLAG);
+        set_ack_reply(c, NOK, (const uint8_t *) tid, flags);
     } else {
         struct node_data *nd = val;
-        bool has_ttl = nd->ttl == -NOTTL ? false : true;
+        bool has_ttl = !(nd->ttl == -NOTTL);
         nd->ttl = cmd->ttl;
 
         /*
@@ -730,7 +764,7 @@ static int ttl_handler(struct client *c) {
         vector_qsort(tritedb.expiring_keys,
                 compare_ttl, sizeof(struct expiring_key));
 
-        set_ack_reply(c, OK, NULL, F_NOFLAG);
+        set_ack_reply(c, OK, (const uint8_t *) tid, flags);
     }
 
     free_request(c->request);
@@ -744,6 +778,11 @@ static int del_handler(struct client *c) {
     int code = OK;
     struct key_list_command *cmd = c->request->command->klcommand;
     bool found = false;
+    int flags = cmd->header->flags & F_FROMNODEREQUEST ?
+        F_FROMNODERESPONSE : F_NOFLAG;
+
+    char *tid = flags & F_FROMNODEREQUEST ?
+        cmd->header->transaction_id : NULL;
 
     // Flush all data in case of no prefixes passed
     if (cmd->len == 0) {
@@ -785,7 +824,7 @@ static int del_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code, NULL, F_NOFLAG);
+    set_ack_reply(c, code, (const uint8_t *) tid, flags);
     free_request(c->request);
 
     return OK;
@@ -840,7 +879,13 @@ static int inc_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code, NULL, F_NOFLAG);
+    int flags = inc->header->flags & F_FROMNODEREQUEST ?
+        F_FROMNODERESPONSE : F_NOFLAG;
+
+    char *tid = flags & F_FROMNODEREQUEST ?
+        inc->header->transaction_id : NULL;
+
+    set_ack_reply(c, code, (const uint8_t *) tid, flags);
     free_request(c->request);
 
     return OK;
@@ -895,7 +940,13 @@ static int dec_handler(struct client *c) {
         }
     }
 
-    set_ack_reply(c, code, NULL, F_NOFLAG);
+    int flags = dec->header->flags & F_FROMNODEREQUEST ?
+        F_FROMNODERESPONSE : F_NOFLAG;
+
+    char *tid = flags & F_FROMNODEREQUEST ?
+        dec->header->transaction_id : NULL;
+
+    set_ack_reply(c, code, (const uint8_t *) tid, flags);
     free_request(c->request);
 
     return OK;
@@ -963,12 +1014,25 @@ static int count_handler(struct client *c) {
     count = !cnt->key ? c->db->data->size :
         trie_prefix_count(c->db->data, (const char *) cnt->key);
 
-    struct response *res = make_valuecontent_response(count, NULL, F_NOFLAG);
+    int flags = cnt->header->flags & F_FROMNODEREQUEST ?
+        F_FROMNODERESPONSE : F_NOFLAG;
 
-    struct buffer *b = buffer_create(res->vcontent->header->size);
-    pack_response(b, res);
+    char *tid = flags & F_FROMNODEREQUEST ?
+        cnt->header->transaction_id : NULL;
+
+    struct header hdr;
+    struct response resp = {
+        .vcontent = &(struct value_content) {
+            .header = &hdr,
+            .val = count
+        }                                                                   \
+    };                                                                      \
+
+    value_response_init(&resp, count, flags, tid);
+
+    struct buffer *b = buffer_create(resp.vcontent->header->size);
+    pack_response(b, &resp);
     set_reply(c, b, -1);
-    free_response(res);
 
     free_request(c->request);
 
@@ -1083,7 +1147,7 @@ static int cluster_members_handler(struct client *c) {
     new_node->addr = tstrdup((const char *) pair->key);
     new_node->fd = fd;
     new_node->last_action_time = time(NULL);
-    new_node->ctx_handler = reply_handler;
+    new_node->ctx_handler = write_handler;
     new_node->reply = NULL;
     new_node->request = NULL;
     new_node->response = NULL;
@@ -1149,67 +1213,123 @@ static int cluster_members_handler(struct client *c) {
 /**************************************/
 
 
-static int route_command(struct request *request,
-        struct buffer *buffer, struct client *client) {
+static int route_command(struct request *request, struct client *client) {
 
     int ret = 0;
 
     if (request->reqtype == SINGLE_REQUEST) {
 
-        int16_t hashval = -1;
+        /* Cluster node placeholder */
+        struct cluster_node *node = NULL;
+        struct command *command = request->command;
 
-        switch (request->command->cmdtype) {
+        int16_t hashval = -1;
+        size_t len = 0LL;
+
+        /*
+         * Update cluster transactions in order to know who to answer to
+         * when the other node will reply back with result
+         */
+        char transaction_id[UUID_LEN];
+        generate_uuid(transaction_id);
+
+        /* Track the transaction */
+        hashtable_put(tritedb.transactions, transaction_id, client);
+
+        switch (command->cmdtype) {
             case KEY_COMMAND:
+
+                /*
+                 * Compute a CRC32(key) % RING_POINTS, we get an index for a
+                 * position in the consistent hash ring and retrieve the node
+                 * in charge to handle the request
+                 * TODO check if the node resulted is self
+                 */
+                hashval = hash((const char *) command->kcommand->key);
+
+                node = cluster_get_node(tritedb.cluster, hashval);
+
+                if (node->self)
+                    goto exitself;
+
+                /*
+                 * Assign the generated transaction id and set the flag
+                 * F_FROMNODEREQUEST on, in order to make clear that we are
+                 * routing this request to another node.
+                 */
+                strcpy(command->kcommand->header->transaction_id,
+                        transaction_id);
+                command->kcommand->header->flags |= F_FROMNODEREQUEST;
+                command->kcommand->header->size += UUID_LEN - 1;
+
+                len = command->kcommand->header->size;
+
+                break;
+
             case KEY_VAL_COMMAND:
 
                 /*
                  * Compute a CRC32(key) % RING_POINTS, we get an index for a
                  * position in the consistent hash ring and retrieve the node
                  * in charge to handle the request
+                 * TODO check if the node resulted is self
                  */
-                hashval = hash((const char *) request->command->kcommand->key);
+                hashval = hash((const char *) command->kvcommand->key);
 
-                struct cluster_node *node =
-                    cluster_get_node(tritedb.cluster, hashval);
+                node = cluster_get_node(tritedb.cluster, hashval);
+
+                if (node->self)
+                    goto exitself;
 
                 /*
-                 * Sent out all bytes. TODO: raise a EPOLLOUT event and handle
-                 * the operation in a cleaner way
+                 * Assign the generated transaction id and set the flag
+                 * F_FROMNODEREQUEST on, in order to make clear that we are
+                 * routing this request to another node.
                  */
-                ssize_t sent;
-                if ((sendall(node->link->fd, buffer->data,
-                                buffer->size, &sent)) < 0) {
-                    perror("send(2): can't write on socket descriptor");
-                    ret = -1;
-                }
+                strcpy(command->kvcommand->header->transaction_id,
+                        transaction_id);
+                command->kvcommand->header->flags |= F_FROMNODEREQUEST;
+                command->kvcommand->header->size += UUID_LEN - 1;
 
-                // Update information stats
-                info.noutputbytes += sent;
-
-                /*
-                 * Update cluster transactions in order to know who to answer to
-                 * when the other node will reply back with result
-                 */
-                char transaction_id[UUID_LEN];
-                generate_uuid(transaction_id);
-
-                /* Track the transaction */
-                hashtable_put(tritedb.transactions, transaction_id, client);
+                len = command->kvcommand->header->size;
 
                 break;
+
             default:
                 tdebug("Not implemented yet");
                 break;
         }
 
+        struct buffer *buffer = buffer_create(len);
+
+        /*
+         * Sent out all bytes. TODO: raise a EPOLLOUT event and handle
+         * the operation in a cleaner way
+         */
+        ssize_t sent;
+        if ((sendall(node->link->fd, buffer->data, buffer->size, &sent)) < 0) {
+            perror("send(2): can't write on socket descriptor");
+            ret = -1;
+        }
+
+        buffer_release(buffer);
+
+        // Update information stats
+        info.noutputbytes += sent;
+
     } else {
+        // TODO
     }
 
     return ret;
+
+exitself:
+
+    return -1;
 }
 
 /* Handle incoming requests, after being accepted or after a reply */
-static int request_handler(struct client *client) {
+static int read_handler(struct client *client) {
 
     int clientfd = client->fd;
 
@@ -1299,8 +1419,26 @@ static int request_handler(struct client *client) {
          * server but another node in the cluster, we should route the command to
          * the correct node before handling it.
          */
-        if (client->ctype == CLIENT && conf->mode == CLUSTER)
-            route_command(request, b, client);
+        if (client->ctype == CLIENT && conf->mode == CLUSTER) {
+
+            /*
+             * The hash of the key belong to the current node, no need to
+             * forward the request to another node in the cluster
+             */
+            if (route_command(request, client) > 0) {
+
+                /* No more need of the byte buffer from now on */
+                buffer_release(b);
+
+                /* Free ring buffer as we alredy have all needed informations in memory */
+                ringbuf_release(rbuf);
+
+                tfree(buffer);
+
+                // TODO release resources
+                goto setreply;
+            }
+        }
     }
 
     /* No more need of the byte buffer from now on */
@@ -1339,11 +1477,13 @@ static int request_handler(struct client *client) {
     if (err == -1)
         goto exit;
 
+setreply:
+
     // Set reply handler as the current context handler
-    client->ctx_handler = reply_handler;
+    client->ctx_handler = write_handler;
 
     /*
-     * Reset handler to request_handler in order to read new incoming data and
+     * Reset handler to read_handler in order to read new incoming data and
      * EPOLL event for read fds
      */
     mod_epoll(tritedb.epollfd, clientfd, EPOLLOUT, client);
@@ -1359,7 +1499,7 @@ freebuf:
 
 reset:
 
-    client->ctx_handler = request_handler;
+    client->ctx_handler = read_handler;
     mod_epoll(tritedb.epollfd, clientfd, EPOLLIN, client);
     return 0;
 
@@ -1376,11 +1516,11 @@ errclient:
 
 /*
  * Handle reply state, after a request/response has been processed in
- * request_handler routine. Just send out all bytes stored in the reply buffer
+ * read_handler routine. Just send out all bytes stored in the reply buffer
  * to the reply file descriptor, which can be either a connected client or a
  * tritedb node connected to the bus port.
  */
-static int reply_handler(struct client *client) {
+static int write_handler(struct client *client) {
 
     int ret = 0;
     if (!client->reply)
@@ -1402,7 +1542,7 @@ static int reply_handler(struct client *client) {
     client->reply = NULL;
 
     /* Set up EPOLL event on EPOLLIN to read fds */
-    client->ctx_handler = request_handler;
+    client->ctx_handler = read_handler;
     mod_epoll(tritedb.epollfd, client->fd, EPOLLIN, client);
 
     return ret;
@@ -1471,7 +1611,7 @@ static int accept_handler(struct client *server) {
     client->ctype = CLIENT;
     client->addr = tstrdup(conn.ip);
     client->fd = conn.fd;
-    client->ctx_handler = request_handler;
+    client->ctx_handler = read_handler;
 
     /* Record last action as of now */
     client->last_action_time = (uint64_t) time(NULL);
@@ -1521,7 +1661,7 @@ static int accept_node_handler(struct client *bus_server) {
     new_node->ctype = NODE;
     new_node->addr = tstrdup(conn.ip);
     new_node->fd = conn.fd;
-    new_node->ctx_handler = request_handler;
+    new_node->ctx_handler = read_handler;
 
     /* Record last action as of now */
     new_node->last_action_time = (uint64_t) time(NULL);
@@ -1869,7 +2009,7 @@ int start_server(const char *addr,
         node->addr = tstrdup(seednode->addr);
         node->fd = seednode->fd;
         node->last_action_time = time(NULL);
-        node->ctx_handler = reply_handler;
+        node->ctx_handler = write_handler;
         node->reply = NULL;
         node->request = NULL;
         node->response = NULL;

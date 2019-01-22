@@ -307,6 +307,11 @@ struct request *make_key_request(const uint8_t *, uint8_t, uint16_t, uint8_t);
 struct request *make_keyval_request(const uint8_t *,
         const uint8_t *, uint8_t, uint16_t, uint8_t);
 
+void ack_response_init(struct response *, uint8_t, int, const char *);
+void data_response_init(struct response *,
+        const uint8_t *, uint8_t, const char *);
+void value_response_init(struct response *, uint32_t, uint8_t, const char *);
+
 // Response -> byte buffer
 void pack_response(struct buffer *, const struct response *);
 
