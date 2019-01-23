@@ -88,7 +88,7 @@ void buffer_release(struct buffer *b) {
 
 
 // Reading data
-uint8_t read_uint8(struct buffer *b) {
+uint8_t unpack_u8(struct buffer *b) {
 
     if ((b->pos + sizeof(uint8_t)) > b->size)
         return 0;
@@ -100,7 +100,7 @@ uint8_t read_uint8(struct buffer *b) {
 }
 
 
-uint16_t read_uint16(struct buffer *b) {
+uint16_t unpack_u16(struct buffer *b) {
 
     if ((b->pos + sizeof(uint16_t)) > b->size)
         return 0;
@@ -112,7 +112,7 @@ uint16_t read_uint16(struct buffer *b) {
 }
 
 
-uint32_t read_uint32(struct buffer *b) {
+uint32_t unpack_u32(struct buffer *b) {
 
     if ((b->pos + sizeof(uint32_t)) > b->size)
         return 0;
@@ -124,7 +124,7 @@ uint32_t read_uint32(struct buffer *b) {
 }
 
 
-uint64_t read_uint64(struct buffer *b) {
+uint64_t unpack_u64(struct buffer *b) {
 
     if ((b->pos + sizeof(uint64_t)) > b->size)
         return 0;
@@ -136,7 +136,7 @@ uint64_t read_uint64(struct buffer *b) {
 }
 
 
-uint8_t *read_bytes(struct buffer *b, size_t len) {
+uint8_t *unpack_bytes(struct buffer *b, size_t len) {
 
     if ((b->pos + len) > b->size)
         return NULL;
@@ -151,7 +151,7 @@ uint8_t *read_bytes(struct buffer *b, size_t len) {
 
 
 // Write data
-void write_uint8(struct buffer *b, uint8_t val) {
+void pack_u8(struct buffer *b, uint8_t val) {
 
     if ((b->pos + sizeof(uint8_t)) > b->size)
         return;
@@ -161,7 +161,7 @@ void write_uint8(struct buffer *b, uint8_t val) {
 }
 
 
-void write_uint16(struct buffer *b, uint16_t val) {
+void pack_u16(struct buffer *b, uint16_t val) {
 
     if ((b->pos + sizeof(uint16_t)) > b->size)
         return;
@@ -171,7 +171,7 @@ void write_uint16(struct buffer *b, uint16_t val) {
 }
 
 
-void write_uint32(struct buffer *b, uint32_t val) {
+void pack_u32(struct buffer *b, uint32_t val) {
 
     if ((b->pos + sizeof(uint32_t)) > b->size)
         return;
@@ -181,7 +181,7 @@ void write_uint32(struct buffer *b, uint32_t val) {
 }
 
 
-void write_uint64(struct buffer *b, uint64_t val) {
+void pack_u64(struct buffer *b, uint64_t val) {
 
     if ((b->pos + sizeof(uint64_t)) > b->size)
         return;
@@ -191,7 +191,7 @@ void write_uint64(struct buffer *b, uint64_t val) {
 }
 
 
-void write_bytes(struct buffer *b, uint8_t *str) {
+void pack_bytes(struct buffer *b, uint8_t *str) {
 
     size_t len = strlen((char *) str);
     if ((b->pos + len) > b->size)
@@ -228,27 +228,27 @@ int pack(struct buffer *buffer, const char *fmt, ...) {
 
             case 'B': // 8-bit unsigned
                 B = (uint8_t) va_arg(ap, uint32_t);
-                write_uint8(buffer, B);
+                pack_u8(buffer, B);
                 break;
 
             case 'H': // 16-bit unsigned
                 H = (uint16_t) va_arg(ap, uint32_t);
-                write_uint16(buffer, H);
+                pack_u16(buffer, H);
                 break;
 
             case 'I': // 32-bit unsigned
                 I = va_arg(ap, uint32_t);
-                write_uint32(buffer, I);
+                pack_u32(buffer, I);
                 break;
 
             case 'Q': // 64-bit unsigned
                 Q = va_arg(ap, uint64_t);
-                write_uint64(buffer, Q);
+                pack_u64(buffer, Q);
                 break;
 
             case 's': // bytestring
                 s = va_arg(ap, uint8_t *);
-                write_bytes(buffer, s);
+                pack_bytes(buffer, s);
                 break;
         }
     }
@@ -288,27 +288,27 @@ void unpack(struct buffer *buffer, const char *fmt, ...) {
 
             case 'B': // 8-bit unsigned
                 B = va_arg(ap, uint8_t *);
-                *B = read_uint8(buffer);
+                *B = unpack_u8(buffer);
                 break;
 
             case 'H': // 16-bit unsigned
                 H = va_arg(ap, uint16_t *);
-                *H = read_uint16(buffer);
+                *H = unpack_u16(buffer);
                 break;
 
             case 'I': // 32-bit unsigned
                 I = va_arg(ap, uint32_t *);
-                *I = read_uint32(buffer);
+                *I = unpack_u32(buffer);
                 break;
 
             case 'Q': // 64-bit unsigned
                 Q = va_arg(ap, uint64_t *);
-                *Q = read_uint64(buffer);
+                *Q = unpack_u64(buffer);
                 break;
 
             case 's': // bytestring
                 s = va_arg(ap, uint8_t *);
-                uint8_t *buf = read_bytes(buffer, len);
+                uint8_t *buf = unpack_bytes(buffer, len);
                 memcpy(s, buf, len);
                 tfree(buf);
                 s[len] = 0;

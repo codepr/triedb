@@ -63,36 +63,36 @@ void buffer_release(struct buffer *);
 
 /* Reading data on struct buffer pointer */
 // bytes -> uint8_t
-uint8_t read_uint8(struct buffer *);
+uint8_t unpack_u8(struct buffer *);
 
 // bytes -> uint16_t
-uint16_t read_uint16(struct buffer *);
+uint16_t unpack_u16(struct buffer *);
 
 // bytes -> uint32_t
-uint32_t read_uint32(struct buffer *);
+uint32_t unpack_u32(struct buffer *);
 
 // bytes -> uint64_t
-uint64_t read_uint64(struct buffer *);
+uint64_t unpack_u64(struct buffer *);
 
 // read a defined len of bytes
-uint8_t *read_bytes(struct buffer *, size_t);
+uint8_t *unpack_bytes(struct buffer *, size_t);
 
 
 /* Write data on struct buffer pointer */
 // append a uint8_t -> bytes into the buffer
-void write_uint8(struct buffer *, uint8_t);
+void pack_u8(struct buffer *, uint8_t);
 
 // append a uint16_t -> bytes into the buffer
-void write_uint16(struct buffer *, uint16_t);
+void pack_u16(struct buffer *, uint16_t);
 
 // append a uint32_t -> bytes into the buffer
-void write_uint32(struct buffer *, uint32_t);
+void pack_u32(struct buffer *, uint32_t);
 
 // append a uint64_t -> bytes into the buffer
-void write_uint64(struct buffer *, uint64_t);
+void pack_u64(struct buffer *, uint64_t);
 
 // append len bytes into the buffer
-void write_bytes(struct buffer *, uint8_t *);
+void pack_bytes(struct buffer *, uint8_t *);
 
 
 int pack(struct buffer *, const char *, ...);

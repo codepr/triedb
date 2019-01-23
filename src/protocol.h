@@ -122,6 +122,12 @@ struct header {
     char transaction_id[UUID_LEN];
 };
 
+
+/********************************************
+ *             REQUEST STRUCTS
+ ********************************************/
+
+
 /*
  * Definition of a single key, with `is_prefix` defining if the key must be
  * treated as a prefix, in other words if the command which operates on it
@@ -216,8 +222,10 @@ struct command {
     };
 };
 
-/* List of commands, used to handle bulk requests, a stream of sequential
-   commands to be executed in a single TCP request. */
+/*
+ * List of commands, used to handle bulk requests, a stream of sequential
+ * commands to be executed in a single TCP request.
+ */
 struct bulk_command {
     uint32_t ncommands;
     struct command **commands;
@@ -232,17 +240,30 @@ struct request {
     };
 };
 
-/* Unpack a request from network byteorder (a big-endian) bytestream into a
-   struct request struct */
+/*
+ * Pack a request transforming all fields into their binary representation,
+ * ready to be sent out in network byteorder
+ */
+void pack_request(struct buffer *, const struct request *, int);
+
+/*
+ * Unpack a request from network byteorder (a big-endian) bytestream into a
+ * request struct
+ */
 struct request *unpack_request(struct buffer *);
 
-/* Unpack a command from network byteorder to a Command struct */
-struct command *unpack_command(struct buffer *, struct header *);
+/* Request builder functions, essentially mirroring of response builders */
+struct request *make_key_request(const uint8_t *, uint8_t, uint16_t, uint8_t);
+struct request *make_keyval_request(const uint8_t *,
+        const uint8_t *, uint8_t, uint16_t, uint8_t);
 
 /* Cleanup functions */
 void free_request(struct request *);
 
-void free_command(struct command *, bool);
+
+/********************************************
+ *             RESPONSE STRUCTS
+ ********************************************/
 
 
 // struct response structure without body, like ACK etc.
@@ -302,24 +323,25 @@ struct response *make_valuecontent_response(uint32_t, const uint8_t *, uint8_t);
 struct response *make_list_response(const List *, const uint8_t *, uint8_t);
 struct response *make_kvlist_response(const List *, const uint8_t *, uint8_t);
 
-/* Request builder functions, essentially mirroring of response builders */
-struct request *make_key_request(const uint8_t *, uint8_t, uint16_t, uint8_t);
-struct request *make_keyval_request(const uint8_t *,
-        const uint8_t *, uint8_t, uint16_t, uint8_t);
 
 void ack_response_init(struct response *, uint8_t, int, const char *);
 void data_response_init(struct response *,
         const uint8_t *, uint8_t, const char *);
 void value_response_init(struct response *, uint32_t, uint8_t, const char *);
 
-// Response -> byte buffer
+/*
+ * Pack a response transforming all fields into their binary representation,
+ * ready to be sent out in network byteorder
+ */
 void pack_response(struct buffer *, const struct response *);
 
+/*
+ * Unpack a response from network byteorder (a big-endian) bytestream into a
+ * response struct
+ */
 struct response *unpack_response(struct buffer *);
 
 void free_response(struct response *);
-
-void pack_request(struct buffer *, const struct request *, int);
 
 
 #endif
