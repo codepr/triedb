@@ -272,24 +272,30 @@ static int reply_to_client(struct response *response,
 
     struct client *client = NULL;
 
+    // FIXME: wrong mapping
     switch (opcode) {
         case NO_CONTENT:
+            tinfo("REPLY: %s -> %s", response->ncontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->ncontent->header->transaction_id);
             break;
         case DATA_CONTENT:
+            tinfo("REPLY: %s -> %s", response->dcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->dcontent->header->transaction_id);
             break;
         case VALUE_CONTENT:
+            tinfo("REPLY: %s -> %s", response->vcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->vcontent->header->transaction_id);
             break;
         case LIST_CONTENT:
+            tinfo("REPLY: %s -> %s", response->lcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->lcontent->header->transaction_id);
             break;
         case KVLIST_CONTENT:
+            tinfo("REPLY: %s -> %s", response->kvlcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->kvlcontent->header->transaction_id);
             break;
@@ -711,7 +717,7 @@ static int get_handler(struct client *c) {
     int flags = cmd->header->flags & F_FROMNODEREQUEST ?
         F_FROMNODERESPONSE : F_NOFLAG;
 
-    char *tid = flags & F_FROMNODEREQUEST ?
+    char *tid = cmd->header->flags & F_FROMNODEREQUEST ?
         cmd->header->transaction_id : NULL;
 
     // Test for the presence of the key in the trie structure
@@ -1289,6 +1295,8 @@ static int route_command(struct request *request, struct client *client) {
         /* Track the transaction */
         hashtable_put(tritedb.transactions, transaction_id, client);
 
+        tinfo("%s -> %s", transaction_id, client->uuid);
+
         switch (command->cmdtype) {
             case KEY_COMMAND:
 
@@ -1449,7 +1457,7 @@ static int read_handler(struct client *client) {
         if (!response)
             goto errclient;
 
-        if (flags & F_JOINREQUEST) {
+        if (!(flags & F_JOINREQUEST) && opcode != ACK) {
             reply_to_client(response, b, opcode);
             // FIXME repeated code everywhere
             /* No more need of the byte buffer from now on */

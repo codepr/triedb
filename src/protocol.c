@@ -36,8 +36,8 @@
 
 
 /*
- * Conversion table, maps OPCODE -> COMMAND_TYPE, it's still a shitty
- * abstraction, further improvements planned on future refactoring
+ * Conversion table for request, maps OPCODE -> COMMAND_TYPE, it's still a
+ * shitty abstraction, further improvements planned on future refactoring
  */
 static const int opcode_req_map[COMMAND_COUNT][2] = {
     {ACK, EMPTY_COMMAND},
@@ -58,6 +58,29 @@ static const int opcode_req_map[COMMAND_COUNT][2] = {
     {QUIT, EMPTY_COMMAND}
 };
 
+/*
+ * Conversion table for response, maps OPCODE -> CONTENT_TYPE, it's still a
+ * shitty abstraction, further improvements planned on future refactoring
+ */
+/* static const int opcode_res_map[COMMAND_COUNT][2] = { */
+/*     {ACK, NO_CONTENT}, */
+/*     {PUT, DATA_CONTENT}, */
+/*     {GET, DATA_CONTENT}, */
+/*     {DEL, LIST_CONTENT}, */
+/*     {TTL, LIST_CONTENT}, */
+/*     {INC, LIST_CONTENT}, */
+/*     {DEC, LIST_CONTENT}, */
+/*     {COUNT, VALUE_CONTENT}, */
+/*     {KEYS, DATA_CONTENT}, */
+/*     {USE, NO_CONTENT}, */
+/*     {CLUSTER_JOIN, NO_CONTENT}, */
+/*     {CLUSTER_MEMBERS, NO_CONTENT}, */
+/*     {PING, NO_CONTENT}, */
+/*     {DB, NO_CONTENT}, */
+/*     {INFO, EMPTY_COMMAND}, */
+/*     {QUIT, NO_CONTENT} */
+/* }; */
+
 
 static void pack_header(const struct header *, struct buffer *);
 static void unpack_header(struct buffer *, struct header *);
@@ -67,6 +90,7 @@ static void free_command_header(struct command *);
 static void free_command(struct command *, bool);
 static void header_init(struct header *, uint8_t, uint32_t, uint8_t, const char *);
 static int get_ctype(uint8_t);
+/* static int get_cttype(uint8_t); */
 
 
 static int get_ctype(uint8_t opcode) {
@@ -79,6 +103,18 @@ static int get_ctype(uint8_t opcode) {
 
     return ctype;
 }
+
+
+/* static int get_cctype(uint8_t opcode) { */
+/*  */
+/*     int cctype = -1; */
+/*  */
+/*     for (int i = 0; i < COMMAND_COUNT; i++) */
+/*         if (opcode_req_map[i][0] == opcode) */
+/*             cctype = opcode_req_map[i][1]; */
+/*  */
+/*     return cctype; */
+/* } */
 
 
 static void pack_header(const struct header *h, struct buffer *b) {
@@ -681,14 +717,15 @@ struct response *unpack_response(struct buffer *b) {
     unpack_header(b, header);
 
     // XXX not implemented all responses yet
-    response->restype = get_ctype(header->opcode);
+    int ctype = get_ctype(header->opcode);
 
-    switch (response->restype) {
+    switch (ctype) {
 
         case EMPTY_COMMAND:
             response->ncontent = tmalloc(sizeof(struct no_content));
             response->ncontent->header = header;
             response->ncontent->code = unpack_u8(b);
+            response->restype = NO_CONTENT;
             break;
 
         case KEY_COMMAND:
@@ -697,6 +734,7 @@ struct response *unpack_response(struct buffer *b) {
             response->dcontent->datalen = unpack_u32(b);
             response->dcontent->data =
                 unpack_bytes(b, response->dcontent->datalen);
+            response->restype = DATA_CONTENT;
             break;
 
         case KEY_VAL_COMMAND:
@@ -722,6 +760,8 @@ struct response *unpack_response(struct buffer *b) {
                 kv->is_prefix = unpack_u8(b);
                 response->kvlcontent->pairs[i] = kv;
             }
+
+            response->restype = KVLIST_CONTENT;
             break;
     }
 
