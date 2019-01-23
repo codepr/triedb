@@ -559,6 +559,50 @@ err:
 
 }
 
+
+struct request *make_keylist_request(const List *content,
+        const uint8_t *transaction_id, uint8_t flags) {
+
+    struct request *request = tmalloc(sizeof(*request));
+    if (!request)
+        return NULL;
+
+    request->reqtype = SINGLE_REQUEST;
+    request->command = tmalloc(sizeof(struct command));
+    if (!request->command) {
+        tfree(request->command);
+        return NULL;
+    }
+
+    request->command->klcommand->header = tmalloc(sizeof(struct header));
+    if (!request->command->klcommand->header) {
+        tfree(request->command->klcommand);
+        tfree(request);
+        return NULL;
+    }
+
+    header_init(request->command->klcommand->header, ACK,
+            HEADERLEN + sizeof(uint16_t), flags, (const char *) transaction_id);
+
+    request->command->klcommand->len = content->len;
+    request->command->klcommand->keys =
+        tmalloc(content->len * sizeof(struct key));
+
+    int i = 0;
+
+    for (struct list_node *cur = content->head; cur; cur = cur->next) {
+        struct key *key = tmalloc(sizeof(*key));
+        key->key = (uint8_t *) tstrdup((const char *) cur->data);
+        key->keysize = strlen((const char *) cur->data);
+        request->command->klcommand->keys[i] = key;
+        request->command->klcommand->header->size +=
+            key->keysize + sizeof(uint16_t) + sizeof(uint8_t);
+        i++;
+    }
+
+    return request;
+}
+
 /********************************************
  *         RESPONSE PACKING FUNCTIONS
  ********************************************/
@@ -627,16 +671,9 @@ struct response *unpack_response(struct buffer *b) {
     unpack_header(b, header);
 
     // XXX not implemented all responses yet
-    // TODO write a more efficient solution for this hack
-    int code = 0;
+    response->restype = get_ctype(header->opcode);
 
-    for (int i = 0; i < COMMAND_COUNT; i++)
-        if (opcode_req_map[i][0] == header->opcode)
-            code = opcode_req_map[i][1];
-
-    response->restype = code;
-
-    switch (code) {
+    switch (response->restype) {
 
         case EMPTY_COMMAND:
             response->ncontent = tmalloc(sizeof(struct no_content));

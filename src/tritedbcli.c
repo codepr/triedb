@@ -210,6 +210,7 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
             tfree(c->kc);
             break;
         case TTL_COMMAND:
+            puts(c->kc->key);
             tfree(c->kc);
             puts("TTL");
             break;
