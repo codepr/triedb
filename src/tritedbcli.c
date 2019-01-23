@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
+#include "list.h"
 #include "config.h"
 #include "server.h"
 #include "ringbuf.h"
@@ -82,6 +83,20 @@ struct input_buffer *input_buffer_create() {
 }
 
 
+static List *split_keys(char *keys) {
+
+    List *list = list_create(NULL);
+
+    char *p = strtok((char *) keys, ",");
+    while (p) {
+        list_push(list, tstrdup(p));
+        p = strtok(NULL, ",");
+    }
+
+    return list;
+}
+
+
 void read_line(struct input_buffer *input_buffer) {
     size_t bytes_read =
         getline(&(input_buffer->buffer), &(input_buffer->buflen), stdin);
@@ -124,7 +139,7 @@ command_type prepare_command(const struct input_buffer *buffer,
         return DEL_COMMAND;
     } else if (STREQ(buffer->buffer, "ttl", 3)) {
         command->kc = tmalloc(sizeof(struct k_command));
-        args = sscanf(buffer->buffer, "ttl %s", command->kc->key);
+        args = sscanf(buffer->buffer, "ttl %[^\n]", command->kc->key);
         if (args < 1)
             return UNKNOWN_COMMAND;
         return TTL_COMMAND;
@@ -154,7 +169,7 @@ static struct response *recv_data(int fd) {
 
     uint8_t *buf = tmalloc(conf->max_request_size);
     Ringbuffer *rbuffer = ringbuf_create(buf, conf->max_request_size);
-    struct buffer *buffer = recv_packet(fd, rbuffer, &(uint8_t){0}, &(int){0});
+    struct buffer *buffer = recv_packet(fd, rbuffer, &(uint8_t){0}, &(int){0}, &(int){0});
     struct response *response = unpack_response(buffer);
     ringbuf_release(rbuffer);
     buffer_release(buffer);
@@ -167,6 +182,7 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
     /* Request placeholder */
     struct request *request = NULL;
     struct response *response = NULL;
+    List *keylist = NULL;
     ssize_t sent = 0LL;
     switch (command) {
         case PUT_COMMAND:
@@ -196,8 +212,8 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
             tfree(c->kc);
             break;
         case DEL_COMMAND:
-            request = make_key_request((const uint8_t *) c->kc->key,
-                    DEL, 0x00, F_NOFLAG);
+            keylist = split_keys(c->kc->key);
+            request = make_keylist_request(keylist, DEL, NULL, F_NOFLAG);
             sent = send_request(fd, request,
                     request->command->kcommand->header->size);
             printf("%ld bytes sent\n", sent);
@@ -232,9 +248,12 @@ int main(int argc, char **argv) {
     // Connect to the listening peer node
     int fd = open_connection("127.0.0.1", 9090);
 
+    if (fd < 0)
+        return -1;
+
     while (1) {
 
-        printf("> ");
+        printf("tritedb@127.0.0.1> ");
 
         read_line(input_buffer);
 

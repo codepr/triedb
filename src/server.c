@@ -118,6 +118,7 @@ static int accept_node_handler(struct client *);
 static int read_handler(struct client *);
 static int write_handler(struct client *);
 static int route_command(struct request *, struct client *);
+static int reply_to_client(struct response *, struct buffer *, uint8_t);
 
 /* Specific handlers for commands that every client can request */
 static int ack_handler(struct client *);
@@ -170,7 +171,7 @@ static struct command_handler commands_map[COMMAND_COUNT] = {
  * type and total length that we need to recv to complete the packet
  */
 struct buffer *recv_packet(int clientfd,
-        Ringbuffer *rbuf, uint8_t *opcode, int *rc) {
+        Ringbuffer *rbuf, uint8_t *opcode, int *rc, int *fl) {
 
     size_t n = 0;
     uint8_t read_all = 0;
@@ -207,7 +208,7 @@ struct buffer *recv_packet(int clientfd,
     uint32_t tlen = ntohl(*((uint32_t *) (tmp + sizeof(uint8_t))));
 
     /*
-     * Set return code to -ERRMAXREQSIZE in case of total packet len exceed
+     * Set return code to -ERRMAXREQSIZE in case the total packet len exceeds
      * the configuration limit `max_request_size`
      */
     if (tlen > conf->max_request_size) {
@@ -218,6 +219,7 @@ struct buffer *recv_packet(int clientfd,
     /* Read flags */
     uint8_t flags = *((uint8_t *) (tmp + sizeof(uint8_t) + sizeof(uint32_t)));
 
+    *fl = flags;
     *rc = flags & F_FROMNODERESPONSE ? 1 : 0;
 
     /* Read remaining bytes to complete the packet */
@@ -256,6 +258,53 @@ err:
     tfree(tmp);
 
     return NULL;
+}
+
+/*
+ * Given a response and the opcode to which it refer (buffer is just the
+ * serialized version of the response, for commodity) check and try to retrieve
+ * from the global transactions map if there's one pending associated with the
+ * response and forward the payload of the buffer to the client associated with
+ * the transaction code.
+ */
+static int reply_to_client(struct response *response,
+        struct buffer *buffer, uint8_t opcode) {
+
+    struct client *client = NULL;
+
+    switch (opcode) {
+        case NO_CONTENT:
+            client = hashtable_get(tritedb.transactions,
+                    response->ncontent->header->transaction_id);
+            break;
+        case DATA_CONTENT:
+            client = hashtable_get(tritedb.transactions,
+                    response->dcontent->header->transaction_id);
+            break;
+        case VALUE_CONTENT:
+            client = hashtable_get(tritedb.transactions,
+                    response->vcontent->header->transaction_id);
+            break;
+        case LIST_CONTENT:
+            client = hashtable_get(tritedb.transactions,
+                    response->lcontent->header->transaction_id);
+            break;
+        case KVLIST_CONTENT:
+            client = hashtable_get(tritedb.transactions,
+                    response->kvlcontent->header->transaction_id);
+            break;
+    }
+
+    if (!client)
+        return -1;
+
+    ssize_t sent;
+    if ((sendall(client->fd, buffer->data, buffer->size, &sent)) < 0) {
+        perror("send(2): can't write on socket descriptor");
+        return -1;
+    }
+
+    return OK;
 }
 
 /*
@@ -388,7 +437,8 @@ static int ack_handler(struct client *c) {
 
     int ret = 5;
 
-    if (!(c->response->ncontent->header->flags & F_FROMNODERESPONSE))
+    if (!(c->response->ncontent->header->flags &
+                (F_FROMNODERESPONSE | F_JOINREQUEST)))
         goto exit;
 
     /*
@@ -437,7 +487,7 @@ static int ack_handler(struct client *c) {
         /* Track the new connected node */
         hashtable_put(tritedb.nodes, new_node->uuid, new_node);
 
-        tdebug("[ACK] Added %s:%s", pair->key, pair->val);
+        tdebug("New node on %s:%s joined", pair->key, pair->val);
 
         // Send CLUSTER_JOIN request
         // XXX Obnoxious
@@ -611,6 +661,7 @@ static void put_data_into_trie(struct database *db,
 
 static int put_handler(struct client *c) {
 
+    tinfo("PUT %s %s", c->request->command->kvcommand->key, c->request->command->kvcommand->val);
     struct request *request = c->request;
     int flags = 0;
     // Transaction id placeholder
@@ -817,9 +868,9 @@ static int del_handler(struct client *c) {
                         (const char *) cmd->keys[i]->key);
                 if (found == false)
                     code = NOK;
-
-                // Update total keyspace counter
-                tritedb.keyspace_size--;
+                else
+                    // Update total keyspace counter
+                    tritedb.keyspace_size--;
             }
         }
     }
@@ -1089,13 +1140,15 @@ static int cluster_join_handler(struct client *c) {
             free_response(response);
 
         } else {
-            set_ack_reply(c, OK, (const uint8_t *) uuid, F_FROMNODERESPONSE);
+            set_ack_reply(c, OK, (const uint8_t *) uuid,
+                    F_FROMNODERESPONSE | F_JOINREQUEST);
         }
 
         list_release(members, 0);
 
     } else {
-        set_ack_reply(c, OK, (const uint8_t *) uuid, F_FROMNODERESPONSE);
+        set_ack_reply(c, OK, (const uint8_t *) uuid,
+                F_FROMNODERESPONSE | F_JOINREQUEST);
     }
 
     /*
@@ -1302,6 +1355,7 @@ static int route_command(struct request *request, struct client *client) {
 
         struct buffer *buffer = buffer_create(len);
 
+        pack_request(buffer, request, command->cmdtype);
         /*
          * Sent out all bytes. TODO: raise a EPOLLOUT event and handle
          * the operation in a cleaner way
@@ -1348,6 +1402,7 @@ static int read_handler(struct client *client) {
 
     uint8_t opcode = 0;
     int rc = 0;
+    int flags = 0;
 
     /*
      * We must read all incoming bytes till an entire packet is received. This
@@ -1355,7 +1410,7 @@ static int read_handler(struct client *client) {
      * complete packet as the first 4 bytes. By knowing it we know if the
      * packet is ready to be deserialized and used.
      */
-    struct buffer *b = recv_packet(clientfd, rbuf, &opcode, &rc);
+    struct buffer *b = recv_packet(clientfd, rbuf, &opcode, &rc, &flags);
 
     /*
      * Looks like we got a client disconnection.
@@ -1383,7 +1438,7 @@ static int read_handler(struct client *client) {
      * Currently we have a stream of bytes, we want to unpack them into a
      * request structure or a response structure
      */
-    if (rc == 1 || opcode == ACK) {
+    if (rc == 1) {
 
         struct response *response = unpack_response(b);
 
@@ -1393,6 +1448,23 @@ static int read_handler(struct client *client) {
          */
         if (!response)
             goto errclient;
+
+        if (flags & F_JOINREQUEST) {
+            reply_to_client(response, b, opcode);
+            // FIXME repeated code everywhere
+            /* No more need of the byte buffer from now on */
+            buffer_release(b);
+
+            /*
+             * Free ring buffer as we alredy have all needed informations
+             * in memory
+             */
+            ringbuf_release(rbuf);
+
+            tfree(buffer);
+
+            goto setreply;
+        }
 
         /* Link the response to the client that sent it */
         client->response = response;
@@ -1425,17 +1497,21 @@ static int read_handler(struct client *client) {
              * The hash of the key belong to the current node, no need to
              * forward the request to another node in the cluster
              */
-            if (route_command(request, client) > 0) {
+            if (route_command(request, client) > -1) {
 
                 /* No more need of the byte buffer from now on */
                 buffer_release(b);
 
-                /* Free ring buffer as we alredy have all needed informations in memory */
+                /*
+                 * Free ring buffer as we alredy have all needed informations
+                 * in memory
+                 */
                 ringbuf_release(rbuf);
 
                 tfree(buffer);
 
-                // TODO release resources
+                set_ack_reply(client, OK, NULL, F_NOFLAG);
+
                 goto setreply;
             }
         }

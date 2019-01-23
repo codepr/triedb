@@ -256,6 +256,8 @@ struct request *unpack_request(struct buffer *);
 struct request *make_key_request(const uint8_t *, uint8_t, uint16_t, uint8_t);
 struct request *make_keyval_request(const uint8_t *,
         const uint8_t *, uint8_t, uint16_t, uint8_t);
+struct request *make_keylist_request(const List *,
+        uint8_t, const uint8_t *, uint8_t);
 
 /* Cleanup functions */
 void free_request(struct request *);

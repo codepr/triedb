@@ -222,7 +222,7 @@ void pack_request(struct buffer *buffer,
             break;
         case KEY_LIST_COMMAND:
             pack_header(request->command->klcommand->header, buffer);
-            pack_u16(buffer, request->command->klcommand->len);
+            pack_u32(buffer, request->command->klcommand->len);
             for (int i = 0; i < request->command->klcommand->len; i++) {
                 pack_u16(buffer,
                         request->command->klcommand->keys[i]->keysize);
@@ -302,9 +302,9 @@ static struct command *unpack_command(struct buffer *b,
     if (!command)
         return NULL;
 
-    int ctype = get_ctype(header->opcode);
+    command->cmdtype = get_ctype(header->opcode);
 
-    switch (ctype) {
+    switch (command->cmdtype) {
         case EMPTY_COMMAND:
             command->ecommand = tmalloc(sizeof(struct empty_command));
             if (!command->ecommand)
@@ -560,7 +560,7 @@ err:
 }
 
 
-struct request *make_keylist_request(const List *content,
+struct request *make_keylist_request(const List *content, uint8_t opcode,
         const uint8_t *transaction_id, uint8_t flags) {
 
     struct request *request = tmalloc(sizeof(*request));
@@ -574,15 +574,25 @@ struct request *make_keylist_request(const List *content,
         return NULL;
     }
 
-    request->command->klcommand->header = tmalloc(sizeof(struct header));
-    if (!request->command->klcommand->header) {
-        tfree(request->command->klcommand);
+    request->command->klcommand = tmalloc(sizeof(struct key_list_command));
+    if (!request->command->klcommand) {
+        tfree(request->command);
         tfree(request);
         return NULL;
     }
 
-    header_init(request->command->klcommand->header, ACK,
-            HEADERLEN + sizeof(uint16_t), flags, (const char *) transaction_id);
+    request->command->klcommand->header = tmalloc(sizeof(struct header));
+    if (!request->command->klcommand->header) {
+        tfree(request->command->klcommand);
+        tfree(request->command);
+        tfree(request);
+        return NULL;
+    }
+
+    request->command->cmdtype = KEY_LIST_COMMAND;
+
+    header_init(request->command->klcommand->header, opcode,
+            HEADERLEN + sizeof(uint32_t), flags, (const char *) transaction_id);
 
     request->command->klcommand->len = content->len;
     request->command->klcommand->keys =
@@ -682,7 +692,6 @@ struct response *unpack_response(struct buffer *b) {
             break;
 
         case KEY_COMMAND:
-            tdebug("KEYCOMMAND");
             response->dcontent = tmalloc(sizeof(struct data_content));
             response->dcontent->header = header;
             response->dcontent->datalen = unpack_u32(b);

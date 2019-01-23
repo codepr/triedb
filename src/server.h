@@ -158,7 +158,7 @@ struct seed_node {
 };
 
 
-struct buffer *recv_packet(int , Ringbuffer *, uint8_t *, int *);
+struct buffer *recv_packet(int , Ringbuffer *, uint8_t *, int *, int *);
 
 int start_server(const char *, const char *, struct seed_node *);
 
