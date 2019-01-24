@@ -121,7 +121,7 @@ static int accept_node_handler(struct client *);
 static int read_handler(struct client *);
 static int write_handler(struct client *);
 static int route_command(struct request *, struct client *);
-static int reply_to_client(struct response *, struct buffer *);
+static ssize_t reply_to_client(struct response *, struct buffer *);
 
 /* Specific handlers for commands that every client can request */
 static int ack_handler(struct client *);
@@ -279,7 +279,8 @@ err:
  * if there's one pending associated with the response and forward the payload
  * of the buffer to the client associated with the transaction code.
  */
-static int reply_to_client(struct response *response, struct buffer *buffer) {
+static ssize_t reply_to_client(struct response *response,
+        struct buffer *buffer) {
 
     struct client *client = NULL;
 
@@ -1478,7 +1479,9 @@ static int read_handler(struct client *client) {
         if ((flags & F_JOINREQUEST && opcode != ACK) ||
                 flags & F_FROMNODEREPLY) {
 
-            reply_to_client(response, b);
+            ssize_t nbytes = -1;
+            if ((nbytes = reply_to_client(response, b)) > 0)
+                info.noutputbytes += nbytes;
 
             free_response(response);
 
