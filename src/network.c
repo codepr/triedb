@@ -248,10 +248,10 @@ err:
 }
 
 /* Send all bytes contained in buf, updating sent bytes counter */
-int sendall(int sfd, const uint8_t *buf, ssize_t len, ssize_t *sent) {
-    int total = 0;
-    ssize_t bytesleft = len;
-    int n = 0;
+int sendall(int sfd, const uint8_t *buf, size_t len, size_t *sent) {
+    size_t total = 0;
+    size_t bytesleft = len;
+    ssize_t n = 0;
     while (total < len) {
         n = send(sfd, buf + total, bytesleft, MSG_NOSIGNAL);
         if (n == -1) {
@@ -271,13 +271,13 @@ int sendall(int sfd, const uint8_t *buf, ssize_t len, ssize_t *sent) {
 
 /* Receive all incoming bytes in the kernel buffer for the sfd descriptor,
    storing them into a Ringbuffer instance of max size two Mb */
-int recvall(int sfd, Ringbuffer *ringbuf, ssize_t len) {
-    int n = 0;
-    int total = 0;
+size_t recvall(int sfd, Ringbuffer *ringbuf, size_t len) {
+    ssize_t n = 0;
+    size_t total = 0;
     int bufsize = 256;
     if (len > 0)
         bufsize = len + 1;
-    uint8_t buf[bufsize];
+    uint8_t buf[bufsize]; // FIXME should be alloc'ed on HEAP
     for (;;) {
         if ((n = recv(sfd, buf, bufsize - 1, 0)) < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -301,9 +301,9 @@ int recvall(int sfd, Ringbuffer *ringbuf, ssize_t len) {
 
 /* Receive a given number of bytes on the descriptor sfd, storing the stream of
    data into a 2 Mb capped ringbuffer */
-int recvbytes(int sfd, Ringbuffer *ringbuf, ssize_t len, size_t bufsize) {
-    int n = 0;
-    int total = 0;
+size_t recvbytes(int sfd, Ringbuffer *ringbuf, size_t bufsize) {
+    ssize_t n = 0;
+    size_t total = 0;
     uint8_t *buf = tmalloc(bufsize);
     while (total < bufsize) {
 

@@ -44,6 +44,9 @@
 #include "network.h"
 #include "protocol.h"
 
+/* Error code to separate ACK responses from ACK needed to build up a cluster */
+static const int JUSTACK = 0x05;
+
 
 /*
  * Helper macro to create a join request to a defined seed node, communicating
@@ -118,7 +121,7 @@ static int accept_node_handler(struct client *);
 static int read_handler(struct client *);
 static int write_handler(struct client *);
 static int route_command(struct request *, struct client *);
-static int reply_to_client(struct response *, struct buffer *, uint8_t);
+static int reply_to_client(struct response *, struct buffer *);
 
 /* Specific handlers for commands that every client can request */
 static int ack_handler(struct client *);
@@ -167,18 +170,27 @@ static struct command_handler commands_map[COMMAND_COUNT] = {
 };
 
 /*
- * Parse header, require at least the first 5 bytes in order to read packet
- * type and total length that we need to recv to complete the packet
+ * Parse packet header, it is required at least the first 5 bytes in order to
+ * read packet type and total length that we need to recv to complete the
+ * packet.
+ *
+ * This function accept a socket fd, a ringbuffer to read incoming streams of
+ * bytes and 3 pointers:
+ * - opcode -> to set the OPCODE set in the incoming header, for simplicity
+ *   and convenience of the caller
+ * - rc -> return code, state if the next incoming packet is a request or a
+ *   reply (could be refactored and probably removed)
+ * - fl -> flags pointer, copy the flag setting of the incoming packet, again
+ *   for simplicity and convenience of the caller.
  */
 struct buffer *recv_packet(int clientfd,
         Ringbuffer *rbuf, uint8_t *opcode, int *rc, int *fl) {
 
     size_t n = 0;
-    uint8_t read_all = 0;
 
     while (n < HEADLEN) {
         /* Read first 5 bytes to get the total len of the packet */
-        n += recvbytes(clientfd, rbuf, read_all, HEADLEN);
+        n += recvbytes(clientfd, rbuf, HEADLEN);
         if (n <= 0) {
             *rc = -ERRCLIENTDC;
             return NULL;
@@ -224,7 +236,7 @@ struct buffer *recv_packet(int clientfd,
 
     /* Read remaining bytes to complete the packet */
     while (ringbuf_size(rbuf) < tlen - HEADLEN)
-        if ((n = recvbytes(clientfd, rbuf, read_all, tlen - HEADLEN)) < 0)
+        if ((n = recvbytes(clientfd, rbuf, tlen - HEADLEN)) < 0)
             goto errrecv;
 
     /* Allocate a buffer to fit the entire packet */
@@ -242,6 +254,7 @@ struct buffer *recv_packet(int clientfd,
         --tlen;
     }
 
+    /* Store opcode */
     *opcode = *opc;
 
     tfree(tmp);
@@ -261,18 +274,15 @@ err:
 }
 
 /*
- * Given a response and the opcode to which it refer (buffer is just the
- * serialized version of the response, for commodity) check and try to retrieve
- * from the global transactions map if there's one pending associated with the
- * response and forward the payload of the buffer to the client associated with
- * the transaction code.
+ * Given a response (buffer is just the serialized version of the response,
+ * for convenience) check and try to retrieve from the global transactions map
+ * if there's one pending associated with the response and forward the payload
+ * of the buffer to the client associated with the transaction code.
  */
-static int reply_to_client(struct response *response,
-        struct buffer *buffer, uint8_t opcode) {
+static int reply_to_client(struct response *response, struct buffer *buffer) {
 
     struct client *client = NULL;
 
-    // FIXME: wrong mapping
     switch (response->restype) {
         case NO_CONTENT:
             client = hashtable_get(tritedb.transactions,
@@ -296,16 +306,18 @@ static int reply_to_client(struct response *response,
             break;
     }
 
+    /* No transaction saved for the response received */
     if (!client)
         return -1;
 
-    ssize_t sent;
+    /* Send out data to the correct client which previous made the request */
+    size_t sent;
     if ((sendall(client->fd, buffer->data, buffer->size, &sent)) < 0) {
         perror("send(2): can't write on socket descriptor");
         return -1;
     }
 
-    return OK;
+    return sent;
 }
 
 /*
@@ -408,6 +420,17 @@ static inline int hashtable_client_free(struct hashtable_entry *entry) {
     return HASHTABLE_OK;
 }
 
+/* Hashtable destructor function for transactions */
+static inline int hashtable_transaction_free(struct hashtable_entry *entry) {
+
+    if (!entry || !entry->val)
+        return -HASHTABLE_ERR;
+
+    tfree((char *) entry->key);
+
+    return HASHTABLE_OK;
+}
+
 /*
  * Hashtable destructor function for struct database objects. It's the
  * function that will be called on hashtable_del call as well as
@@ -436,7 +459,7 @@ static inline int database_free(struct hashtable_entry *entry) {
 
 static int ack_handler(struct client *c) {
 
-    int ret = 5;
+    int ret = JUSTACK;
 
     if (!(c->response->ncontent->header->flags &
                 (F_FROMNODERESPONSE | F_JOINREQUEST)))
@@ -1363,7 +1386,7 @@ static int route_command(struct request *request, struct client *client) {
          * Sent out all bytes. TODO: raise a EPOLLOUT event and handle
          * the operation in a cleaner way
          */
-        ssize_t sent;
+        size_t sent;
         if ((sendall(node->link->fd, buffer->data, buffer->size, &sent)) < 0) {
             perror("send(2): can't write on socket descriptor");
             ret = -1;
@@ -1455,7 +1478,9 @@ static int read_handler(struct client *client) {
         if ((flags & F_JOINREQUEST && opcode != ACK) ||
                 flags & F_FROMNODEREPLY) {
 
-            reply_to_client(response, b, opcode);
+            reply_to_client(response, b);
+
+            free_response(response);
 
             goto reset;
         }
@@ -1491,8 +1516,10 @@ static int read_handler(struct client *client) {
              * The hash of the key belong to the current node, no need to
              * forward the request to another node in the cluster
              */
-            if (route_command(request, client) > -1)
+            if (route_command(request, client) > -1) {
+                free_request(request);
                 goto reset;
+            }
         }
     }
 
@@ -1513,8 +1540,11 @@ static int read_handler(struct client *client) {
     // Record request on the counter
     info.nrequests++;
 
-    // If no handler is found, it must be an error case
-    if (executed == 0 || err == 5)
+    /*
+     * If no handler is found, or the response was just a normal ACK, it must
+     * be an error case
+     */
+    if (executed == 0 || err == JUSTACK)
         goto reset;
 
     /*
@@ -1591,7 +1621,7 @@ static int write_handler(struct client *client) {
         return ret;
 
     struct reply *reply = client->reply;
-    ssize_t sent;
+    size_t sent;
 
     if ((sendall(reply->fd, reply->payload->data,
                     reply->payload->size, &sent)) < 0) {
@@ -1997,7 +2027,7 @@ int start_server(const char *addr,
     tritedb.keyspace_size = 0LL;
     // TODO add free cluster
     tritedb.cluster = &(struct cluster) { list_create(NULL) };
-    tritedb.transactions = hashtable_create(hashtable_client_free);
+    tritedb.transactions = hashtable_create(hashtable_transaction_free);
     tritedb.pending_members = queue_create(keyval_queue_free);
 
     /* Create default database */
@@ -2177,8 +2207,8 @@ cleanup:
     hashtable_release(tritedb.transactions);
     hashtable_release(tritedb.dbs);
     queue_release(tritedb.pending_members);
-    /* list_release(tritedb.cluster->nodes, 1); */
-    tfree(tritedb.cluster->nodes);
+    list_release(tritedb.cluster->nodes, 1);
+    /* tfree(tritedb.cluster->nodes); */
     free_expiring_keys(tritedb.expiring_keys);
 
     tdebug("Bye\n");

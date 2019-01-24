@@ -90,9 +90,9 @@ int mod_epoll(int, int, int, void *);
 int del_epoll(int, int);
 
 /* I/O management functions */
-int sendall(int, const uint8_t *, ssize_t, ssize_t *);
-int recvall(int, Ringbuffer *, ssize_t);
-int recvbytes(int, Ringbuffer *, ssize_t, size_t);
+int sendall(int, const uint8_t *, size_t, size_t *);
+size_t recvall(int, Ringbuffer *, size_t);
+size_t recvbytes(int, Ringbuffer *, size_t);
 
 void htonll(uint8_t *, uint_least64_t );
 uint_least64_t ntohll(const uint8_t *);

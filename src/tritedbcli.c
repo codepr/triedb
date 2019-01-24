@@ -154,7 +154,7 @@ static ssize_t send_request(int fd, struct request *request, size_t size) {
 
     pack_request(buffer, request, request->command->cmdtype);
 
-    ssize_t sent;
+    size_t sent;
 
     if ((sendall(fd, buffer->data, buffer->size, &sent)) < 0)
         perror("send(2): can't write on socket descriptor");
