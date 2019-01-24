@@ -50,6 +50,7 @@
 #define F_FROMNODEREQUEST       1 << 3
 #define F_FROMNODERESPONSE      1 << 4
 #define F_JOINREQUEST           1 << 5
+#define F_FROMNODEREPLY         1 << 6
 
 /* Command type */
 #define EMPTY_COMMAND           0x00

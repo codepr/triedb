@@ -273,29 +273,24 @@ static int reply_to_client(struct response *response,
     struct client *client = NULL;
 
     // FIXME: wrong mapping
-    switch (opcode) {
+    switch (response->restype) {
         case NO_CONTENT:
-            tinfo("REPLY: %s -> %s", response->ncontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->ncontent->header->transaction_id);
             break;
         case DATA_CONTENT:
-            tinfo("REPLY: %s -> %s", response->dcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->dcontent->header->transaction_id);
             break;
         case VALUE_CONTENT:
-            tinfo("REPLY: %s -> %s", response->vcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->vcontent->header->transaction_id);
             break;
         case LIST_CONTENT:
-            tinfo("REPLY: %s -> %s", response->lcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->lcontent->header->transaction_id);
             break;
         case KVLIST_CONTENT:
-            tinfo("REPLY: %s -> %s", response->kvlcontent->header->transaction_id, client->uuid);
             client = hashtable_get(tritedb.transactions,
                     response->kvlcontent->header->transaction_id);
             break;
@@ -493,7 +488,8 @@ static int ack_handler(struct client *c) {
         /* Track the new connected node */
         hashtable_put(tritedb.nodes, new_node->uuid, new_node);
 
-        tdebug("New node on %s:%s joined", pair->key, pair->val);
+        tdebug("New node on %s:%s UUID %s joined",
+                pair->key, pair->val, new_node->uuid);
 
         // Send CLUSTER_JOIN request
         // XXX Obnoxious
@@ -667,7 +663,6 @@ static void put_data_into_trie(struct database *db,
 
 static int put_handler(struct client *c) {
 
-    tinfo("PUT %s %s", c->request->command->kvcommand->key, c->request->command->kvcommand->val);
     struct request *request = c->request;
     int flags = 0;
     // Transaction id placeholder
@@ -701,8 +696,8 @@ static int put_handler(struct client *c) {
     }
 
     // For now just a single response
-    set_ack_reply(c, OK, (const uint8_t *) tid,
-            flags & F_FROMNODEREQUEST ? F_FROMNODERESPONSE : F_NOFLAG);
+    set_ack_reply(c, OK, (const uint8_t *) tid, flags & F_FROMNODEREQUEST ?
+            F_FROMNODERESPONSE | F_FROMNODEREPLY : F_NOFLAG);
 
     free_request(c->request);
 
@@ -715,7 +710,7 @@ static int get_handler(struct client *c) {
     struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
     int flags = cmd->header->flags & F_FROMNODEREQUEST ?
-        F_FROMNODERESPONSE : F_NOFLAG;
+        F_FROMNODERESPONSE | F_FROMNODEREPLY : F_NOFLAG;
 
     char *tid = cmd->header->flags & F_FROMNODEREQUEST ?
         cmd->header->transaction_id : NULL;
@@ -1164,7 +1159,8 @@ static int cluster_join_handler(struct client *c) {
     cluster_add_new_node(tritedb.cluster, c,
             (const char *) command->key, (const char *) command->val, false);
 
-    tdebug("New node on %s:%s joined", command->key, command->val);
+    tdebug("New node on %s:%s UUID %s joined",
+            command->key, command->val, c->uuid);
 
     free_request(c->request);
 
@@ -1227,7 +1223,8 @@ static int cluster_members_handler(struct client *c) {
     /* Track the new connected node */
     hashtable_put(tritedb.nodes, new_node->uuid, new_node);
 
-    tdebug("New node on %s:%s joined", pair->key, pair->val);
+    tdebug("New node on %s:%s UUID %s joined",
+            pair->key, pair->val, new_node->uuid);
 
     // Send CLUSTER_JOIN request
     // XXX Obnoxious
@@ -1293,9 +1290,7 @@ static int route_command(struct request *request, struct client *client) {
         generate_uuid(transaction_id);
 
         /* Track the transaction */
-        hashtable_put(tritedb.transactions, transaction_id, client);
-
-        tinfo("%s -> %s", transaction_id, client->uuid);
+        hashtable_put(tritedb.transactions, tstrdup(transaction_id), client);
 
         switch (command->cmdtype) {
             case KEY_COMMAND:
@@ -1414,7 +1409,7 @@ static int read_handler(struct client *client) {
 
     /*
      * We must read all incoming bytes till an entire packet is received. This
-     * is achieved by using a standardized protocol, which send the size of the
+     * is achieved by using a custom protocol, which send the size of the
      * complete packet as the first 4 bytes. By knowing it we know if the
      * packet is ready to be deserialized and used.
      */
@@ -1457,21 +1452,12 @@ static int read_handler(struct client *client) {
         if (!response)
             goto errclient;
 
-        if (!(flags & F_JOINREQUEST) && opcode != ACK) {
+        if ((flags & F_JOINREQUEST && opcode != ACK) ||
+                flags & F_FROMNODEREPLY) {
+
             reply_to_client(response, b, opcode);
-            // FIXME repeated code everywhere
-            /* No more need of the byte buffer from now on */
-            buffer_release(b);
 
-            /*
-             * Free ring buffer as we alredy have all needed informations
-             * in memory
-             */
-            ringbuf_release(rbuf);
-
-            tfree(buffer);
-
-            goto setreply;
+            goto reset;
         }
 
         /* Link the response to the client that sent it */
@@ -1505,33 +1491,10 @@ static int read_handler(struct client *client) {
              * The hash of the key belong to the current node, no need to
              * forward the request to another node in the cluster
              */
-            if (route_command(request, client) > -1) {
-
-                /* No more need of the byte buffer from now on */
-                buffer_release(b);
-
-                /*
-                 * Free ring buffer as we alredy have all needed informations
-                 * in memory
-                 */
-                ringbuf_release(rbuf);
-
-                tfree(buffer);
-
-                set_ack_reply(client, OK, NULL, F_NOFLAG);
-
-                goto setreply;
-            }
+            if (route_command(request, client) > -1)
+                goto reset;
         }
     }
-
-    /* No more need of the byte buffer from now on */
-    buffer_release(b);
-
-    /* Free ring buffer as we alredy have all needed informations in memory */
-    ringbuf_release(rbuf);
-
-    tfree(buffer);
 
     // Update client last action time
     client->last_action_time = (uint64_t) time(NULL);
@@ -1561,8 +1524,6 @@ static int read_handler(struct client *client) {
     if (err == -1)
         goto exit;
 
-setreply:
-
     // Set reply handler as the current context handler
     client->ctx_handler = write_handler;
 
@@ -1571,6 +1532,14 @@ setreply:
      * EPOLL event for read fds
      */
     mod_epoll(tritedb.epollfd, clientfd, EPOLLOUT, client);
+
+    /* No more need of the byte buffer from now on */
+    buffer_release(b);
+
+    /* Free ring buffer as we alredy have all needed informations in memory */
+    ringbuf_release(rbuf);
+
+    tfree(buffer);
 
 exit:
 
@@ -1582,6 +1551,17 @@ freebuf:
     tfree(buffer);
 
 reset:
+
+    /* No more need of the byte buffer from now on */
+    buffer_release(b);
+
+    /*
+     * Free ring buffer as we alredy have all needed informations
+     * in memory
+     */
+    ringbuf_release(rbuf);
+
+    tfree(buffer);
 
     client->ctx_handler = read_handler;
     mod_epoll(tritedb.epollfd, clientfd, EPOLLIN, client);
@@ -2106,8 +2086,8 @@ int start_server(const char *addr,
 
         // Send CLUSTER_JOIN request
         // XXX Obnoxious
-        struct request *request =
-            make_join_request(addr, port, F_FROMNODEREQUEST | F_JOINREQUEST);
+        struct request *request = make_join_request(addr,
+                port, F_FROMNODEREQUEST | F_JOINREQUEST);
 
         struct buffer *buffer =
             buffer_create(request->command->kvcommand->header->size);
@@ -2129,7 +2109,8 @@ int start_server(const char *addr,
         /* Track the new connected node on the cluster */
         hashtable_put(tritedb.nodes, node->uuid, node);
 
-        tdebug("New node on %s:%s joined", seednode->addr, seednode->port);
+        tdebug("New node on %s:%s UUID %s joined",
+                seednode->addr, seednode->port, node->uuid);
     }
 
     /*
@@ -2158,6 +2139,8 @@ int start_server(const char *addr,
         bus_server->request = NULL;
         bus_server->response = NULL;
         bus_server->db = NULL;
+
+        generate_uuid((char *) bus_server->uuid);
 
         /* Set bus socket in EPOLLIN too */
         add_epoll(tritedb.epollfd, bfd, EPOLLIN, bus_server);
@@ -2194,7 +2177,8 @@ cleanup:
     hashtable_release(tritedb.transactions);
     hashtable_release(tritedb.dbs);
     queue_release(tritedb.pending_members);
-    list_release(tritedb.cluster->nodes, 1);
+    /* list_release(tritedb.cluster->nodes, 1); */
+    tfree(tritedb.cluster->nodes);
     free_expiring_keys(tritedb.expiring_keys);
 
     tdebug("Bye\n");

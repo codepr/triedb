@@ -39,7 +39,7 @@
  * Conversion table for request, maps OPCODE -> COMMAND_TYPE, it's still a
  * shitty abstraction, further improvements planned on future refactoring
  */
-static const int opcode_req_map[COMMAND_COUNT][2] = {
+static const uint8_t opcode_req_map[COMMAND_COUNT][2] = {
     {ACK, EMPTY_COMMAND},
     {PUT, KEY_VAL_COMMAND},
     {GET, KEY_COMMAND},
@@ -62,24 +62,17 @@ static const int opcode_req_map[COMMAND_COUNT][2] = {
  * Conversion table for response, maps OPCODE -> CONTENT_TYPE, it's still a
  * shitty abstraction, further improvements planned on future refactoring
  */
-/* static const int opcode_res_map[COMMAND_COUNT][2] = { */
-/*     {ACK, NO_CONTENT}, */
-/*     {PUT, DATA_CONTENT}, */
-/*     {GET, DATA_CONTENT}, */
-/*     {DEL, LIST_CONTENT}, */
-/*     {TTL, LIST_CONTENT}, */
-/*     {INC, LIST_CONTENT}, */
-/*     {DEC, LIST_CONTENT}, */
-/*     {COUNT, VALUE_CONTENT}, */
-/*     {KEYS, DATA_CONTENT}, */
-/*     {USE, NO_CONTENT}, */
-/*     {CLUSTER_JOIN, NO_CONTENT}, */
-/*     {CLUSTER_MEMBERS, NO_CONTENT}, */
-/*     {PING, NO_CONTENT}, */
-/*     {DB, NO_CONTENT}, */
-/*     {INFO, EMPTY_COMMAND}, */
-/*     {QUIT, NO_CONTENT} */
-/* }; */
+static const uint8_t opcode_res_map[9][2] = {
+    {ACK, NO_CONTENT},
+    {GET, DATA_CONTENT},
+    {DEL, NO_CONTENT},
+    {TTL, NO_CONTENT},
+    {INC, NO_CONTENT},
+    {DEC, NO_CONTENT},
+    {COUNT, VALUE_CONTENT},
+    {KEYS, LIST_CONTENT},
+    {CLUSTER_MEMBERS, KVLIST_CONTENT}
+};
 
 
 static void pack_header(const struct header *, struct buffer *);
@@ -89,15 +82,15 @@ static struct command *unpack_command(struct buffer *, struct header *);
 static void free_command_header(struct command *);
 static void free_command(struct command *, bool);
 static void header_init(struct header *, uint8_t, uint32_t, uint8_t, const char *);
-static int get_ctype(uint8_t);
-/* static int get_cttype(uint8_t); */
+static int8_t get_command_type(uint8_t);
+static int8_t get_content_type(uint8_t);
 
 
-static int get_ctype(uint8_t opcode) {
+static int8_t get_command_type(uint8_t opcode) {
 
     int ctype = -1;
 
-    for (int i = 0; i < COMMAND_COUNT; i++)
+    for (int i = 0; i < COMMAND_COUNT && ctype == -1; i++)
         if (opcode_req_map[i][0] == opcode)
             ctype = opcode_req_map[i][1];
 
@@ -105,16 +98,16 @@ static int get_ctype(uint8_t opcode) {
 }
 
 
-/* static int get_cctype(uint8_t opcode) { */
-/*  */
-/*     int cctype = -1; */
-/*  */
-/*     for (int i = 0; i < COMMAND_COUNT; i++) */
-/*         if (opcode_req_map[i][0] == opcode) */
-/*             cctype = opcode_req_map[i][1]; */
-/*  */
-/*     return cctype; */
-/* } */
+static int8_t get_content_type(uint8_t opcode) {
+
+    int cctype = -1;
+
+    for (int i = 0; i < 9 && cctype == -1; i++)
+        if (opcode_res_map[i][0] == opcode)
+            cctype = opcode_res_map[i][1];
+
+    return cctype;
+}
 
 
 static void pack_header(const struct header *h, struct buffer *b) {
@@ -338,7 +331,7 @@ static struct command *unpack_command(struct buffer *b,
     if (!command)
         return NULL;
 
-    command->cmdtype = get_ctype(header->opcode);
+    command->cmdtype = get_command_type(header->opcode);
 
     switch (command->cmdtype) {
         case EMPTY_COMMAND:
@@ -717,7 +710,8 @@ struct response *unpack_response(struct buffer *b) {
     unpack_header(b, header);
 
     // XXX not implemented all responses yet
-    int ctype = get_ctype(header->opcode);
+    int8_t ctype = get_command_type(header->opcode);
+    response->restype = get_content_type(header->opcode);
 
     switch (ctype) {
 
@@ -725,7 +719,6 @@ struct response *unpack_response(struct buffer *b) {
             response->ncontent = tmalloc(sizeof(struct no_content));
             response->ncontent->header = header;
             response->ncontent->code = unpack_u8(b);
-            response->restype = NO_CONTENT;
             break;
 
         case KEY_COMMAND:
@@ -734,7 +727,6 @@ struct response *unpack_response(struct buffer *b) {
             response->dcontent->datalen = unpack_u32(b);
             response->dcontent->data =
                 unpack_bytes(b, response->dcontent->datalen);
-            response->restype = DATA_CONTENT;
             break;
 
         case KEY_VAL_COMMAND:
@@ -761,7 +753,6 @@ struct response *unpack_response(struct buffer *b) {
                 response->kvlcontent->pairs[i] = kv;
             }
 
-            response->restype = KVLIST_CONTENT;
             break;
     }
 

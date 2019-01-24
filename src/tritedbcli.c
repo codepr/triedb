@@ -206,7 +206,7 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
                 printf("%d bytes received\n", response->dcontent->header->size);
                 printf("%s\n", response->dcontent->data);
             } else {
-                printf("%d bytes received\n", response->ncontent->header->size);
+                printf("[%d] %d bytes received\n", response->restype, response->ncontent->header->size);
                 printf("(nil)\n");
             }
             tfree(c->kc);
