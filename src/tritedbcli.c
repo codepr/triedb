@@ -169,8 +169,11 @@ static struct response *recv_data(int fd) {
 
     uint8_t *buf = tmalloc(conf->max_request_size);
     Ringbuffer *rbuffer = ringbuf_create(buf, conf->max_request_size);
-    struct buffer *buffer = recv_packet(fd, rbuffer, &(uint8_t){0}, &(int){0}, &(int){0});
+    struct buffer *buffer =
+        recv_packet(fd, rbuffer, &(uint8_t){0}, &(int){0}, &(int){0});
+
     struct response *response = unpack_response(buffer);
+
     ringbuf_release(rbuffer);
     buffer_release(buffer);
     tfree(buf);
@@ -206,7 +209,8 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
                 printf("%d bytes received\n", response->dcontent->header->size);
                 printf("%s\n", response->dcontent->data);
             } else {
-                printf("[%d] %d bytes received\n", response->restype, response->ncontent->header->size);
+                printf("[%d] %d bytes received\n",
+                        response->restype, response->ncontent->header->size);
                 printf("(nil)\n");
             }
             tfree(c->kc);
@@ -226,7 +230,17 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
             tfree(c->kc);
             break;
         case TTL_COMMAND:
-            puts(c->kc->key);
+            request = make_key_request((const uint8_t *) c->kc->key,
+                    TTL, c->kc->ttl, F_NOFLAG);
+            sent = send_request(fd, request,
+                    request->command->kcommand->header->size);
+            printf("%ld bytes sent\n", sent);
+            response = recv_data(fd);
+            printf("%d bytes received\n", response->ncontent->header->size);
+            if (response->ncontent->code == 0x00)
+                printf("ok\n");
+            else
+                printf("(nil)\n");
             tfree(c->kc);
             puts("TTL");
             break;
