@@ -491,7 +491,7 @@ static int ack_handler(struct client *c) {
         new_node->addr = tstrdup((const char *) pair->key);
         new_node->fd = fd;
         new_node->last_action_time = time(NULL);
-        new_node->ctx_handler = write_handler;
+        new_node->ctx_handler = read_handler;
         new_node->reply = NULL;
         new_node->request = NULL;
         new_node->response = NULL;
@@ -499,7 +499,7 @@ static int ack_handler(struct client *c) {
 
         generate_uuid((char *) new_node->uuid);
 
-        if (add_epoll(tritedb.epollfd, fd, EPOLLOUT, new_node) < 0)
+        if (add_epoll(tritedb.epollfd, fd, EPOLLIN, new_node) < 0)
             perror("epoll_add: ");
 
         /*
@@ -517,15 +517,18 @@ static int ack_handler(struct client *c) {
 
         // Send CLUSTER_JOIN request
         // XXX Obnoxious
-        struct request *request =
-            make_join_request(conf->hostname, conf->port, F_FROMNODEREQUEST);
+        struct request *request = make_join_request(conf->hostname,
+                conf->port, F_FROMNODEREQUEST | F_JOINREQUEST);
 
         struct buffer *buffer =
             buffer_create(request->command->kvcommand->header->size);
 
         pack_request(buffer, request, KEY_VAL_COMMAND);
 
-        set_reply(new_node, buffer, -1);
+        /* Send cluster join request to the new node */
+        size_t sent;
+        if ((sendall(new_node->fd, buffer->data, buffer->size, &sent)) < 0)
+            perror("send(2): can't write on socket descriptor");
 
         free_request(request);
 
@@ -538,7 +541,7 @@ static int ack_handler(struct client *c) {
         tfree(pair->val);
         tfree(pair);
 
-        ret = OK;
+        /* ret = OK; */
     }
 
 exit:
@@ -687,6 +690,7 @@ static void put_data_into_trie(struct database *db,
 
 static int put_handler(struct client *c) {
 
+    tinfo("PUT");
     struct request *request = c->request;
     int flags = 0;
     // Transaction id placeholder
@@ -731,6 +735,7 @@ static int put_handler(struct client *c) {
 
 static int get_handler(struct client *c) {
 
+    tinfo("GET");
     struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
     int flags = cmd->header->flags & F_FROMNODEREQUEST ?
@@ -1139,7 +1144,7 @@ static int cluster_join_handler(struct client *c) {
 
             struct cluster_node *curr_node = ln->data;
 
-            if (curr_node->self)
+            if (curr_node->self || curr_node->vnode)
                 continue;
 
             struct keyval *kv = tmalloc(sizeof(*kv));
@@ -1226,7 +1231,7 @@ static int cluster_members_handler(struct client *c) {
     new_node->addr = tstrdup((const char *) pair->key);
     new_node->fd = fd;
     new_node->last_action_time = time(NULL);
-    new_node->ctx_handler = write_handler;
+    new_node->ctx_handler = read_handler;
     new_node->reply = NULL;
     new_node->request = NULL;
     new_node->response = NULL;
@@ -1234,7 +1239,7 @@ static int cluster_members_handler(struct client *c) {
 
     generate_uuid((char *) new_node->uuid);
 
-    if (add_epoll(tritedb.epollfd, fd, EPOLLOUT, new_node) < 0)
+    if (add_epoll(tritedb.epollfd, fd, EPOLLIN, new_node) < 0)
         perror("epoll_add: ");
 
     /*
@@ -1260,8 +1265,12 @@ static int cluster_members_handler(struct client *c) {
 
     pack_request(buffer, request, KEY_VAL_COMMAND);
 
-    set_reply(new_node, buffer, -1);
+    /* Send join cluster request to the new node */
+    size_t sent;
+    if ((sendall(new_node->fd, buffer->data, buffer->size, &sent)) < 0)
+        perror("send(2): can't write on socket descriptor");
 
+    buffer_release(buffer);
     free_request(request);
 
     // Update informations
@@ -1284,7 +1293,7 @@ static int cluster_members_handler(struct client *c) {
     tfree(content);
     tfree(c->response);
 
-    return OK;
+    return JUSTACK;
 }
 
 
@@ -1320,7 +1329,7 @@ static int route_command(struct request *request, struct client *client) {
             case KEY_COMMAND:
 
                 /*
-                 * Compute a CRC32(key) % RING_POINTS, we get an index for a
+                 * Compute a CRC32(key) % RING_SIZE, we get an index for a
                  * position in the consistent hash ring and retrieve the node
                  * in charge to handle the request
                  * TODO check if the node resulted is self
@@ -1349,7 +1358,7 @@ static int route_command(struct request *request, struct client *client) {
             case KEY_VAL_COMMAND:
 
                 /*
-                 * Compute a CRC32(key) % RING_POINTS, we get an index for a
+                 * Compute a CRC32(key) % RING_SIZE, we get an index for a
                  * position in the consistent hash ring and retrieve the node
                  * in charge to handle the request
                  * TODO check if the node resulted is self
@@ -1383,6 +1392,7 @@ static int route_command(struct request *request, struct client *client) {
         struct buffer *buffer = buffer_create(len);
 
         pack_request(buffer, request, command->cmdtype);
+
         /*
          * Sent out all bytes. TODO: raise a EPOLLOUT event and handle
          * the operation in a cleaner way
@@ -2029,7 +2039,7 @@ int start_server(const char *addr,
     tritedb.dbs = hashtable_create(database_free);
     tritedb.keyspace_size = 0LL;
     // TODO add free cluster
-    tritedb.cluster = &(struct cluster) { list_create(NULL) };
+    tritedb.cluster = &(struct cluster) { 0, 4, list_create(NULL) };
     tritedb.transactions = hashtable_create(hashtable_transaction_free);
     tritedb.pending_members = queue_create(keyval_queue_free);
 

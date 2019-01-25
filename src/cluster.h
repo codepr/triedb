@@ -30,7 +30,7 @@
 
 #include <arpa/inet.h>
 
-#define RING_POINTS 4096
+#define RING_SIZE 4096
 
 #define KPRIME 2654435761
 
@@ -40,6 +40,7 @@
  */
 struct cluster_node {
     bool self;
+    bool vnode;
     uint16_t upper_bound;
     const char host[INET_ADDRSTRLEN + 1];
     const char port[5];
@@ -48,10 +49,12 @@ struct cluster_node {
 
 /* Just a list of nodes for now */
 struct cluster {
+    int size;
+    int replicas;
     List *nodes;
 };
 
-/* Compute a hash of a string by using CRC32 function mod RING_POINTS */
+/* Compute a hash of a string by using CRC32 function mod RING_SIZE */
 uint16_t hash(const char *);
 
 /*
@@ -67,11 +70,11 @@ int cluster_add_new_node(struct cluster *,
  */
 struct cluster_node *cluster_get_node(struct cluster *, uint16_t);
 
-/* Add new node already assigned in the circle */
-void cluster_add_node(struct cluster *, struct cluster_node *);
-
 /* Return the size of the hash ring */
 size_t cluster_size(struct cluster *);
+
+/* Utility function, log the hashring distribution of virtual node */
+void log_cluster_ring(struct cluster *);
 
 
 #endif

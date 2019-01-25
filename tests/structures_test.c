@@ -698,7 +698,7 @@ static char *test_hashtable_del(void) {
 
 static char *test_cluster_add_new_node(void) {
 
-    struct cluster cluster = { list_create(NULL) };
+    struct cluster cluster = { 0, 4, list_create(NULL) };
 
     struct client client = {
         .ctype = SERVER,
@@ -714,13 +714,13 @@ static char *test_cluster_add_new_node(void) {
 
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8080", false);
 
-    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 1);
+    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.size == 1);
 
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8081", false);
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8082", false);
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8083", false);
 
-    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.nodes->len == 4);
+    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.size == 4);
 
     for (struct list_node *ln = cluster.nodes->head; ln; ln = ln->next)
         tfree(ln->data);
@@ -748,7 +748,7 @@ static int compare_upper_bound(void *arg1, void *arg2) {
 
 static char *test_cluster_get_node(void) {
 
-    struct cluster cluster = { list_create(NULL) };
+    struct cluster cluster = { 0, 4, list_create(NULL) };
 
     struct client client = {
         .ctype = SERVER,
@@ -761,10 +761,10 @@ static char *test_cluster_get_node(void) {
         .db = NULL
     };
 
-    struct cluster_node node1 = { false, 1000, "127.0.0.1", "8080", &client};
-    struct cluster_node node2 = { false, 1500, "127.0.0.1", "8080", &client};
-    struct cluster_node node3 = { false, 2000, "127.0.0.1", "8080", &client};
-    struct cluster_node node4 = { false, 2500, "127.0.0.1", "8080", &client};
+    struct cluster_node node1 = { false, false, 1000, "127.0.0.1", "8080", &client};
+    struct cluster_node node2 = { false, false, 1500, "127.0.0.1", "8080", &client};
+    struct cluster_node node3 = { false, false, 2000, "127.0.0.1", "8080", &client};
+    struct cluster_node node4 = { false, false, 2500, "127.0.0.1", "8080", &client};
 
     list_push(cluster.nodes, &node1);
     list_push(cluster.nodes, &node2);

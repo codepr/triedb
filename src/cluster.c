@@ -27,6 +27,7 @@
 
 #include "util.h"
 #include "list.h"
+#include "server.h"
 #include "cluster.h"
 #include "hashtable.h"
 #include <stdlib.h>
@@ -54,7 +55,7 @@ uint16_t hash(const char *keystr) {
     /* Knuth's Multiplicative Method */
     key = (key >> 3) * KPRIME;
 
-    return key % RING_POINTS;
+    return key % RING_SIZE;
 }
 
 
@@ -70,42 +71,17 @@ static int compare_upper_bound(void *arg1, void *arg2) {
     return n1 < n2 ? -1 : 1;
 }
 
-/*
- * To create our consitent hash ring for now we just distribute randomly around
- * the circle our nodes by getting a random value in range [0, RING_POINTS),
- * obtained by generating a hash with CRC32 of the node address:
- *
- *      uint16_t hash = CRC32(host + port) % RING_POINTS.
- *
- * Further development will make sure that nodes will be distributed more
- * evenly around by using virtual nodes, in other words by replicating each
- * node multiple times around the circle.
- */
-int cluster_add_new_node(struct cluster *cluster,
-        struct client *client, const char *addr, const char *port, bool self) {
 
-    char fulladdr[22];
+static void insert_node(struct cluster *cluster,
+        struct cluster_node *cnode, bool vnode) {
 
-    strcpy(fulladdr, addr);
-
-    // Get a ring point
-    uint16_t upper_bound = hash(strcat(fulladdr, port)) % RING_POINTS;
-
-    struct cluster_node *new_node = tmalloc(sizeof(*new_node));
-    if (!new_node)
-        return -1;
-
-    new_node->self = self;
-    strcpy((char *) new_node->host, addr);
-    strcpy((char *) new_node->port, port);
-    new_node->upper_bound = upper_bound;
-    new_node->link = client;
+    cnode->vnode = vnode;
 
     /*
      * Push the new node into the cluster node list and sort it by the
      * upper_bound value of each node
      */
-    list_push(cluster->nodes, new_node);
+    list_push(cluster->nodes, cnode);
 
     /*
      * O(n), can be improved by inserting in an almost sorted list but for now
@@ -114,12 +90,101 @@ int cluster_add_new_node(struct cluster *cluster,
     cluster->nodes->head =
         list_merge_sort(cluster->nodes->head, compare_upper_bound);
 
+    if (!vnode)
+        cluster->size++;
+}
+
+/*
+ * To create our consitent hash ring for now we just distribute randomly around
+ * the circle our nodes by getting a random value in range [0, RING_SIZE),
+ * obtained by generating a hash with CRC32 of the node address:
+ *
+ *      uint16_t hash = CRC32(host + port) % RING_SIZE.
+ *
+ * Further development will make sure that nodes will be distributed more
+ * evenly around by using virtual nodes, in other words by replicating each
+ * node multiple times around the circle.
+ */
+int cluster_add_new_node(struct cluster *cluster,
+        struct client *client, const char *addr, const char *port, bool self) {
+
+    char fulladdr[30];
+
+    /*
+     * First we insert the real node into the hash ring, positioned by
+     * computing HASH(addr + port) % RING_SIZE
+     */
+    strcpy(fulladdr, addr);
+
+    // Get a ring point by hashing the node address + port
+    uint16_t upper_bound = hash(strcat(fulladdr, port)) % RING_SIZE;
+
+    struct cluster_node *cnode = tmalloc(sizeof(*cnode));
+    if (!cnode)
+        return -1;
+
+    cnode->self = self;
+    strcpy((char *) cnode->host, addr);
+    strcpy((char *) cnode->port, port);
+    cnode->upper_bound = upper_bound;
+    cnode->link = client;
+
+    /* Set to false the vnode flag: The first is the real node */
+    insert_node(cluster, cnode, false);
+
+    int replicas = cluster->replicas;
+
+    /*
+     * Cycle replicas times or the number of virtual nodes that will be added
+     * to the hash ring
+     */
+    while (replicas--) {
+
+        /*
+         * Create prefix number to be append to the full address in order to
+         * distributed more evenly the nodes into the ring by creating virtual
+         * nodes
+         */
+        char prefix[20];
+
+        sprintf(prefix, "%d", replicas);
+
+        char fulladdr[30];
+
+        /*
+         * Here we got:
+         * 1127.0.0.1, 2127.0.0.1 etc
+         */
+        strcpy(fulladdr, strcat(prefix, addr));
+
+        // Get a ring point by hashing the vnode
+        uint16_t upper_bound = hash(strcat(fulladdr, port)) % RING_SIZE;
+
+        struct cluster_node *vnode = tmalloc(sizeof(*vnode));
+        if (!vnode)
+            return -1;
+
+        vnode->self = self;
+        strcpy((char *) vnode->host, addr);
+        strcpy((char *) vnode->port, port);
+        vnode->upper_bound = upper_bound;
+        vnode->link = client;
+
+        /*
+         * Now we set to true the vnode flag indicating that this node is
+         * effectively a virtual node, in other word a replica of an already
+         * existing node in the ring
+         */
+        insert_node(cluster, vnode, true);
+
+    }
+
     return 0;
 }
 
 /*
  * Retrieve the cluster node which a given hash belong to, the hash is
- * obtained by doing CRC32(key) % RING_POINTS and represents a point in
+ * obtained by doing CRC32(key) % RING_SIZE and represents a point in
  * the consistent hash ring
  */
 struct cluster_node *cluster_get_node(struct cluster *cluster,
@@ -155,16 +220,23 @@ struct cluster_node *cluster_get_node(struct cluster *cluster,
     return hash_value > upper_bound ? cur->next->data : cur->data;
 }
 
-/* Add an already created and assigned node to the circle */
-void cluster_add_node(struct cluster *cluster, struct cluster_node *node) {
-
-    list_push(cluster->nodes, node);
-
-    cluster->nodes->head =
-        list_merge_sort(cluster->nodes->head, compare_upper_bound);
-}
-
 
 size_t cluster_size(struct cluster *cluster) {
     return cluster->nodes->len;
+}
+
+
+void log_cluster_ring(struct cluster *cluster) {
+
+    struct list_node *head = cluster->nodes->head;
+    for (struct list_node *cur = head; cur; cur = cur->next) {
+
+        struct cluster_node *cnode = cur->data;
+
+        tdebug("%s %s -> %s %s",
+                cnode->vnode ? "vnode" : "node",
+                cnode->link->uuid,
+                cnode->upper_bound,
+                cnode->self ? "(self)" : "");
+    }
 }
