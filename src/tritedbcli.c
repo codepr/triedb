@@ -42,6 +42,8 @@ typedef enum {
     GET_COMMAND,
     DEL_COMMAND,
     TTL_COMMAND,
+    INC_COMMAND,
+    DEC_COMMAND,
     UNKNOWN_COMMAND
 } command_type;
 
@@ -133,16 +135,29 @@ command_type prepare_command(const struct input_buffer *buffer,
         return GET_COMMAND;
     } else if (STREQ(buffer->buffer, "del", 3)) {
         command->kc = tmalloc(sizeof(struct k_command));
-        args = sscanf(buffer->buffer, "del %s", command->kc->key);
+        args = sscanf(buffer->buffer, "del %[^\n]", command->kc->key);
         if (args < 1)
             return UNKNOWN_COMMAND;
         return DEL_COMMAND;
     } else if (STREQ(buffer->buffer, "ttl", 3)) {
         command->kc = tmalloc(sizeof(struct k_command));
-        args = sscanf(buffer->buffer, "ttl %[^\n]", command->kc->key);
-        if (args < 1)
+        args = sscanf(buffer->buffer, "ttl %s %d",
+                command->kc->key, &command->kc->ttl);
+        if (args < 2)
             return UNKNOWN_COMMAND;
         return TTL_COMMAND;
+    } else if (STREQ(buffer->buffer, "inc", 3)) {
+        command->kc = tmalloc(sizeof(struct k_command));
+        args = sscanf(buffer->buffer, "inc %[^\n]", command->kc->key);
+        if (args < 1)
+            return UNKNOWN_COMMAND;
+        return INC_COMMAND;
+    } else if (STREQ(buffer->buffer, "dec", 3)) {
+        command->kc = tmalloc(sizeof(struct k_command));
+        args = sscanf(buffer->buffer, "dec %[^\n]", command->kc->key);
+        if (args < 1)
+            return UNKNOWN_COMMAND;
+        return DEC_COMMAND;
     } else
         return UNKNOWN_COMMAND;
 }
@@ -215,9 +230,11 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
             }
             tfree(c->kc);
             break;
+        case INC_COMMAND:
+        case DEC_COMMAND:
         case DEL_COMMAND:
             keylist = split_keys(c->kc->key);
-            request = make_keylist_request(keylist, DEL, NULL, F_NOFLAG);
+            request = make_keylist_request(keylist, command, NULL, F_NOFLAG);
             sent = send_request(fd, request,
                     request->command->kcommand->header->size);
             printf("%ld bytes sent\n", sent);

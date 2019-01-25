@@ -72,7 +72,7 @@ static const int JUSTACK = 0x05;
     ack_response_init(&resp, o, f, (const char *) t);                   \
     struct buffer *buffer = buffer_create(resp.ncontent->header->size); \
     pack_response(buffer, &resp);                                       \
-    set_reply((c), buffer, -1);                                         \
+    set_reply((c), buffer);                                             \
 } while (0)
 
 /* Global information structure */
@@ -326,21 +326,16 @@ static ssize_t reply_to_client(struct response *response,
  * removes the const qualifier from the struct buffer pointed by the ptr as a
  * matter of fact it doesn't touch it, so it is semantically correct to mark
  * it as const in the declaration.
- *
- * As last parameter it accepts a file descriptor which can be optionally set
- * to a negative value (-1 std) to fallback to the client fd; this to handle
- * communication from connected clients or from other tritedb nodes in a
- * cluster.
  */
 static inline void set_reply(struct client *client,
-        const struct buffer *payload, int fd) {
+        const struct buffer *payload) {
 
     struct reply *rep = tmalloc(sizeof(*rep));
 
     if (!rep)
         oom("setting reply");
 
-    rep->fd = fd > 0 ? fd : client->fd;
+    rep->fd = client->fd;
     rep->payload = (struct buffer *) payload;
 
     client->reply = rep;
@@ -603,7 +598,7 @@ static int keys_handler(struct client *c) {
     struct buffer *buffer = buffer_create(response->lcontent->header->size);
     pack_response(buffer, response);
 
-    set_reply(c, buffer, -1);
+    set_reply(c, buffer);
 
     list_release(keys, 1);
     free_response(response);
@@ -690,7 +685,6 @@ static void put_data_into_trie(struct database *db,
 
 static int put_handler(struct client *c) {
 
-    tinfo("PUT");
     struct request *request = c->request;
     int flags = 0;
     // Transaction id placeholder
@@ -735,7 +729,6 @@ static int put_handler(struct client *c) {
 
 static int get_handler(struct client *c) {
 
-    tinfo("GET");
     struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
     int flags = cmd->header->flags & F_FROMNODEREQUEST ?
@@ -792,7 +785,7 @@ static int get_handler(struct client *c) {
 
             pack_response(buffer, response);
 
-            set_reply(c, buffer, -1);
+            set_reply(c, buffer);
             free_response(response);
         }
     }
@@ -807,8 +800,9 @@ static int ttl_handler(struct client *c) {
 
     struct key_command *cmd = c->request->command->kcommand;
     void *val = NULL;
+
     int flags = cmd->header->flags & F_FROMNODEREQUEST ?
-        F_FROMNODERESPONSE : F_NOFLAG;
+        F_FROMNODERESPONSE | F_FROMNODEREPLY : F_NOFLAG;
 
     char *tid = cmd->header->flags & F_FROMNODEREQUEST ?
         cmd->header->transaction_id : NULL;
@@ -860,7 +854,7 @@ static int del_handler(struct client *c) {
     struct key_list_command *cmd = c->request->command->klcommand;
     bool found = false;
     int flags = cmd->header->flags & F_FROMNODEREQUEST ?
-        F_FROMNODERESPONSE : F_NOFLAG;
+        F_FROMNODERESPONSE | F_FROMNODEREPLY : F_NOFLAG;
 
     char *tid = flags & F_FROMNODEREQUEST ?
         cmd->header->transaction_id : NULL;
@@ -919,6 +913,7 @@ static int del_handler(struct client *c) {
  */
 static int inc_handler(struct client *c) {
 
+    tinfo("INC");
     int code = OK, n = 0;
     struct key_list_command *inc = c->request->command->klcommand;
     bool found = false;
@@ -950,7 +945,7 @@ static int inc_handler(struct client *c) {
                      * Check for realloc if the new value is "larger" then
                      * previous
                      */
-                    char tmp[number_len(n)];  // max size in bytes
+                    char tmp[number_len(n) + 1];  // max size in bytes
                     sprintf(tmp, "%d", n);  // XXX Unsafe
                     size_t len = strlen(tmp);
                     nd->data = trealloc(nd->data, len + 1);
@@ -961,12 +956,13 @@ static int inc_handler(struct client *c) {
     }
 
     int flags = inc->header->flags & F_FROMNODEREQUEST ?
-        F_FROMNODERESPONSE : F_NOFLAG;
+        F_FROMNODERESPONSE | F_FROMNODEREPLY : F_NOFLAG;
 
     char *tid = flags & F_FROMNODEREQUEST ?
         inc->header->transaction_id : NULL;
 
     set_ack_reply(c, code, (const uint8_t *) tid, flags);
+
     free_request(c->request);
 
     return OK;
@@ -1011,7 +1007,7 @@ static int dec_handler(struct client *c) {
                      * Check for realloc if the new value is "smaller" then
                      * previous
                      */
-                    char tmp[number_len(n)];
+                    char tmp[number_len(n) + 1];
                     sprintf(tmp, "%d", n);
                     size_t len = strlen(tmp);
                     nd->data = trealloc(nd->data, len + 1);
@@ -1022,7 +1018,7 @@ static int dec_handler(struct client *c) {
     }
 
     int flags = dec->header->flags & F_FROMNODEREQUEST ?
-        F_FROMNODERESPONSE : F_NOFLAG;
+        F_FROMNODERESPONSE | F_FROMNODEREPLY : F_NOFLAG;
 
     char *tid = flags & F_FROMNODEREQUEST ?
         dec->header->transaction_id : NULL;
@@ -1042,7 +1038,7 @@ static int db_handler(struct client *c) {
     struct buffer *buffer = buffer_create(response->dcontent->header->size);
     pack_response(buffer, response);
 
-    set_reply(c, buffer, -1);
+    set_reply(c, buffer);
     free_response(response);
 
     free_request(c->request);
@@ -1106,14 +1102,14 @@ static int count_handler(struct client *c) {
         .vcontent = &(struct value_content) {
             .header = &hdr,
             .val = count
-        }                                                                   \
-    };                                                                      \
+        }
+    };
 
     value_response_init(&resp, count, flags, tid);
 
     struct buffer *b = buffer_create(resp.vcontent->header->size);
     pack_response(b, &resp);
-    set_reply(c, b, -1);
+    set_reply(c, b);
 
     free_request(c->request);
 
@@ -1165,7 +1161,7 @@ static int cluster_join_handler(struct client *c) {
 
             pack_response(buffer, response);
 
-            set_reply(c, buffer, -1);
+            set_reply(c, buffer);
 
             free_response(response);
 
@@ -1615,8 +1611,16 @@ errclient:
     terror("Dropping client on %s", client->addr);
     shutdown(client->fd, 0);
     close(client->fd);
+
+    if (client->ctype == NODE)
+        info.nnodes--;
+    else
+        info.nclients--;
+
+    info.nconnections--;
+
     hashtable_del(tritedb.clients, client->uuid);
-    info.nclients--;
+
     return -1;
 }
 
@@ -1853,7 +1857,7 @@ static void expire_keys(void) {
         // Update total keyspace counter
         tritedb.keyspace_size--;
 
-        tdebug("EXPIRING %s", ek->key);
+        tdebug("%s expired", ek->key);
 
         tfree((char *) ek->key);
         tfree(ek);
@@ -1866,9 +1870,12 @@ static inline void log_stats(void) {
     info.uptime = time(NULL) - info.start_time;
     const char *uptime = time_to_string(info.uptime);
     const char *memory = memory_to_string(memory_used());
-    tdebug("Connected clients: %d total connections: %d "
+    char cnodes[17 + number_len(info.nnodes) + 1];
+    sprintf(cnodes, "connected nodes: %d", info.nnodes);
+    tdebug("Connected clients: %d %s total connections: %d "
             "requests: %d dbs: %ld keys: %ld memory usage: %s  uptime: %s",
-            info.nclients, info.nconnections, info.nrequests, tritedb.dbs->size,
+            info.nclients, conf->mode == CLUSTER ? cnodes : "",
+            info.nconnections, info.nrequests, tritedb.dbs->size,
             tritedb.keyspace_size, memory, uptime);
     tfree((char *) uptime);
     tfree((char *) memory);
@@ -1976,6 +1983,8 @@ static void run_server(void) {
                     info.nnodes--;
                 else
                     info.nclients--;
+
+                info.nconnections--;
 
                 hashtable_del(client->ctype == NODE ?
                         tritedb.nodes : tritedb.clients, client->uuid);
@@ -2137,7 +2146,7 @@ int start_server(const char *addr,
 
         pack_request(buffer, request, KEY_VAL_COMMAND);
 
-        set_reply(node, buffer, -1);
+        set_reply(node, buffer);
 
         free_request(request);
 
