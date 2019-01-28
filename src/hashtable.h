@@ -61,22 +61,27 @@ typedef struct {
 } HashTable;
 
 
-/* HashTable API to create a new `HashTable`, it require a function pointer to
-   define a custom destructor, which can be NULL in case of bytes stream or
-   simple pointers as values */
+/*
+ * HashTable API to create a new `HashTable`, it require a function pointer to
+ * define a custom destructor, which can be NULL in case of bytes stream or
+ * simple pointers as values
+ */
 HashTable *hashtable_create(int (*destructor)(struct hashtable_entry *));
 
 /* Destroy the hashtable by calling functor `destructor` on every
-   `struct hashtable_entry`, thus it needs to have a defined destructor function for
-   each different data-type inserted. In case of a NULL destructor, it' ll call
-   normal free. */
+ * `struct hashtable_entry`, thus it needs to have a defined destructor function for
+ * each different data-type inserted. In case of a NULL destructor, it' ll call
+ * normal free.
+ */
 void hashtable_release(HashTable *);
 
 /* Return hashtable size */
 size_t hashtable_size(const HashTable *);
 
-/* Insert a new key-value pair into the hashtable, accept a const char * as
-   key and a void * for value */
+/*
+ * Insert a new key-value pair into the hashtable, accept a const char * as
+ * key and a void * for value
+ */
 int hashtable_put(HashTable *, const char *, void *);
 
 /* Retrieve a value from the hashtable, accept a const char * as key. */
@@ -85,9 +90,18 @@ void *hashtable_get(HashTable *, const char *);
 /* Remove a key-value pair from the hashtable, accept a const char * as key. */
 int hashtable_del(HashTable *, const char *);
 
-/* Iterate through all key-value pairs in the hashtable, accept a functor as
-   parameter to apply function to each pair */
+/*
+ * Iterate through all key-value pairs in the hashtable, accept a functor as
+ * parameter to apply function to each pair
+ */
 int hashtable_map(HashTable *, int (*func)(struct hashtable_entry *));
+
+/*
+ * Iterate through all key-value pairs in the hashtable, accept a functor as
+ * parameter to apply function to each pair with an additional parameter
+ */
+int hashtable_map2(HashTable *,
+        int (*func)(struct hashtable_entry *, void *), void *);
 
 
 uint64_t crc32(const uint8_t *, const uint32_t);

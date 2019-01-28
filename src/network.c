@@ -269,8 +269,10 @@ int sendall(int sfd, const uint8_t *buf, size_t len, size_t *sent) {
     return n == -1 ? -1 : 0;
 }
 
-/* Receive all incoming bytes in the kernel buffer for the sfd descriptor,
-   storing them into a Ringbuffer instance of max size two Mb */
+/*
+ * Receive all incoming bytes in the kernel buffer for the sfd descriptor,
+ * storing them into a Ringbuffer instance of max size two Mb
+ */
 size_t recvall(int sfd, Ringbuffer *ringbuf, size_t len) {
     ssize_t n = 0;
     size_t total = 0;
@@ -299,8 +301,10 @@ size_t recvall(int sfd, Ringbuffer *ringbuf, size_t len) {
     return total;
 }
 
-/* Receive a given number of bytes on the descriptor sfd, storing the stream of
-   data into a 2 Mb capped ringbuffer */
+/*
+ * Receive a given number of bytes on the descriptor sfd, storing the stream of
+ * data into a 2 Mb capped ringbuffer
+ */
 size_t recvbytes(int sfd, Ringbuffer *ringbuf, size_t bufsize) {
     ssize_t n = 0;
     size_t total = 0;

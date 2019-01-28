@@ -340,8 +340,41 @@ int hashtable_map(HashTable *table, int (*func)(struct hashtable_entry *)) {
     return HASHTABLE_OK;
 }
 
-/* Deallocate the hashtable using the defined destructor, if the destructor is
-   NULL it call normal free on key-value pairs. */
+/*
+ * Iterate through all key-value pairs in the hashtable, accept a functor as
+ * parameter to apply function to each pair with an additional parameter
+ */
+int hashtable_map2(HashTable *table,
+        int (*func)(struct hashtable_entry *, void *), void *param) {
+
+    assert(func);
+
+    /* On empty hashmap, return immediately */
+    if (!table || table->size <= 0)
+        return -HASHTABLE_ERR;
+
+    /* Linear probing */
+    for (size_t i = 0; i < table->table_size; i++) {
+
+        if (table->entries[i].taken == true) {
+
+            /* Apply function to the key-value entry */
+            struct hashtable_entry data = table->entries[i];
+            int status = func(&data, param);
+
+            if (status != HASHTABLE_OK)
+                return status;
+
+        }
+    }
+
+    return HASHTABLE_OK;
+}
+
+/*
+ * Deallocate the hashtable using the defined destructor, if the destructor is
+ * NULL it call normal free on key-value pairs.
+ */
 void hashtable_release(HashTable *table){
 
     if (!table)

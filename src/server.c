@@ -101,6 +101,22 @@ struct command_handler {
 };
 
 /*
+ * Multiple requests struct, to handle key_list requests in cluster mode, each
+ * one of these structure will be a value in a key->val hashtable mapping
+ * node-uuid -> multirequest.
+ * It contains the transaction ID of the request, the socket descriptor of the
+ * node of reference and a list of keys which will serve to construct the
+ * effective key_list_request
+ */
+struct multirequest {
+    uint8_t opcode;
+    uint8_t flags;
+    int fd;
+    char transaction_id[UUID_LEN];
+    List *keys;
+};
+
+/*
  * Connection structure for private use of the module, mainly for accepting
  * new connections
  */
@@ -121,7 +137,9 @@ static int accept_node_handler(struct client *);
 static int read_handler(struct client *);
 static int write_handler(struct client *);
 static int route_command(struct request *, struct client *);
-static ssize_t reply_to_client(struct response *, struct buffer *);
+static inline ssize_t reply_to_client(struct response *, struct buffer *);
+static inline ssize_t send_data(int, const uint8_t *, size_t);
+static inline ssize_t write_to_node(int, struct request *, size_t, uint8_t);
 
 /* Specific handlers for commands that every client can request */
 static int ack_handler(struct client *);
@@ -321,6 +339,30 @@ static ssize_t reply_to_client(struct response *response,
     return sent;
 }
 
+/* Write `size` bytes on socket descriptor */
+static inline ssize_t send_data(int fd, const uint8_t *bytes, size_t size) {
+    size_t sent;
+    if ((sendall(fd, bytes, size, &sent)) < 0) {
+        terror("server::send_data: %s", strerror(errno));
+        return -1;
+    }
+    return sent;
+}
+
+/*
+ * Write request data to the client defined by the socket descriptor `fd` by
+ * creating a struct buffer of size `size` first which will contain the packed
+ * response
+ */
+static inline ssize_t write_to_node(int fd,
+        struct request *request, size_t size, uint8_t reqtype) {
+    struct buffer *buffer = buffer_create(size);
+    pack_request(buffer, request, reqtype);
+    ssize_t bytes = send_data(fd, buffer->data, buffer->size);
+    buffer_release(buffer);
+    return bytes;
+}
+
 /*
  * Build a reply object and link it to the struct client pointer. Even tho it
  * removes the const qualifier from the struct buffer pointed by the ptr as a
@@ -447,6 +489,20 @@ static inline int database_free(struct hashtable_entry *entry) {
     return HASHTABLE_OK;
 }
 
+/* Release function for multirequest hashtable */
+static inline int hashtable_multirequest_release(struct hashtable_entry *entry) {
+
+    if (!entry || !entry->val)
+        return -HASHTABLE_ERR;
+
+    struct multirequest *mrequest = entry->val;
+
+    list_release(mrequest->keys, 1);
+
+    tfree(mrequest);
+
+    return HASHTABLE_OK;
+}
 
 /********************************/
 /*      COMMAND HANDLERS        */
@@ -515,15 +571,11 @@ static int ack_handler(struct client *c) {
         struct request *request = make_join_request(conf->hostname,
                 conf->port, F_FROMNODEREQUEST | F_JOINREQUEST);
 
-        struct buffer *buffer =
-            buffer_create(request->command->kvcommand->header->size);
-
-        pack_request(buffer, request, KEY_VAL_COMMAND);
-
-        /* Send cluster join request to the new node */
-        size_t sent;
-        if ((sendall(new_node->fd, buffer->data, buffer->size, &sent)) < 0)
-            perror("send(2): can't write on socket descriptor");
+        ssize_t sent;
+        size_t rsize = request->command->kvcommand->header->size;
+        if ((sent = write_to_node(new_node->fd,
+                        request, rsize, KEY_VAL_COMMAND)) < 0)
+            terror("server::ack_handler: %s", strerror(errno));
 
         free_request(request);
 
@@ -913,7 +965,6 @@ static int del_handler(struct client *c) {
  */
 static int inc_handler(struct client *c) {
 
-    tinfo("INC");
     int code = OK, n = 0;
     struct key_list_command *inc = c->request->command->klcommand;
     bool found = false;
@@ -1256,17 +1307,12 @@ static int cluster_members_handler(struct client *c) {
     struct request *request =
         make_join_request(conf->hostname, conf->port, F_FROMNODEREQUEST);
 
-    struct buffer *buffer =
-        buffer_create(request->command->kvcommand->header->size);
+    ssize_t sent;
+    size_t rsize = request->command->kvcommand->header->size;
+    if ((sent = write_to_node(new_node->fd,
+                    request, rsize, KEY_VAL_COMMAND)) < 0)
+        terror("server::ack_handler: %s", strerror(errno));
 
-    pack_request(buffer, request, KEY_VAL_COMMAND);
-
-    /* Send join cluster request to the new node */
-    size_t sent;
-    if ((sendall(new_node->fd, buffer->data, buffer->size, &sent)) < 0)
-        perror("send(2): can't write on socket descriptor");
-
-    buffer_release(buffer);
     free_request(request);
 
     // Update informations
@@ -1298,6 +1344,37 @@ static int cluster_members_handler(struct client *c) {
 /**************************************/
 
 
+/*
+ * Construct an hashtable containing all keylist request that must be sent to
+ * different nodes on the cluster:
+ * node uuid -> keylist_request
+ */
+static int make_kl_reqs(struct hashtable_entry *entry, void *param) {
+
+    if (!param || !entry || !entry->val)
+        return -HASHTABLE_ERR;
+
+    /*
+     * TODO add struct to handle:
+     * - a list of keys
+     * - a hashtable UUID -> keylists
+     */
+    HashTable *kl_reqs = param;
+    struct multirequest *mrequest = entry->val;
+
+    struct request *klr = hashtable_get(kl_reqs, entry->key);
+
+    if (!klr) {
+        struct request *klrequest =
+            make_keylist_request(mrequest->keys, mrequest->opcode,
+                    (const uint8_t *) mrequest->transaction_id, mrequest->flags);
+        hashtable_put(kl_reqs, entry->key, klrequest);
+    }
+
+    return HASHTABLE_OK;
+}
+
+
 static int route_command(struct request *request, struct client *client) {
 
     int ret = 0;
@@ -1307,6 +1384,7 @@ static int route_command(struct request *request, struct client *client) {
         /* Cluster node placeholder */
         struct cluster_node *node = NULL;
         struct command *command = request->command;
+        HashTable *requests;
 
         int16_t hashval = -1;
         size_t len = 0LL;
@@ -1380,26 +1458,81 @@ static int route_command(struct request *request, struct client *client) {
 
                 break;
 
+            case KEY_LIST_COMMAND:
+
+                // TODO add destructor function
+                requests = hashtable_create(hashtable_multirequest_release);
+
+                for (int i = 0; i < len; i++) {
+
+                    struct key *key = command->klcommand->keys[i];
+
+                    /*
+                     * Compute a CRC32(key) % RING_SIZE, we get an index for a
+                     * position in the consistent hash ring and retrieve the node
+                     * in charge to handle the request
+                     * TODO check if the node resulted is self
+                     */
+                    hashval = hash((const char *) key->key);
+
+                    node = cluster_get_node(tritedb.cluster, hashval);
+
+                    /* if (node->self) */
+                    /*     goto exitself; */
+
+                    /*
+                     * Assign the generated transaction id and set the flag
+                     * F_FROMNODEREQUEST on, in order to make clear that we are
+                     * routing this request to another node.
+                     */
+                    strcpy(command->klcommand->header->transaction_id,
+                            transaction_id);
+                    command->klcommand->header->flags |= F_FROMNODEREQUEST;
+                    command->klcommand->header->size += UUID_LEN - 1;
+
+                    len = command->klcommand->header->size;
+
+                    struct multirequest *mrequest =
+                        hashtable_get(requests, node->link->uuid);
+
+                    if (hashtable_size(requests) == 0 || !mrequest) {
+
+                        /*
+                         * Could be created on stack but on heap it's simpler
+                         * to destroy it after the use
+                         */
+                        mrequest = tmalloc(sizeof(*mrequest));
+                        mrequest->fd = node->link->fd;
+                        mrequest->keys = list_create(NULL);  // TODO add destructor
+                        mrequest->opcode = command->klcommand->header->opcode;
+                        mrequest->flags = command->klcommand->header->flags;
+                        list_push(mrequest->keys, key->key);
+                        strcpy(mrequest->transaction_id, transaction_id);
+                        hashtable_put(requests, node->link->uuid, mrequest);
+                    } else {
+                        list_push(mrequest->keys, key->key);
+                    }
+                }
+
+                // Create key_list requests
+                HashTable *kl_reqs = hashtable_create(NULL);
+
+                hashtable_map2(requests, make_kl_reqs, kl_reqs);
+
+                break;
+
             default:
                 tdebug("Not implemented yet");
                 break;
         }
 
-        struct buffer *buffer = buffer_create(len);
+        if (!node)
+            goto err;
 
-        pack_request(buffer, request, command->cmdtype);
-
-        /*
-         * Sent out all bytes. TODO: raise a EPOLLOUT event and handle
-         * the operation in a cleaner way
-         */
-        size_t sent;
-        if ((sendall(node->link->fd, buffer->data, buffer->size, &sent)) < 0) {
-            perror("send(2): can't write on socket descriptor");
-            ret = -1;
-        }
-
-        buffer_release(buffer);
+        ssize_t sent;
+        if ((sent = write_to_node(node->link->fd,
+                        request, len, command->cmdtype)) < 0)
+            terror("server::ack_handler: %s", strerror(errno));
 
         // Update information stats
         info.noutputbytes += sent;
@@ -1413,6 +1546,10 @@ static int route_command(struct request *request, struct client *client) {
 exitself:
 
     return -1;
+
+err:
+    return -2;
+
 }
 
 /* Handle incoming requests, after being accepted or after a reply */
@@ -1633,17 +1770,17 @@ errclient:
  */
 static int write_handler(struct client *client) {
 
-    int ret = 0;
+    int rc = 0;
     if (!client->reply)
-        return ret;
+        return rc;
 
     struct reply *reply = client->reply;
-    size_t sent;
 
-    if ((sendall(reply->fd, reply->payload->data,
-                    reply->payload->size, &sent)) < 0) {
-        perror("send(2): can't write on socket descriptor");
-        ret = -1;
+    ssize_t sent;
+    if ((sent = send_data(reply->fd,
+                    reply->payload->data, reply->payload->size)) < 0) {
+        terror("server::write_handler %s", strerror(errno));
+        rc = -1;
     }
 
     // Update information stats
@@ -1656,7 +1793,7 @@ static int write_handler(struct client *client) {
     client->ctx_handler = read_handler;
     mod_epoll(tritedb.epollfd, client->fd, EPOLLIN, client);
 
-    return ret;
+    return rc;
 }
 
 /*
@@ -2230,7 +2367,6 @@ cleanup:
     hashtable_release(tritedb.dbs);
     queue_release(tritedb.pending_members);
     list_release(tritedb.cluster->nodes, 1);
-    /* tfree(tritedb.cluster->nodes); */
     free_expiring_keys(tritedb.expiring_keys);
 
     tdebug("Bye\n");
