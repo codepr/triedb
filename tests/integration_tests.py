@@ -435,3 +435,47 @@ class TriteDBTest(unittest.TestCase):
 
         self.assertEqual(code, 0x02)
         self.assertEqual(payload, defaultdb.encode())
+
+
+class TriteDBTestHT(TriteDBTest):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        dbname = "test-database"
+
+        use = struct.pack(
+            f'=BIBH{len(dbname)}sB',
+            0x09,
+            htonl(9 + len(dbname)),
+            0x00,
+            htons(len(dbname)),
+            dbname.encode(),
+            0x01
+        )
+
+        cls.connection.send(use)
+
+        header = cls.connection.recv(6)
+        _, total_len, *_ = struct.unpack('=BIB', header)
+        total_len = ntohl(total_len)
+        _ = struct.unpack('=B', cls.connection.recv(1))
+
+    def test_keys(self):
+        pass
+
+    def test_inc(self):
+        pass
+
+    def test_put(self):
+        pass
+
+    def test_put_bulk(self):
+        pass
+
+    def test_ttl(self):
+        pass
+
+    def test_use(self):
+        pass

@@ -46,6 +46,9 @@
 #define ERRMAXREQSIZE           1
 #define ERRCLIENTDC             2
 
+#define STORE_TRIE_TYPE         1
+#define STORE_HT_TYPE           2
+
 
 enum client_type { CLIENT, SERVER, NODE };
 
@@ -124,8 +127,12 @@ struct expiring_key {
  * client
  */
 struct database {
+    uint8_t st_type;
     const char *name;
-    Trie *data;
+    union {
+        Trie *data;
+        HashTable *ht_data;
+    };
 };
 
 /* Global informations statistics structure */

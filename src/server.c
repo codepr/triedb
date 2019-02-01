@@ -479,9 +479,14 @@ static inline int database_free(struct hashtable_entry *entry) {
     if (!entry)
         return -HASHTABLE_ERR;
 
-    tfree((char *) ((struct database *) entry->val)->name);
+    struct database *db = entry->val;
 
-    trie_release(((struct database *) entry->val)->data);
+    tfree((char *) (db->name));
+
+    if (db->st_type == STORE_HT_TYPE)
+        hashtable_release(db->ht_data);
+    else
+        trie_release(db->data);
 
     tfree(entry->val);
     tfree((char *) entry->key);
@@ -678,59 +683,72 @@ static bool compare_ttl(void *arg1, void *arg2) {
  * Private function, insert or update values into the the trie database,
  * updating, if any present, expiring keys vector
  */
-static void put_data_into_trie(struct database *db,
+static void put_data_into_db(struct database *db,
         struct keyval_command *cmd) {
 
     int16_t ttl = cmd->ttl != 0 ? cmd->ttl : -NOTTL;
 
-    /*
-     * TODO refactor TTL insertion, for now it does not support expiration of
-     * keys below a given prefix
-     */
-    if (cmd->is_prefix == 1) {
-        trie_prefix_set(db->data, (const char *) cmd->key, cmd->val, ttl);
-    } else {
-        struct node_data *nd =
-            trie_insert(db->data, (const char *) cmd->key, cmd->val);
+    if (db->st_type == STORE_TRIE_TYPE) {
+        /*
+         * TODO refactor TTL insertion, for now it does not support expiration of
+         * keys below a given prefix
+         */
+        if (cmd->is_prefix == 1) {
+            trie_prefix_set(db->data, (const char *) cmd->key, cmd->val, ttl);
+        } else {
+            struct node_data *nd =
+                trie_insert(db->data, (const char *) cmd->key, cmd->val);
 
-        bool has_ttl = nd->ttl == -NOTTL ? false : true;
+            bool has_ttl = nd->ttl == -NOTTL ? false : true;
 
-        // Update expiring keys if ttl != -NOTTL and sort it
-        if (ttl != -NOTTL) {
+            // Update expiring keys if ttl != -NOTTL and sort it
+            if (ttl != -NOTTL) {
 
-            nd->ttl = cmd->ttl;
+                nd->ttl = cmd->ttl;
 
-            /*
-             * It's a new TTL, so we update creation_time to now in order to
-             * calculate the effective expiration of the key
-             */
-            nd->ctime = nd->latime = (uint64_t) time(NULL);
+                /*
+                 * It's a new TTL, so we update creation_time to now in order to
+                 * calculate the effective expiration of the key
+                 */
+                nd->ctime = nd->latime = (uint64_t) time(NULL);
 
-            // Create a data strucuture to handle expiration
-            struct expiring_key *ek = tmalloc(sizeof(*ek));
-            ek->nd = nd;
-            ek->key = tstrdup((const char *) cmd->key);
-            ek->data_ptr = db->data;
+                // Create a data strucuture to handle expiration
+                struct expiring_key *ek = tmalloc(sizeof(*ek));
+                ek->nd = nd;
+                ek->key = tstrdup((const char *) cmd->key);
+                ek->data_ptr = db->data;
 
-            /*
-             * Add the node data to the expiring keys only if it wasn't already
-             * in, otherwise nothing should change cause the expiring keys
-             * already got a pointer to the node data, which will now have an
-             * updated TTL value
-             */
-            if (!has_ttl)
-                vector_append(tritedb.expiring_keys, ek);
+                /*
+                 * Add the node data to the expiring keys only if it wasn't already
+                 * in, otherwise nothing should change cause the expiring keys
+                 * already got a pointer to the node data, which will now have an
+                 * updated TTL value
+                 */
+                if (!has_ttl)
+                    vector_append(tritedb.expiring_keys, ek);
 
-            /*
-             * Quicksort in O(nlogn) if there's more than one element in the
-             * vector
-             */
-            vector_qsort(tritedb.expiring_keys,
-                    compare_ttl, sizeof(struct expiring_key));
+                /*
+                 * Quicksort in O(nlogn) if there's more than one element in the
+                 * vector
+                 */
+                vector_qsort(tritedb.expiring_keys,
+                        compare_ttl, sizeof(struct expiring_key));
+            }
+
+            // Update total counter of keys
+            tritedb.keyspace_size++;
         }
+    } else {
 
-        // Update total counter of keys
-        tritedb.keyspace_size++;
+        size_t ht_size = hashtable_size(db->ht_data);
+
+        hashtable_put(db->ht_data,
+                tstrdup((char *) cmd->key), tstrdup((char *) cmd->val));
+
+        if (hashtable_size(db->ht_data) > ht_size)
+            tritedb.keyspace_size++;
+
+        // TODO expiring keys support
     }
 }
 
@@ -752,7 +770,7 @@ static int put_handler(struct client *c) {
             tid = cmd->header->transaction_id;
 
         // Insert data into the trie
-        put_data_into_trie(c->db, cmd);
+        put_data_into_db(c->db, cmd);
 
     } else {
 
@@ -766,7 +784,7 @@ static int put_handler(struct client *c) {
 
         // Apply insertion for each command
         for (uint32_t i = 0; i < bcmd->ncommands; i++)
-            put_data_into_trie(c->db, bcmd->commands[i]->kvcommand);
+            put_data_into_db(c->db, bcmd->commands[i]->kvcommand);
     }
 
     // For now just a single response
@@ -789,12 +807,13 @@ static int get_handler(struct client *c) {
     char *tid = cmd->header->flags & F_FROMNODEREQUEST ?
         cmd->header->transaction_id : NULL;
 
-    // Test for the presence of the key in the trie structure
-    bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
+    if (c->db->st_type == STORE_TRIE_TYPE) {
 
-    if (found == false || val == NULL) {
-        set_ack_reply(c, NOK, (const uint8_t *) tid, flags);
-    } else {
+        // Test for the presence of the key in the trie structure
+        bool found = trie_find(c->db->data, (const char *) cmd->key, &val);
+
+        if (found == false || val == NULL)
+            goto setnok;
 
         struct node_data *nd = val;
 
@@ -840,9 +859,37 @@ static int get_handler(struct client *c) {
             set_reply(c, buffer);
             free_response(response);
         }
+
+    } else {
+
+        // TODO add expiring key support
+
+        void *data = hashtable_get(c->db->ht_data, (const char *) cmd->key);
+
+        if (!data)
+            goto setnok;
+
+        // and return it
+        struct response *response =
+            make_data_response(data, (const uint8_t *) tid, flags);
+
+        struct buffer *buffer =
+            buffer_create(response->dcontent->header->size);
+
+        pack_response(buffer, response);
+
+        set_reply(c, buffer);
+        free_response(response);
     }
 
     free_request(c->request);
+
+    return OK;
+
+setnok:
+
+    free_request(c->request);
+    set_ack_reply(c, NOK, (const uint8_t *) tid, flags);
 
     return OK;
 }
@@ -911,41 +958,60 @@ static int del_handler(struct client *c) {
     char *tid = flags & F_FROMNODEREQUEST ?
         cmd->header->transaction_id : NULL;
 
-    // Flush all data in case of no prefixes passed
-    if (cmd->len == 0) {
-        trie_node_free(c->db->data->root, &c->db->data->size);
-        // Update total keyspace counter
-        tritedb.keyspace_size--;
-    } else {
-        size_t currsize = 0;
-        for (int i = 0; i < cmd->len; i++) {
-
-            /*
-             * For each key in the keys array, check for presence and try to
-             * remove it, if the `is_prefix` flag is a set the key will be
-             * treated as a prefix wildcard (*) and we'll remove all keys below
-             * it in the trie
-             */
-            if (cmd->keys[i]->is_prefix == 1) {
-
-                currsize = c->db->data->size;
+    if (c->db->st_type == STORE_TRIE_TYPE) {
+        // Flush all data in case of no prefixes passed
+        if (cmd->len == 0) {
+            trie_node_free(c->db->data->root, &c->db->data->size);
+            // Update total keyspace counter
+            tritedb.keyspace_size = 0;
+        } else {
+            size_t currsize = 0;
+            for (int i = 0; i < cmd->len; i++) {
 
                 /*
-                 * We are dealing with a wildcard, so we apply the deletion to
-                 * all keys below the wildcard
+                 * For each key in the keys array, check for presence and try to
+                 * remove it, if the `is_prefix` flag is a set the key will be
+                 * treated as a prefix wildcard (*) and we'll remove all keys below
+                 * it in the trie
                  */
-                trie_prefix_delete(c->db->data,
-                        (const char *) cmd->keys[i]->key);
+                if (cmd->keys[i]->is_prefix == 1) {
 
-                // Update total keyspace counter
-                tritedb.keyspace_size -= currsize - c->db->data->size;
-            } else {
-                found = trie_delete(c->db->data,
+                    currsize = c->db->data->size;
+
+                    /*
+                     * We are dealing with a wildcard, so we apply the deletion to
+                     * all keys below the wildcard
+                     */
+                    trie_prefix_delete(c->db->data,
+                            (const char *) cmd->keys[i]->key);
+
+                    // Update total keyspace counter
+                    tritedb.keyspace_size -= currsize - c->db->data->size;
+                } else {
+                    found = trie_delete(c->db->data,
+                            (const char *) cmd->keys[i]->key);
+                    if (found == false)
+                        code = NOK;
+                    else
+                        // Update total keyspace counter
+                        tritedb.keyspace_size--;
+                }
+            }
+        }
+    } else {
+
+        int err;
+
+        if (cmd->len == 0) {
+            hashtable_release(c->db->ht_data);
+            tritedb.keyspace_size = 0;
+        } else {
+            for (int i = 0; i < cmd->len; i++) {
+                err = hashtable_del(c->db->ht_data,
                         (const char *) cmd->keys[i]->key);
-                if (found == false)
+                if (err == -HASHTABLE_ERR)
                     code = NOK;
                 else
-                    // Update total keyspace counter
                     tritedb.keyspace_size--;
             }
         }
@@ -965,44 +1031,49 @@ static int del_handler(struct client *c) {
  */
 static int inc_handler(struct client *c) {
 
-    int code = OK, n = 0;
+    int code = OK;
     struct key_list_command *inc = c->request->command->klcommand;
     bool found = false;
     void *val = NULL;
 
-    for (int i = 0; i < inc->len; i++) {
+    if (c->db->st_type == STORE_TRIE_TYPE) {
 
-        if (inc->keys[i]->is_prefix == 1) {
-            trie_prefix_inc(c->db->data, (const char *) inc->keys[i]->key);
-        } else {
+        for (int i = 0; i < inc->len; i++) {
 
-            /*
-             * For each key in the keys array, check for presence and increment
-             * it by one
-             */
-            found = trie_find(c->db->data,
-                    (const char *) inc->keys[i]->key, &val);
-
-            if (found == false || !val) {
-                code = NOK;
+            if (inc->keys[i]->is_prefix == 1) {
+                trie_prefix_inc(c->db->data, (const char *) inc->keys[i]->key);
             } else {
-                struct node_data *nd = val;
-                if (!is_integer(nd->data)) {
+
+                /*
+                 * For each key in the keys array, check for presence and
+                 * increment it by one
+                 */
+                found = trie_find(c->db->data,
+                        (const char *) inc->keys[i]->key, &val);
+
+                if (found == false || !val) {
                     code = NOK;
                 } else {
-                    n = parse_int(nd->data);
-                    ++n;
-                    /*
-                     * Check for realloc if the new value is "larger" then
-                     * previous
-                     */
-                    char tmp[number_len(n) + 1];  // max size in bytes
-                    sprintf(tmp, "%d", n);  // XXX Unsafe
-                    size_t len = strlen(tmp);
-                    nd->data = trealloc(nd->data, len + 1);
-                    strncpy(nd->data, tmp, len + 1);
+
+                    struct node_data *nd = val;
+
+                    if (!is_integer(nd->data))
+                        code = NOK;
+                    else
+                        nd->data = update_integer_string(nd->data, 1);
                 }
             }
+        }
+    } else {
+
+        for (int i = 0; i < inc->len; i++) {
+
+            void *data = hashtable_get(c->db->ht_data,
+                    (const char *) inc->keys[i]->key);
+            if (!data)
+                code = NOK;
+            else
+                data = update_integer_string(data, 1);
         }
     }
 
@@ -1027,44 +1098,44 @@ static int inc_handler(struct client *c) {
  */
 static int dec_handler(struct client *c) {
 
-    int code = OK, n = 0;
+    int code = OK;
     struct key_list_command *dec = c->request->command->klcommand;
     bool found = false;
     void *val = NULL;
 
-    for (int i = 0; i < dec->len; i++) {
+    if (c->db->st_type == STORE_TRIE_TYPE) {
+        for (int i = 0; i < dec->len; i++) {
 
-        if (dec->keys[i]->is_prefix) {
-            trie_prefix_dec(c->db->data, (const char *) dec->keys[i]->key);
-        } else {
-
-            /*
-             * For each key in the keys array, check for presence and increment
-             * it by one
-             */
-            found = trie_find(c->db->data,
-                    (const char *) dec->keys[i]->key, &val);
-            if (found == false || !val) {
-                code = NOK;
+            if (dec->keys[i]->is_prefix) {
+                trie_prefix_dec(c->db->data, (const char *) dec->keys[i]->key);
             } else {
-                struct node_data *nd = val;
-                if (!is_integer(nd->data)) {
+
+                /*
+                 * For each key in the keys array, check for presence and increment
+                 * it by one
+                 */
+                found = trie_find(c->db->data,
+                        (const char *) dec->keys[i]->key, &val);
+                if (found == false || !val) {
                     code = NOK;
                 } else {
-                    n = parse_int(nd->data);
-                    --n;
-
-                    /*
-                     * Check for realloc if the new value is "smaller" then
-                     * previous
-                     */
-                    char tmp[number_len(n) + 1];
-                    sprintf(tmp, "%d", n);
-                    size_t len = strlen(tmp);
-                    nd->data = trealloc(nd->data, len + 1);
-                    strncpy(nd->data, tmp, len + 1);
+                    struct node_data *nd = val;
+                    if (!is_integer(nd->data)) {
+                        code = NOK;
+                    } else {
+                        nd->data = update_integer_string(nd->data, -1);
+                    }
                 }
             }
+        }
+    } else {
+        for (int i = 0; i < dec->len; i++) {
+            void *data = hashtable_get(c->db->ht_data,
+                    (const char *) dec->keys[i]->key);
+            if (!data)
+                code = NOK;
+            else
+                data = update_integer_string(data, -1);
         }
     }
 
@@ -1114,7 +1185,13 @@ static int use_handler(struct client *c) {
         // TODO check for OOM
         database = tmalloc(sizeof(*database));
         database->name = tstrdup((const char *) cmd->key);
-        database->data = trie_create();
+        database->st_type = cmd->is_prefix ? STORE_HT_TYPE : STORE_TRIE_TYPE;
+
+        if (database->st_type == STORE_HT_TYPE)
+            database->ht_data = hashtable_create(NULL);
+        else
+            database->data = trie_create();
+
         // Add it to the databases table
         hashtable_put(tritedb.dbs, tstrdup(database->name), database);
         c->db = database;
@@ -1139,8 +1216,11 @@ static int count_handler(struct client *c) {
      * Get the size of each key below the requested one, glob operation or the
      * entire trie size in case of NULL key
      */
-    count = !cnt->key ? c->db->data->size :
-        trie_prefix_count(c->db->data, (const char *) cnt->key);
+    if (c->db->st_type == STORE_HT_TYPE)
+        count = hashtable_size(c->db->ht_data);
+    else
+        count = !cnt->key ? c->db->data->size :
+            trie_prefix_count(c->db->data, (const char *) cnt->key);
 
     int flags = cnt->header->flags & F_FROMNODEREQUEST ?
         F_FROMNODERESPONSE : F_NOFLAG;
@@ -2191,6 +2271,7 @@ int start_server(const char *addr,
 
     /* Create default database */
     struct database *default_db = tmalloc(sizeof(struct database));
+    default_db->st_type = STORE_TRIE_TYPE;
     default_db->name = tstrdup("db0");
     default_db->data = trie_create();
 

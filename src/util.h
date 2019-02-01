@@ -61,6 +61,7 @@ void *trealloc(void *, size_t);
 size_t malloc_size(void *);
 void tfree(void *);
 char *tstrdup(const char *);
+char *update_integer_string(char *, int);
 
 size_t memory_used(void);
 
