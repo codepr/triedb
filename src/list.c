@@ -32,7 +32,8 @@
 
 
 static struct list_node *list_node_remove(struct list_node *,
-        struct list_node *, compare_func, int *);
+                                          struct list_node *,
+                                          compare_func, int *);
 
 /*
  * Create a list, initializing all fields
@@ -203,7 +204,8 @@ void list_remove(List *l, struct list_node *node, compare_func cmp) {
 
 
 static struct list_node *list_node_remove(struct list_node *head,
-        struct list_node *node, compare_func cmp, int *counter) {
+                                          struct list_node *node,
+                                          compare_func cmp, int *counter) {
 
     if (!head)
         return NULL;
@@ -227,7 +229,9 @@ static struct list_node *list_node_remove(struct list_node *head,
 
 
 static struct list_node *list_remove_single_node(struct list_node *head,
-        void *data, struct list_node **ret, compare_func cmp) {
+                                                 void *data,
+                                                 struct list_node **ret,
+                                                 compare_func cmp) {
 
     if (!head)
         return NULL;
@@ -250,7 +254,7 @@ static struct list_node *list_remove_single_node(struct list_node *head,
 }
 
 
-struct list_node *list_remove_node(List *list, void *data, compare_func cmp){
+struct list_node *list_remove_node(List *list, void *data, compare_func cmp) {
 
     if (list->len == 0 || !list)
         return NULL;
@@ -293,7 +297,7 @@ static struct list_node *bisect_list(struct list_node *head) {
  * the outcome of the given comparison func.
  */
 static struct list_node *merge_list(struct list_node *list1,
-        struct list_node *list2, cmp cmp_func) {
+                                    struct list_node *list2, cmp cmp_func) {
 
     struct list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
 
@@ -326,7 +330,7 @@ struct list_node *list_merge_sort(struct list_node *head, cmp cmp_func) {
     struct list_node *list2 = bisect_list(list1);
 
     return merge_list(list_merge_sort(list1, cmp_func),
-            list_merge_sort(list2, cmp_func), cmp_func);
+                      list_merge_sort(list2, cmp_func), cmp_func);
 }
 
 /* Search for a given node based on a comparison of char stored in structure
@@ -349,7 +353,7 @@ struct list_node *linear_search(const List *list, int value) {
 
 
 static struct list_node *merge_tnode_list(struct list_node *list1,
-        struct list_node *list2) {
+                                          struct list_node *list2) {
 
     struct list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
 

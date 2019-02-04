@@ -184,13 +184,13 @@ static struct response *recv_data(int fd) {
 
     uint8_t *buf = tmalloc(conf->max_request_size);
     Ringbuffer *rbuffer = ringbuf_create(buf, conf->max_request_size);
-    struct buffer *buffer =
-        recv_packet(fd, rbuffer, &(uint8_t){0}, &(int){0}, &(int){0});
+    struct packet pkt;
+    recv_packet(fd, rbuffer, &pkt);
 
-    struct response *response = unpack_response(buffer);
+    struct response *response = unpack_response(pkt.buf);
 
     ringbuf_release(rbuffer);
-    buffer_release(buffer);
+    buffer_release(pkt.buf);
     tfree(buf);
     return response;
 }

@@ -92,7 +92,7 @@ static int hashtable_hash(HashTable *table, const uint8_t *key) {
         currk = (char *) key;
 
         if (table->entries[curr].taken == true &&
-                STREQ(k, currk, strlen(k)) == true)
+            STREQ(k, currk, strlen(k)) == true)
             return curr;
 
         curr = (curr + 1) % table->table_size;
@@ -135,8 +135,8 @@ static int hashtable_rehash(HashTable *table) {
         if (curr[i].taken == false)
             continue;
 
-        if ((status = hashtable_put(table,
-                        curr[i].key, curr[i].val)) != HASHTABLE_OK)
+        if ((status = hashtable_put(table, curr[i].key,
+                                    curr[i].val)) != HASHTABLE_OK)
             return status;
     }
 
@@ -250,7 +250,8 @@ void *hashtable_get(HashTable *table, const char *key) {
 /*
  * Return the key-value pair represented by a key in the hashtable
  */
-struct hashtable_entry *hashtable_get_entry(HashTable *table, const char *key) {
+struct hashtable_entry *hashtable_get_entry(HashTable *table,
+                                            const char *key) {
 
     assert(table && key);
 
@@ -345,7 +346,8 @@ int hashtable_map(HashTable *table, int (*func)(struct hashtable_entry *)) {
  * parameter to apply function to each pair with an additional parameter
  */
 int hashtable_map2(HashTable *table,
-        int (*func)(struct hashtable_entry *, void *), void *param) {
+                   int (*func)(struct hashtable_entry *, void *),
+                   void *param) {
 
     assert(func);
 

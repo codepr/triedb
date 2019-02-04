@@ -47,7 +47,7 @@ void t_log_init(const char *file) {
     fh = fopen(file, "a+");
     if (!fh)
         printf("%lu * WARNING: Unable to open file %s\n",
-                (unsigned long) time(NULL), file);
+               (unsigned long) time(NULL), file);
 }
 
 

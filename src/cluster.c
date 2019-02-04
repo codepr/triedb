@@ -73,7 +73,7 @@ static int compare_upper_bound(void *arg1, void *arg2) {
 
 
 static void insert_node(struct cluster *cluster,
-        struct cluster_node *cnode, bool vnode) {
+                        struct cluster_node *cnode, bool vnode) {
 
     cnode->vnode = vnode;
 
@@ -87,8 +87,8 @@ static void insert_node(struct cluster *cluster,
      * O(n), can be improved by inserting in an almost sorted list but for now
      * this is OK
      */
-    cluster->nodes->head =
-        list_merge_sort(cluster->nodes->head, compare_upper_bound);
+    cluster->nodes->head = list_merge_sort(cluster->nodes->head,
+                                           compare_upper_bound);
 
     if (!vnode)
         cluster->size++;
@@ -105,8 +105,8 @@ static void insert_node(struct cluster *cluster,
  * evenly around by using virtual nodes, in other words by replicating each
  * node multiple times around the circle.
  */
-int cluster_add_new_node(struct cluster *cluster,
-        struct client *client, const char *addr, const char *port, bool self) {
+int cluster_add_new_node(struct cluster *cluster, struct client *client,
+                         const char *addr, const char *port, bool self) {
 
     char fulladdr[30];
 
@@ -188,7 +188,7 @@ int cluster_add_new_node(struct cluster *cluster,
  * the consistent hash ring
  */
 struct cluster_node *cluster_get_node(struct cluster *cluster,
-        uint16_t hash_value) {
+                                      uint16_t hash_value) {
 
     /*
      * Edge case, a list with a single node (very unlikely) should just return
@@ -204,7 +204,7 @@ struct cluster_node *cluster_get_node(struct cluster *cluster,
      * >= to hash_value or until we reach the end of the list
      */
     while (cur->next &&
-            ((struct cluster_node *) cur->next->data)->upper_bound < hash_value)
+           ((struct cluster_node *) cur->next->data)->upper_bound < hash_value)
         cur = cur->next;
 
     /*
@@ -212,7 +212,7 @@ struct cluster_node *cluster_get_node(struct cluster *cluster,
      * the last cluster_node upper_bound, so we are in the first node again
      */
     if (!cur->next &&
-            ((struct cluster_node *) cur->data)->upper_bound < hash_value)
+        ((struct cluster_node *) cur->data)->upper_bound < hash_value)
         return cluster->nodes->head->data;
 
     uint16_t upper_bound = ((struct cluster_node *) cur->data)->upper_bound;
@@ -234,9 +234,9 @@ void log_cluster_ring(struct cluster *cluster) {
         struct cluster_node *cnode = cur->data;
 
         tdebug("%s %s -> %s %s",
-                cnode->vnode ? "vnode" : "node",
-                cnode->link->uuid,
-                cnode->upper_bound,
-                cnode->self ? "(self)" : "");
+               cnode->vnode ? "vnode" : "node",
+               cnode->link->uuid,
+               cnode->upper_bound,
+               cnode->self ? "(self)" : "");
     }
 }

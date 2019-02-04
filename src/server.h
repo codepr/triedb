@@ -45,12 +45,20 @@
 /* Error codes help */
 #define ERRMAXREQSIZE           1
 #define ERRCLIENTDC             2
+#define ERRPACKETERR            3
 
 #define STORE_TRIE_TYPE         1
 #define STORE_HT_TYPE           2
 
 
 enum client_type { CLIENT, SERVER, NODE };
+
+/* Auxiliary structure to receive packets */
+struct packet {
+    uint8_t opcode;
+    uint8_t flags;
+    struct buffer *buf;
+};
 
 /*
  * Global db instance, containing some connection data, clients, expiring keys
@@ -165,7 +173,7 @@ struct seed_node {
 };
 
 
-struct buffer *recv_packet(int , Ringbuffer *, uint8_t *, int *, int *);
+int recv_packet(int , Ringbuffer *, struct packet *);
 
 int start_server(const char *, const char *, struct seed_node *);
 

@@ -270,7 +270,7 @@ bool config_load(const char *configpath) {
         // Ignore eventually incomplete configuration, but notify it
         if (line[0] == '\0') {
             twarning("WARNING: Incomplete configuration '%s' at line %d. "
-                    "Fallback to default.", key, linenr);
+                     "Fallback to default.", key, linenr);
             continue;
         }
 

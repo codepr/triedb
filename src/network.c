@@ -120,7 +120,7 @@ static int create_and_bind_tcp(const char *host, const char *port) {
 
         /* set SO_REUSEADDR so the socket will be reusable after process kill */
         if (setsockopt(sfd, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR),
-                    &(int) { 1 }, sizeof(int)) < 0)
+                       &(int) { 1 }, sizeof(int)) < 0)
             perror("SO_REUSEADDR");
 
         if ((bind(sfd, rp->ai_addr, rp->ai_addrlen)) == 0) {
@@ -188,18 +188,18 @@ int accept_connection(int serversock) {
     socklen_t addrlen = sizeof(addr);
 
     if ((clientsock = accept(serversock,
-                    (struct sockaddr *) &addr, &addrlen)) < 0)
+                             (struct sockaddr *) &addr, &addrlen)) < 0)
         return -1;
 
     set_nonblocking(clientsock);
 
-     // Set TCP_NODELAY only for TCP sockets
+    // Set TCP_NODELAY only for TCP sockets
     if (conf->socket_family == INET)
         set_tcp_nodelay(clientsock);
 
     char ip_buff[INET_ADDRSTRLEN + 1];
     if (inet_ntop(AF_INET, &addr.sin_addr,
-                ip_buff, sizeof(ip_buff)) == NULL) {
+                  ip_buff, sizeof(ip_buff)) == NULL) {
         close(clientsock);
         return -1;
     }
@@ -231,7 +231,7 @@ int open_connection(const char *host, int port) {
     bzero((char *) &serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
     bcopy((char *) server->h_addr,
-            (char *) &serveraddr.sin_addr.s_addr, server->h_length);
+          (char *) &serveraddr.sin_addr.s_addr, server->h_length);
     serveraddr.sin_port = htons(port);
 
     /* connect: create a connection with the server */
@@ -411,7 +411,7 @@ int epoll_loop_wait(EpollLoop *el) {
     while (1) {
 
         events = epoll_wait(el->epollfd,
-                el->events, el->max_events, el->timeout);
+                            el->events, el->max_events, el->timeout);
 
         if (events < 0) {
 
@@ -429,9 +429,9 @@ int epoll_loop_wait(EpollLoop *el) {
 
             /* Check for errors */
             if ((el->events[i].events & EPOLLERR) ||
-                    (el->events[i].events & EPOLLHUP) ||
-                    (!(el->events[i].events & EPOLLIN) &&
-                     !(el->events[i].events & EPOLLOUT))) {
+                (el->events[i].events & EPOLLHUP) ||
+                (!(el->events[i].events & EPOLLIN) &&
+                 !(el->events[i].events & EPOLLOUT))) {
 
                 /* An error has occured on this fd, or the socket is not
                    ready for reading, closing connection */
