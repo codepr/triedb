@@ -1572,6 +1572,7 @@ static int route_command(struct request *request, struct client *client) {
                      */
                     strcpy(command->klcommand->header->transaction_id,
                            transaction_id);
+
                     command->klcommand->header->flags |= F_FROMNODEREQUEST;
                     command->klcommand->header->size += UUID_LEN - 1;
 
@@ -1607,7 +1608,7 @@ static int route_command(struct request *request, struct client *client) {
                 break;
 
             default:
-                tdebug("Not implemented yet");
+                tdebug("Route command: not implemented yet");
                 break;
         }
 
@@ -1622,6 +1623,7 @@ static int route_command(struct request *request, struct client *client) {
         // Update information stats
         info.noutputbytes += sent;
 
+        tinfo("Routing to %s", node->link->uuid);
     } else {
         // TODO
     }
@@ -1656,9 +1658,7 @@ static int read_handler(struct client *client) {
     Ringbuffer *rbuf = ringbuf_create(buffer, conf->max_request_size);
 
     struct packet pkt;
-    /* uint8_t opcode = 0; */
     int rc = 0;
-    /* int flags = 0; */
 
     /*
      * We must read all incoming bytes till an entire packet is received. This

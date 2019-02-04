@@ -262,7 +262,7 @@ void pack_request(struct buffer *buffer,
             }
             break;
         default:
-            fprintf(stderr, "Not implemented yet\n");
+            fprintf(stderr, "Pack request: not implemented yet\n");
             break;
     }
 }
@@ -697,7 +697,7 @@ void pack_response(struct buffer *b, const struct response *r) {
             }
             break;
         default:
-            fprintf(stderr, "Not implemented yet");
+            fprintf(stderr, "Pack response: not implemented yet");
             break;
     }
 }
@@ -816,7 +816,7 @@ void free_response(struct response *response) {
             tfree(response->kvlcontent);
             break;
         default:
-            fprintf(stderr, "Not implemented yet");
+            fprintf(stderr, "Free response: not implemented yet");
             break;
     }
 

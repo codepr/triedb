@@ -38,12 +38,12 @@
 
 
 typedef enum {
-    PUT_COMMAND,
-    GET_COMMAND,
-    DEL_COMMAND,
-    TTL_COMMAND,
-    INC_COMMAND,
-    DEC_COMMAND,
+    PUT_COMMAND = 0x01,
+    GET_COMMAND = 0x02,
+    DEL_COMMAND = 0x03,
+    TTL_COMMAND = 0x04,
+    INC_COMMAND = 0x05,
+    DEC_COMMAND = 0x06,
     UNKNOWN_COMMAND
 } command_type;
 
