@@ -44,6 +44,7 @@ typedef enum {
     TTL_COMMAND = 0x04,
     INC_COMMAND = 0x05,
     DEC_COMMAND = 0x06,
+    USE_COMMAND = 0x09,
     UNKNOWN_COMMAND
 } command_type;
 
@@ -115,7 +116,7 @@ void read_line(struct input_buffer *input_buffer) {
 
 
 command_type prepare_command(const struct input_buffer *buffer,
-        struct cli_command *command) {
+                             struct cli_command *command) {
 
     int args;
 
@@ -158,6 +159,12 @@ command_type prepare_command(const struct input_buffer *buffer,
         if (args < 1)
             return UNKNOWN_COMMAND;
         return DEC_COMMAND;
+    } else if (STREQ(buffer->buffer, "use", 3)) {
+        command->kc = tmalloc(sizeof(struct k_command));
+        args = sscanf(buffer->buffer, "use %s %d", command->kc->key, &command->kc->ttl);
+        if (args < 2)
+            return UNKNOWN_COMMAND;
+        return USE_COMMAND;
     } else
         return UNKNOWN_COMMAND;
 }
@@ -167,7 +174,7 @@ static ssize_t send_request(int fd, struct request *request, size_t size) {
 
     struct buffer *buffer = buffer_create(size);
 
-    pack_request(buffer, request, request->command->cmdtype);
+    pack_request(buffer, request, request->cmd->cmdtype);
 
     size_t sent;
 
@@ -207,25 +214,25 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
             request = make_keyval_request((const uint8_t *) c->kvc->key,
                     (const uint8_t *) c->kvc->val, PUT, c->kvc->ttl, F_NOFLAG);
             sent = send_request(fd, request,
-                    request->command->kvcommand->header->size);
+                    request->cmd->kv_cmd->hdr->size);
             printf("%ld bytes sent\n", sent);
             response = recv_data(fd);
-            printf("%d bytes received\n", response->ncontent->header->size);
+            printf("%d bytes received\n", response->e_pld->hdr->size);
             tfree(c->kvc);
             break;
         case GET_COMMAND:
             request = make_key_request((const uint8_t *) c->kc->key,
                     GET, 0x00, F_NOFLAG);
             sent = send_request(fd, request,
-                    request->command->kcommand->header->size);
+                    request->cmd->k_cmd->hdr->size);
             printf("%ld bytes sent\n", sent);
             response = recv_data(fd);
-            if (response->restype == DATA_CONTENT) {
-                printf("%d bytes received\n", response->dcontent->header->size);
-                printf("%s\n", response->dcontent->data);
+            if (response->restype == DATA_PAYLOAD) {
+                printf("%d bytes received\n", response->d_pld->hdr->size);
+                printf("%s\n", response->d_pld->data);
             } else {
                 printf("[%d] %d bytes received\n",
-                        response->restype, response->ncontent->header->size);
+                        response->restype, response->e_pld->hdr->size);
                 printf("(nil)\n");
             }
             tfree(c->kc);
@@ -236,11 +243,11 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
             keylist = split_keys(c->kc->key);
             request = make_keylist_request(keylist, command, NULL, F_NOFLAG);
             sent = send_request(fd, request,
-                    request->command->kcommand->header->size);
+                    request->cmd->k_cmd->hdr->size);
             printf("%ld bytes sent\n", sent);
             response = recv_data(fd);
-            printf("%d bytes received\n", response->ncontent->header->size);
-            if (response->ncontent->code == 0x00)
+            printf("%d bytes received\n", response->e_pld->hdr->size);
+            if (response->e_pld->code == 0x00)
                 printf("ok\n");
             else
                 printf("(nil)\n");
@@ -250,16 +257,30 @@ void execute_command(int fd, command_type command, struct cli_command *c) {
             request = make_key_request((const uint8_t *) c->kc->key,
                     TTL, c->kc->ttl, F_NOFLAG);
             sent = send_request(fd, request,
-                    request->command->kcommand->header->size);
+                    request->cmd->k_cmd->hdr->size);
             printf("%ld bytes sent\n", sent);
             response = recv_data(fd);
-            printf("%d bytes received\n", response->ncontent->header->size);
-            if (response->ncontent->code == 0x00)
+            printf("%d bytes received\n", response->e_pld->hdr->size);
+            if (response->e_pld->code == 0x00)
                 printf("ok\n");
             else
                 printf("(nil)\n");
             tfree(c->kc);
-            puts("TTL");
+            break;
+        case USE_COMMAND:
+            request = make_key_request((const uint8_t *) c->kc->key, USE,
+                                       c->kc->ttl,
+                                       c->kc->ttl == 0 ? F_NOFLAG : F_PREFIXREQUEST);
+            sent = send_request(fd, request,
+                    request->cmd->k_cmd->hdr->size);
+            printf("%ld bytes sent\n", sent);
+            response = recv_data(fd);
+            printf("%d bytes received\n", response->e_pld->hdr->size);
+            if (response->e_pld->code == 0x00)
+                printf("ok\n");
+            else
+                printf("(nil)\n");
+            tfree(c->kc);
             break;
         default:
             puts("ERROR");

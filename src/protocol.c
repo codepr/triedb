@@ -63,15 +63,15 @@ static const uint8_t opcode_req_map[COMMAND_COUNT][2] = {
  * shitty abstraction, further improvements planned on future refactoring
  */
 static const uint8_t opcode_res_map[9][2] = {
-    {ACK, NO_CONTENT},
-    {GET, DATA_CONTENT},
-    {DEL, NO_CONTENT},
-    {TTL, NO_CONTENT},
-    {INC, NO_CONTENT},
-    {DEC, NO_CONTENT},
-    {COUNT, VALUE_CONTENT},
-    {KEYS, LIST_CONTENT},
-    {CLUSTER_MEMBERS, KVLIST_CONTENT}
+    {ACK, EMPTY_PAYLOAD},
+    {GET, DATA_PAYLOAD},
+    {DEL, EMPTY_PAYLOAD},
+    {TTL, EMPTY_PAYLOAD},
+    {INC, EMPTY_PAYLOAD},
+    {DEC, EMPTY_PAYLOAD},
+    {COUNT, VALUE_PAYLOAD},
+    {KEYS, LIST_PAYLOAD},
+    {CLUSTER_MEMBERS, KVLIST_PAYLOAD}
 };
 
 
@@ -110,113 +110,113 @@ static int8_t get_content_type(uint8_t opcode) {
 }
 
 
-static void pack_header(const struct header *h, struct buffer *b) {
+static void pack_header(const struct header *hdr, struct buffer *buf) {
 
-    assert(b && h);
+    assert(buf && hdr);
 
-    pack(b, "BIB", h->opcode, b->size, h->flags);
+    pack(buf, "BIB", hdr->opcode, buf->size, hdr->flags);
 
-    if ((h->flags & F_FROMNODEREQUEST) || (h->flags & F_FROMNODERESPONSE))
-        pack(b, "s", h->transaction_id);
+    if ((hdr->flags & F_FROMNODEREQUEST) || (hdr->flags & F_FROMNODERESPONSE))
+        pack(buf, "s", hdr->transaction_id);
 
 }
 
 
-static void unpack_header(struct buffer *b, struct header *h) {
+static void unpack_header(struct buffer *buf, struct header *hdr) {
 
-    assert(b && h);
+    assert(buf && hdr);
 
-    unpack(b, "BIB", &h->opcode, &h->size, &h->flags);
+    unpack(buf, "BIB", &hdr->opcode, &hdr->size, &hdr->flags);
 
-    if (h->flags & F_FROMNODEREQUEST || h->flags & F_FROMNODERESPONSE) {
+    if (hdr->flags & F_FROMNODEREQUEST || hdr->flags & F_FROMNODERESPONSE) {
         const char transaction_id[UUID_LEN];
         char fmt[4];
         snprintf(fmt, 4, "%ds", UUID_LEN - 1);
-        unpack(b, fmt, transaction_id);
-        strcpy(h->transaction_id, transaction_id);
+        unpack(buf, fmt, transaction_id);
+        strcpy(hdr->transaction_id, transaction_id);
     }
 }
 
 
-static void free_header(struct header *header) {
-    tfree(header);
+static void free_header(struct header *hdr) {
+    tfree(hdr);
 }
 
 
-static void free_command_header(struct command *command) {
+static void free_command_header(struct command *cmd) {
 
-    if (!command)
+    if (!cmd)
         return;
 
-    switch (command->cmdtype) {
+    switch (cmd->cmdtype) {
         case EMPTY_COMMAND:
-            free_header(command->ecommand->header);
+            free_header(cmd->e_cmd->hdr);
             break;
         case KEY_COMMAND:
-            free_header(command->kcommand->header);
+            free_header(cmd->k_cmd->hdr);
             break;
         case KEY_VAL_COMMAND:
-            free_header(command->kvcommand->header);
+            free_header(cmd->kv_cmd->hdr);
             break;
         case KEY_LIST_COMMAND:
-            free_header(command->klcommand->header);
+            free_header(cmd->kl_cmd->hdr);
             break;
     }
 }
 
 
-static void free_command(struct command *command, bool with_header) {
+static void free_command(struct command *cmd, bool with_header) {
 
-    if (!command)
+    if (!cmd)
         return;
 
-    switch (command->cmdtype) {
+    switch (cmd->cmdtype) {
         case EMPTY_COMMAND:
             if (with_header)
-                free_header(command->ecommand->header);
-            tfree(command->ecommand);
+                free_header(cmd->e_cmd->hdr);
+            tfree(cmd->e_cmd);
             break;
         case KEY_COMMAND:
             if (with_header)
-                free_header(command->kcommand->header);
-            tfree(command->kcommand->key);
-            tfree(command->kcommand);
+                free_header(cmd->k_cmd->hdr);
+            tfree(cmd->k_cmd->key);
+            tfree(cmd->k_cmd);
             break;
         case KEY_VAL_COMMAND:
             if (with_header)
-                free_header(command->kvcommand->header);
-            tfree(command->kvcommand->key);
-            tfree(command->kvcommand->val);
-            tfree(command->kvcommand);
+                free_header(cmd->kv_cmd->hdr);
+            tfree(cmd->kv_cmd->key);
+            tfree(cmd->kv_cmd->val);
+            tfree(cmd->kv_cmd);
             break;
         case KEY_LIST_COMMAND:
             if (with_header)
-                free_header(command->klcommand->header);
-            for (int i = 0; i < command->klcommand->len; i++) {
-                tfree(command->klcommand->keys[i]->key);
-                tfree(command->klcommand->keys[i]);
+                free_header(cmd->kl_cmd->hdr);
+            for (int i = 0; i < cmd->kl_cmd->len; i++) {
+                tfree(cmd->kl_cmd->keys[i]->key);
+                tfree(cmd->kl_cmd->keys[i]);
             }
-            tfree(command->klcommand->keys);
-            tfree(command->klcommand);
+            tfree(cmd->kl_cmd->keys);
+            tfree(cmd->kl_cmd);
             break;
     }
 
-    tfree(command);
+    tfree(cmd);
 }
 
 
-static void header_init(struct header *header, uint8_t opcode, uint32_t size,
+static void header_init(struct header *hdr, uint8_t opcode, uint32_t size,
                         uint8_t flags, const char *transaction_id) {
 
-    header->opcode = opcode;
-    header->size = size;
-    header->flags = 0 | flags;
+    hdr->opcode = opcode;
+    hdr->size = size;
+    hdr->flags = 0 | flags;
 
     if (transaction_id && (flags & F_FROMNODERESPONSE)) {
-        strncpy(header->transaction_id,
+        strncpy(hdr->transaction_id,
                 (const char *) transaction_id, UUID_LEN - 1);
-        header->transaction_id[UUID_LEN - 1] = '\0';
-        header->size += UUID_LEN - 1;
+        hdr->transaction_id[UUID_LEN - 1] = '\0';
+        hdr->size += UUID_LEN - 1;
     }
 }
 
@@ -226,39 +226,35 @@ static void header_init(struct header *header, uint8_t opcode, uint32_t size,
  ********************************************/
 
 
-void pack_request(struct buffer *buffer,
-                  const struct request *request, int reqtype) {
+void pack_request(struct buffer *buf, const struct request *req, int reqtype) {
 
-    assert(buffer && request);
+    assert(buf && req);
 
     // FIXME make it consistent with the rest
     switch (reqtype) {
         case KEY_COMMAND:
-            pack_header(request->command->kcommand->header, buffer);
-            pack_u16(buffer, request->command->kcommand->keysize);
-            pack_bytes(buffer, request->command->kcommand->key);
-            pack_u8(buffer, request->command->kcommand->is_prefix);
-            pack_u16(buffer, request->command->kcommand->ttl);
+            pack_header(req->cmd->k_cmd->hdr, buf);
+            pack_u16(buf, req->cmd->k_cmd->keysize);
+            pack_bytes(buf, req->cmd->k_cmd->key);
+            pack_u8(buf, req->cmd->k_cmd->is_prefix);
+            pack_u16(buf, req->cmd->k_cmd->ttl);
             break;
         case KEY_VAL_COMMAND:
-            pack_header(request->command->kvcommand->header, buffer);
-            pack_u16(buffer, request->command->kvcommand->keysize);
-            pack_u32(buffer, request->command->kvcommand->valsize);
-            pack_bytes(buffer, request->command->kvcommand->key);
-            pack_bytes(buffer, request->command->kvcommand->val);
-            pack_u8(buffer, request->command->kvcommand->is_prefix);
-            pack_u16(buffer, request->command->kvcommand->ttl);
+            pack_header(req->cmd->kv_cmd->hdr, buf);
+            pack_u16(buf, req->cmd->kv_cmd->keysize);
+            pack_u32(buf, req->cmd->kv_cmd->valsize);
+            pack_bytes(buf, req->cmd->kv_cmd->key);
+            pack_bytes(buf, req->cmd->kv_cmd->val);
+            pack_u8(buf, req->cmd->kv_cmd->is_prefix);
+            pack_u16(buf, req->cmd->kv_cmd->ttl);
             break;
         case KEY_LIST_COMMAND:
-            pack_header(request->command->klcommand->header, buffer);
-            pack_u32(buffer, request->command->klcommand->len);
-            for (int i = 0; i < request->command->klcommand->len; i++) {
-                pack_u16(buffer,
-                         request->command->klcommand->keys[i]->keysize);
-                pack_bytes(buffer,
-                           request->command->klcommand->keys[i]->key);
-                pack_u8(buffer,
-                        request->command->klcommand->keys[i]->is_prefix);
+            pack_header(req->cmd->kl_cmd->hdr, buf);
+            pack_u32(buf, req->cmd->kl_cmd->len);
+            for (int i = 0; i < req->cmd->kl_cmd->len; i++) {
+                pack_u16(buf, req->cmd->kl_cmd->keys[i]->keysize);
+                pack_bytes(buf, req->cmd->kl_cmd->keys[i]->key);
+                pack_u8(buf, req->cmd->kl_cmd->keys[i]->is_prefix);
             }
             break;
         default:
@@ -268,53 +264,52 @@ void pack_request(struct buffer *buffer,
 }
 
 
-struct request *unpack_request(struct buffer *b) {
+struct request *unpack_request(struct buffer *buf) {
 
-    assert(b);
+    assert(buf);
 
-    struct request *request = tmalloc(sizeof(*request));
-    if (!request)
+    struct request *req = tmalloc(sizeof(*req));
+    if (!req)
         return NULL;
 
-    struct header *header = tmalloc(sizeof(*header));
-    if (!header)
+    struct header *hdr = tmalloc(sizeof(*hdr));
+    if (!hdr)
         goto errnomem2;
 
-    unpack_header(b, header);
+    unpack_header(buf, hdr);
 
-    if (!(header->flags & F_BULKREQUEST)) {
+    if (!(hdr->flags & F_BULKREQUEST)) {
         /* It's a single request, just unpack it into the request pointer */
-        request->reqtype = SINGLE_REQUEST;
-        request->command = unpack_command(b, header);
+        req->reqtype = SINGLE_REQUEST;
+        req->cmd = unpack_command(buf, hdr);
     } else {
         /*
          * Unpack the bulk request format, a request formed by a list of
          * single requests.
          */
-        request->reqtype = BULK_REQUEST;
-        request->bulk_command = tmalloc(sizeof(struct bulk_command));
-        if (!request->bulk_command)
+        req->reqtype = BULK_REQUEST;
+        req->bulk_cmd = tmalloc(sizeof(struct bulk_command));
+        if (!req->bulk_cmd)
             goto errnomem1;
 
-        uint32_t ncommands = unpack_u32(b);
-        request->bulk_command->ncommands = ncommands;
-        request->bulk_command->commands =
-            tmalloc(ncommands * sizeof(struct command));
+        uint32_t ncommands = unpack_u32(buf);
+        req->bulk_cmd->ncommands = ncommands;
+        req->bulk_cmd->cmds = tmalloc(ncommands * sizeof(struct command));
 
         /* Unpack each single packet into the array of requests */
         for (uint32_t i = 0; i < ncommands; i++)
-            request->bulk_command->commands[i] = unpack_command(b, header);
+            req->bulk_cmd->cmds[i] = unpack_command(buf, hdr);
     }
 
-    return request;
+    return req;
 
 errnomem1:
 
-    tfree(header);
+    tfree(hdr);
 
 errnomem2:
 
-    tfree(request);
+    tfree(req);
     return NULL;
 }
 
@@ -322,137 +317,131 @@ errnomem2:
  * Main unpacking function, to translates bytes received from clients in
  * network byte-order (big-endian) to a command structure, based on the opcode
  */
-static struct command *unpack_command(struct buffer *b,
-                                      struct header *header) {
+static struct command *unpack_command(struct buffer *buf, struct header *hdr) {
 
-    assert(b && header);
+    assert(buf && hdr);
 
-    struct command *command = tmalloc(sizeof(*command));
-    if (!command)
+    struct command *cmd = tmalloc(sizeof(*cmd));
+    if (!cmd)
         return NULL;
 
-    command->cmdtype = get_command_type(header->opcode);
+    cmd->cmdtype = get_command_type(hdr->opcode);
 
-    switch (command->cmdtype) {
+    switch (cmd->cmdtype) {
         case EMPTY_COMMAND:
-            command->ecommand = tmalloc(sizeof(struct empty_command));
-            if (!command->ecommand)
+            cmd->e_cmd = tmalloc(sizeof(struct empty_command));
+            if (!cmd->e_cmd)
                 goto errnomem3;
 
-            command->ecommand->header = header;
+            cmd->e_cmd->hdr = hdr;
             break;
         case KEY_COMMAND:
-            command->kcommand = tmalloc(sizeof(struct key_command));
-            if (!command->kcommand)
+            cmd->k_cmd = tmalloc(sizeof(struct key_command));
+            if (!cmd->k_cmd)
                 goto errnomem3;
 
-            command->kcommand->header = header;
+            cmd->k_cmd->hdr = hdr;
 
             // Mandatory fields
-            command->kcommand->keysize = unpack_u16(b);
-            command->kcommand->key = unpack_bytes(b,
-                                                  command->kcommand->keysize);
+            cmd->k_cmd->keysize = unpack_u16(buf);
+            cmd->k_cmd->key = unpack_bytes(buf, cmd->k_cmd->keysize);
 
             // Optional fields
-            command->kcommand->is_prefix = unpack_u8(b);
-            command->kcommand->ttl = unpack_u16(b);
+            cmd->k_cmd->is_prefix = unpack_u8(buf);
+            cmd->k_cmd->ttl = unpack_u16(buf);
 
             break;
 
         case KEY_VAL_COMMAND:
-            command->kvcommand = tmalloc(sizeof(struct keyval_command));
-            if (!command->kvcommand)
+            cmd->kv_cmd = tmalloc(sizeof(struct keyval_command));
+            if (!cmd->kv_cmd)
                 goto errnomem3;
 
-            command->kvcommand->header = header;
+            cmd->kv_cmd->hdr = hdr;
 
             // Mandatory fields
-            command->kvcommand->keysize = unpack_u16(b);
-            command->kvcommand->valsize = unpack_u32(b);
-            command->kvcommand->key =
-                unpack_bytes(b, command->kvcommand->keysize);
-            command->kvcommand->val =
-                unpack_bytes(b, command->kvcommand->valsize);
+            cmd->kv_cmd->keysize = unpack_u16(buf);
+            cmd->kv_cmd->valsize = unpack_u32(buf);
+            cmd->kv_cmd->key = unpack_bytes(buf, cmd->kv_cmd->keysize);
+            cmd->kv_cmd->val = unpack_bytes(buf, cmd->kv_cmd->valsize);
 
             // Optional fields
-            command->kvcommand->is_prefix = unpack_u8(b);
-            command->kvcommand->ttl = unpack_u16(b);
+            cmd->kv_cmd->is_prefix = unpack_u8(buf);
+            cmd->kv_cmd->ttl = unpack_u16(buf);
 
             break;
 
         case KEY_LIST_COMMAND:
-            command->klcommand = tmalloc(sizeof(struct key_list_command));
-            if (!command->klcommand)
+            cmd->kl_cmd = tmalloc(sizeof(struct key_list_command));
+            if (!cmd->kl_cmd)
                 goto errnomem3;
 
-            command->klcommand->header = header;
+            cmd->kl_cmd->hdr = hdr;
 
             // Number of keys, or length of the Key array
-            command->klcommand->len = unpack_u32(b);
+            cmd->kl_cmd->len = unpack_u32(buf);
 
-            command->klcommand->keys = tcalloc(command->klcommand->len,
-                                               sizeof(struct key));
+            cmd->kl_cmd->keys = tcalloc(cmd->kl_cmd->len, sizeof(struct key));
 
-            if (!command->klcommand->keys)
+            if (!cmd->kl_cmd->keys)
                 goto errnomem2;
 
-            for (int i = 0; i < command->klcommand->len; i++) {
+            for (int i = 0; i < cmd->kl_cmd->len; i++) {
 
                 struct key *key = tmalloc(sizeof(*key));
                 if (!key)
                     goto errnomem1;
 
-                key->keysize = unpack_u16(b);
-                key->key = unpack_bytes(b, key->keysize);
-                key->is_prefix = unpack_u8(b);
-                command->klcommand->keys[i] = key;
+                key->keysize = unpack_u16(buf);
+                key->key = unpack_bytes(buf, key->keysize);
+                key->is_prefix = unpack_u8(buf);
+                cmd->kl_cmd->keys[i] = key;
             }
 
             break;
 
         default:
-            tfree(header);
-            tfree(command);
-            command = NULL;
+            tfree(hdr);
+            tfree(cmd);
             break;
     };
 
-    return command;
+    return cmd;
 
 errnomem1:
 
-    tfree(command->klcommand->keys);
+    tfree(cmd->kl_cmd->keys);
 
 errnomem2:
 
-    tfree(command->klcommand);
+    tfree(cmd->kl_cmd);
 
 errnomem3:
 
-    tfree(command);
+    tfree(cmd);
     return NULL;
 }
 
 
-void free_request(struct request *request) {
+void free_request(struct request *req) {
 
-    if (!request)
+    if (!req)
         return;
 
-    if (request->reqtype == SINGLE_REQUEST) {
-        free_command(request->command, true);
+    if (req->reqtype == SINGLE_REQUEST) {
+        free_command(req->cmd, true);
     } else {
 
         // FIXME hack, free the first pointer
-        free_command_header(request->bulk_command->commands[0]);
-        for (int i = 0; i < request->bulk_command->ncommands; i++)
-            free_command(request->bulk_command->commands[i], false);
+        free_command_header(req->bulk_cmd->cmds[0]);
+        for (int i = 0; i < req->bulk_cmd->ncommands; i++)
+            free_command(req->bulk_cmd->cmds[i], false);
 
-        tfree(request->bulk_command->commands);
-        tfree(request->bulk_command);
+        tfree(req->bulk_cmd->cmds);
+        tfree(req->bulk_cmd);
     }
 
-    tfree(request);
+    tfree(req);
 }
 
 /********************************************
@@ -467,57 +456,57 @@ void free_request(struct request *request) {
 struct request *make_key_request(const uint8_t *key, uint8_t opcode,
                                  uint16_t ttl, uint8_t flags) {
 
-    struct request *request = tmalloc(sizeof(*request));
-    if (!request)
+    struct request *req = tmalloc(sizeof(*req));
+    if (!req)
         goto err;
 
-    request->reqtype = SINGLE_REQUEST;
-    request->command = tmalloc(sizeof(struct command));
-    if (!request->command)
+    req->reqtype = SINGLE_REQUEST;
+    req->cmd = tmalloc(sizeof(struct command));
+    if (!req->cmd)
         goto errnomem1;
 
-    request->command->cmdtype = KEY_COMMAND;
-    request->command->kcommand = tmalloc(sizeof(struct key_command));
-    if (!request->command->kcommand)
+    req->cmd->cmdtype = KEY_COMMAND;
+    req->cmd->k_cmd = tmalloc(sizeof(struct key_command));
+    if (!req->cmd->k_cmd)
         goto errnomem2;
 
-    request->command->kcommand->header = tmalloc(sizeof(struct header));
-    if (!request->command->kcommand->header)
+    req->cmd->k_cmd->hdr = tmalloc(sizeof(struct header));
+    if (!req->cmd->k_cmd->hdr)
         goto errnomem3;
 
-    request->command->kcommand->header->size = HEADERLEN +
-        (2 * sizeof(uint16_t)) + strlen((const char *) key) + sizeof(uint8_t);
+    req->cmd->k_cmd->hdr->size = HEADERLEN + (2 * sizeof(uint16_t))
+        + strlen((const char *) key) + sizeof(uint8_t);
 
-    request->command->kcommand->header->flags = 0 | flags;
+    req->cmd->k_cmd->hdr->flags = 0 | flags;
 
     if (flags & F_FROMNODEREQUEST) {
         char uuid[UUID_LEN];
         generate_uuid(uuid);
-        strcpy(request->command->kcommand->header->transaction_id, uuid);
-        request->command->kcommand->header->size += UUID_LEN - 1;
+        strcpy(req->cmd->k_cmd->hdr->transaction_id, uuid);
+        req->cmd->k_cmd->hdr->size += UUID_LEN - 1;
     }
 
-    request->command->kcommand->header->opcode = opcode;
+    req->cmd->k_cmd->hdr->opcode = opcode;
 
-    request->command->kcommand->keysize = strlen((const char *) key);
-    request->command->kcommand->key = (uint8_t *) tstrdup((const char *) key);
+    req->cmd->k_cmd->keysize = strlen((const char *) key);
+    req->cmd->k_cmd->key = (uint8_t *) tstrdup((const char *) key);
 
-    request->command->kcommand->ttl = ttl;
-    request->command->kcommand->is_prefix = flags & F_PREFIXREQUEST ? 1 : 0;
+    req->cmd->k_cmd->ttl = ttl;
+    req->cmd->k_cmd->is_prefix = flags & F_PREFIXREQUEST ? 1 : 0;
 
-    return request;
+    return req;
 
 errnomem3:
 
-    tfree(request->command->kcommand);
+    tfree(req->cmd->k_cmd);
 
 errnomem2:
 
-    tfree(request->command);
+    tfree(req->cmd);
 
 errnomem1:
 
-    tfree(request);
+    tfree(req);
 
 err:
 
@@ -531,61 +520,61 @@ struct request *make_keyval_request(const uint8_t *key,
                                     uint16_t ttl,
                                     uint8_t flags) {
 
-    struct request *request = tmalloc(sizeof(*request));
-    if (!request)
+    struct request *req = tmalloc(sizeof(*req));
+    if (!req)
         goto err;
 
-    request->reqtype = SINGLE_REQUEST;
-    request->command = tmalloc(sizeof(struct command));
-    if (!request->command)
+    req->reqtype = SINGLE_REQUEST;
+    req->cmd = tmalloc(sizeof(struct command));
+    if (!req->cmd)
         goto errnomem1;
 
-    request->command->cmdtype = KEY_VAL_COMMAND;
-    request->command->kvcommand = tmalloc(sizeof(struct keyval_command));
-    if (!request->command->kvcommand)
+    req->cmd->cmdtype = KEY_VAL_COMMAND;
+    req->cmd->kv_cmd = tmalloc(sizeof(struct keyval_command));
+    if (!req->cmd->kv_cmd)
         goto errnomem2;
 
-    request->command->kvcommand->header = tmalloc(sizeof(struct header));
-    if (!request->command->kvcommand->header)
+    req->cmd->kv_cmd->hdr = tmalloc(sizeof(struct header));
+    if (!req->cmd->kv_cmd->hdr)
         goto errnomem3;
 
-    request->command->kvcommand->header->size = HEADERLEN +
-        (2 * sizeof(uint16_t)) + strlen((const char *) key) +
-        sizeof(uint32_t) + strlen((const char *) val) + sizeof(uint8_t);
+    req->cmd->kv_cmd->hdr->size = HEADERLEN + (2 * sizeof(uint16_t))
+        + strlen((const char *) key) + sizeof(uint32_t)
+        + strlen((const char *) val) + sizeof(uint8_t);
 
-    request->command->kvcommand->header->flags = 0 | flags;
+    req->cmd->kv_cmd->hdr->flags = 0 | flags;
 
     if (flags & F_FROMNODEREQUEST) {
         char uuid[UUID_LEN];
         generate_uuid(uuid);
-        strcpy(request->command->kvcommand->header->transaction_id, uuid);
-        request->command->kvcommand->header->size += UUID_LEN - 1;
+        strcpy(req->cmd->kv_cmd->hdr->transaction_id, uuid);
+        req->cmd->kv_cmd->hdr->size += UUID_LEN - 1;
     }
 
-    request->command->kvcommand->header->opcode = opcode;
+    req->cmd->kv_cmd->hdr->opcode = opcode;
 
-    request->command->kvcommand->keysize = strlen((const char *) key);
-    request->command->kvcommand->key = (uint8_t *) tstrdup((const char *) key);
+    req->cmd->kv_cmd->keysize = strlen((const char *) key);
+    req->cmd->kv_cmd->key = (uint8_t *) tstrdup((const char *) key);
 
-    request->command->kvcommand->valsize = strlen((const char *) val);
-    request->command->kvcommand->val = (uint8_t *) tstrdup((const char *) val);
+    req->cmd->kv_cmd->valsize = strlen((const char *) val);
+    req->cmd->kv_cmd->val = (uint8_t *) tstrdup((const char *) val);
 
-    request->command->kvcommand->ttl = ttl;
-    request->command->kvcommand->is_prefix = flags & F_PREFIXREQUEST ? 1 : 0;
+    req->cmd->kv_cmd->ttl = ttl;
+    req->cmd->kv_cmd->is_prefix = flags & F_PREFIXREQUEST ? 1 : 0;
 
-    return request;
+    return req;
 
 errnomem3:
 
-    tfree(request->command->kvcommand);
+    tfree(req->cmd->kv_cmd);
 
 errnomem2:
 
-    tfree(request->command);
+    tfree(req->cmd);
 
 errnomem1:
 
-    tfree(request);
+    tfree(req);
 
 err:
 
@@ -599,41 +588,40 @@ struct request *make_keylist_request(const List *content,
                                      const uint8_t *transaction_id,
                                      uint8_t flags) {
 
-    struct request *request = tmalloc(sizeof(*request));
-    if (!request)
+    struct request *req = tmalloc(sizeof(*req));
+    if (!req)
         return NULL;
 
-    request->reqtype = SINGLE_REQUEST;
-    request->command = tmalloc(sizeof(struct command));
-    if (!request->command) {
-        tfree(request->command);
-        return NULL;
-    }
-
-    request->command->klcommand = tmalloc(sizeof(struct key_list_command));
-    if (!request->command->klcommand) {
-        tfree(request->command);
-        tfree(request);
+    req->reqtype = SINGLE_REQUEST;
+    req->cmd = tmalloc(sizeof(struct command));
+    if (!req->cmd) {
+        tfree(req->cmd);
         return NULL;
     }
 
-    request->command->klcommand->header = tmalloc(sizeof(struct header));
-    if (!request->command->klcommand->header) {
-        tfree(request->command->klcommand);
-        tfree(request->command);
-        tfree(request);
+    req->cmd->kl_cmd = tmalloc(sizeof(struct key_list_command));
+    if (!req->cmd->kl_cmd) {
+        tfree(req->cmd);
+        tfree(req);
         return NULL;
     }
 
-    request->command->cmdtype = KEY_LIST_COMMAND;
+    req->cmd->kl_cmd->hdr = tmalloc(sizeof(struct header));
+    if (!req->cmd->kl_cmd->hdr) {
+        tfree(req->cmd->kl_cmd);
+        tfree(req->cmd);
+        tfree(req);
+        return NULL;
+    }
 
-    header_init(request->command->klcommand->header,
+    req->cmd->cmdtype = KEY_LIST_COMMAND;
+
+    header_init(req->cmd->kl_cmd->hdr,
                 opcode, HEADERLEN + sizeof(uint32_t),
                 flags, (const char *) transaction_id);
 
-    request->command->klcommand->len = content->len;
-    request->command->klcommand->keys =
-        tmalloc(content->len * sizeof(struct key));
+    req->cmd->kl_cmd->len = content->len;
+    req->cmd->kl_cmd->keys = tmalloc(content->len * sizeof(struct key));
 
     int i = 0;
 
@@ -641,59 +629,60 @@ struct request *make_keylist_request(const List *content,
         struct key *key = tmalloc(sizeof(*key));
         key->key = (uint8_t *) tstrdup((const char *) cur->data);
         key->keysize = strlen((const char *) cur->data);
-        request->command->klcommand->keys[i] = key;
-        request->command->klcommand->header->size +=
+        req->cmd->kl_cmd->keys[i] = key;
+        req->cmd->kl_cmd->hdr->size +=
             key->keysize + sizeof(uint16_t) + sizeof(uint8_t);
         i++;
     }
 
-    return request;
+    return req;
 }
 
 /********************************************
  *         RESPONSE PACKING FUNCTIONS
  ********************************************/
 
-void pack_response(struct buffer *b, const struct response *r) {
+void pack_response(struct buffer *buf, const struct response *res) {
 
-    assert(b && r);
+    assert(buf && res);
 
-    switch (r->restype) {
-        case NO_CONTENT:
-            pack_header(r->ncontent->header, b);
-            pack_u8(b, r->ncontent->code);
+    switch (res->restype) {
+        case EMPTY_PAYLOAD:
+            pack_header(res->e_pld->hdr, buf);
+            pack_u8(buf, res->e_pld->code);
             break;
-        case DATA_CONTENT:
-            pack_header(r->dcontent->header, b);
+        case DATA_PAYLOAD:
+            pack_header(res->d_pld->hdr, buf);
             // Mandatory fields
-            pack_u32(b, r->dcontent->datalen);
-            pack_bytes(b, r->dcontent->data);
+            pack_u32(buf, res->d_pld->datalen);
+            pack_bytes(buf, res->d_pld->data);
             break;
-        case VALUE_CONTENT:
-            pack_header(r->vcontent->header, b);
+        case VALUE_PAYLOAD:
+            pack_header(res->v_pld->hdr, buf);
             // Mandatory fields
-            pack_u32(b, r->vcontent->val);
+            pack_u32(buf, res->v_pld->val);
             break;
-        case LIST_CONTENT:
-            pack_header(r->lcontent->header, b);
-            pack_u16(b, r->lcontent->len);
+        case LIST_PAYLOAD:
+            pack_header(res->l_pld->hdr, buf);
+            pack_u16(buf, res->l_pld->len);
 
-            for (int i = 0; i < r->lcontent->len; i++) {
-                pack_u16(b, r->lcontent->keys[i]->keysize);
-                pack_bytes(b, r->lcontent->keys[i]->key);
-                pack_u8(b, r->lcontent->keys[i]->is_prefix);
+            for (int i = 0; i < res->l_pld->len; i++) {
+                pack_u16(buf, res->l_pld->keys[i]->keysize);
+                pack_bytes(buf, res->l_pld->keys[i]->key);
+                pack_u8(buf, res->l_pld->keys[i]->is_prefix);
             }
             break;
-        case KVLIST_CONTENT:
-            pack_header(r->kvlcontent->header, b);
-            pack_u16(b, r->kvlcontent->len);
+        case KVLIST_PAYLOAD:
 
-            for (int i = 0; i < r->kvlcontent->len; i++) {
-                pack_u16(b, r->kvlcontent->pairs[i]->keysize);
-                pack_u32(b, r->kvlcontent->pairs[i]->valsize);
-                pack_bytes(b, r->kvlcontent->pairs[i]->key);
-                pack_bytes(b, r->kvlcontent->pairs[i]->val);
-                pack_u8(b, r->kvlcontent->pairs[i]->is_prefix);
+            pack_header(res->kvl_pld->hdr, buf);
+            pack_u16(buf, res->kvl_pld->len);
+
+            for (int i = 0; i < res->kvl_pld->len; i++) {
+                pack_u16(buf, res->kvl_pld->pairs[i]->keysize);
+                pack_u32(buf, res->kvl_pld->pairs[i]->valsize);
+                pack_bytes(buf, res->kvl_pld->pairs[i]->key);
+                pack_bytes(buf, res->kvl_pld->pairs[i]->val);
+                pack_u8(buf, res->kvl_pld->pairs[i]->is_prefix);
             }
             break;
         default:
@@ -703,38 +692,37 @@ void pack_response(struct buffer *b, const struct response *r) {
 }
 
 
-struct response *unpack_response(struct buffer *b) {
+struct response *unpack_response(struct buffer *buf) {
 
-    assert(b);
+    assert(buf);
 
-    struct response *response = tmalloc(sizeof(*response));
-    if (!response)
+    struct response *res = tmalloc(sizeof(*res));
+    if (!res)
         return NULL;
 
-    struct header *header = tmalloc(sizeof(*header));
-    if (!header)
+    struct header *hdr = tmalloc(sizeof(*hdr));
+    if (!hdr)
         goto errnomem2;
 
-    unpack_header(b, header);
+    unpack_header(buf, hdr);
 
     // XXX not implemented all responses yet
-    int8_t ctype = get_command_type(header->opcode);
-    response->restype = get_content_type(header->opcode);
+    int8_t ctype = get_command_type(hdr->opcode);
+    res->restype = get_content_type(hdr->opcode);
 
     switch (ctype) {
 
         case EMPTY_COMMAND:
-            response->ncontent = tmalloc(sizeof(struct no_content));
-            response->ncontent->header = header;
-            response->ncontent->code = unpack_u8(b);
+            res->e_pld = tmalloc(sizeof(struct empty_payload));
+            res->e_pld->hdr = hdr;
+            res->e_pld->code = unpack_u8(buf);
             break;
 
         case KEY_COMMAND:
-            response->dcontent = tmalloc(sizeof(struct data_content));
-            response->dcontent->header = header;
-            response->dcontent->datalen = unpack_u32(b);
-            response->dcontent->data =
-                unpack_bytes(b, response->dcontent->datalen);
+            res->d_pld = tmalloc(sizeof(struct data_payload));
+            res->d_pld->hdr = hdr;
+            res->d_pld->datalen = unpack_u32(buf);
+            res->d_pld->data = unpack_bytes(buf, res->d_pld->datalen);
             break;
 
         case KEY_VAL_COMMAND:
@@ -742,85 +730,85 @@ struct response *unpack_response(struct buffer *b) {
             break;
 
         case KEY_VAL_LIST_COMMAND:
-            response->kvlcontent = tmalloc(sizeof(struct kvlist_content));
-            response->kvlcontent->header = header;
-            response->kvlcontent->len = unpack_u16(b);
-            response->kvlcontent->pairs =
-                tmalloc(response->kvlcontent->len * sizeof(struct keyval));
+            res->kvl_pld = tmalloc(sizeof(struct kvlist_payload));
+            res->kvl_pld->hdr = hdr;
+            res->kvl_pld->len = unpack_u16(buf);
+            res->kvl_pld->pairs =
+                tmalloc(res->kvl_pld->len * sizeof(struct keyval));
 
-            if (!response->kvlcontent->pairs)
+            if (!res->kvl_pld->pairs)
                 goto errnomem1;
 
-            for (int i = 0; i < response->kvlcontent->len; i++) {
+            for (int i = 0; i < res->kvl_pld->len; i++) {
                 struct keyval *kv = tmalloc(sizeof(*kv));
-                kv->keysize = unpack_u16(b);
-                kv->valsize = unpack_u32(b);
-                kv->key = unpack_bytes(b, kv->keysize);
-                kv->val = unpack_bytes(b, kv->valsize);
-                kv->is_prefix = unpack_u8(b);
-                response->kvlcontent->pairs[i] = kv;
+                kv->keysize = unpack_u16(buf);
+                kv->valsize = unpack_u32(buf);
+                kv->key = unpack_bytes(buf, kv->keysize);
+                kv->val = unpack_bytes(buf, kv->valsize);
+                kv->is_prefix = unpack_u8(buf);
+                res->kvl_pld->pairs[i] = kv;
             }
 
             break;
     }
 
-    return response;
+    return res;
 
 errnomem1:
 
-    tfree(header);
+    tfree(hdr);
 
 errnomem2:
 
-    tfree(response);
+    tfree(res);
     return NULL;
 }
 
 
-void free_response(struct response *response) {
+void free_response(struct response *res) {
 
-    if (!response)
+    if (!res)
         return;
 
-    switch (response->restype) {
-        case NO_CONTENT:
-            tfree(response->ncontent->header);
-            tfree(response->ncontent);
+    switch (res->restype) {
+        case EMPTY_PAYLOAD:
+            tfree(res->e_pld->hdr);
+            tfree(res->e_pld);
             break;
-        case DATA_CONTENT:
-            tfree(response->dcontent->header);
-            tfree(response->dcontent->data);
-            tfree(response->dcontent);
+        case DATA_PAYLOAD:
+            tfree(res->d_pld->hdr);
+            tfree(res->d_pld->data);
+            tfree(res->d_pld);
             break;
-        case VALUE_CONTENT:
-            tfree(response->vcontent->header);
-            tfree(response->vcontent);
+        case VALUE_PAYLOAD:
+            tfree(res->v_pld->hdr);
+            tfree(res->v_pld);
             break;
-        case LIST_CONTENT:
-            tfree(response->lcontent->header);
-            for (int i = 0; i < response->lcontent->len; i++) {
-                tfree(response->lcontent->keys[i]->key);
-                tfree(response->lcontent->keys[i]);
+        case LIST_PAYLOAD:
+            tfree(res->l_pld->hdr);
+            for (int i = 0; i < res->l_pld->len; i++) {
+                tfree(res->l_pld->keys[i]->key);
+                tfree(res->l_pld->keys[i]);
             }
-            tfree(response->lcontent->keys);
-            tfree(response->lcontent);
+            tfree(res->l_pld->keys);
+            tfree(res->l_pld);
             break;
-        case KVLIST_CONTENT:
-            tfree(response->kvlcontent->header);
-            for (int i = 0; i < response->kvlcontent->len; i++) {
-                tfree(response->kvlcontent->pairs[i]->key);
-                tfree(response->kvlcontent->pairs[i]->val);
-                tfree(response->kvlcontent->pairs[i]);
+        case KVLIST_PAYLOAD:
+            tfree(res->kvl_pld->hdr);
+            for (int i = 0; i < res->kvl_pld->len; i++) {
+                tfree(res->kvl_pld->pairs[i]->key);
+                tfree(res->kvl_pld->pairs[i]->val);
+                tfree(res->kvl_pld->pairs[i]);
             }
-            tfree(response->kvlcontent->pairs);
-            tfree(response->kvlcontent);
+            tfree(res->kvl_pld->pairs);
+            tfree(res->kvl_pld);
             break;
         default:
             fprintf(stderr, "Free response: not implemented yet");
             break;
     }
 
-    tfree(response);
+    tfree(res);
 }
 
 /********************************************
@@ -831,29 +819,29 @@ struct response *make_ack_response(uint8_t code,
                                    const uint8_t *transaction_id,
                                    uint8_t flags) {
 
-    struct response *response = tmalloc(sizeof(*response));
-    if (!response)
+    struct response *res = tmalloc(sizeof(*res));
+    if (!res)
         goto errnomem3;
 
-    response->ncontent = tmalloc(sizeof(struct no_content));
-    if (!response->ncontent)
+    res->e_pld = tmalloc(sizeof(struct empty_payload));
+    if (!res->e_pld)
         goto errnomem2;
 
-    response->ncontent->header = tmalloc(sizeof(struct header));
-    if (!response->ncontent->header)
+    res->e_pld->hdr = tmalloc(sizeof(struct header));
+    if (!res->e_pld->hdr)
         goto errnomem1;
 
-    ack_response_init(response, code, flags, (const char *) transaction_id);
+    ack_response_init(res, code, flags, (const char *) transaction_id);
 
-    return response;
+    return res;
 
 errnomem1:
 
-    tfree(response->ncontent);
+    tfree(res->e_pld);
 
 errnomem2:
 
-    tfree(response);
+    tfree(res);
 
 errnomem3:
 
@@ -865,29 +853,29 @@ struct response *make_data_response(const uint8_t *data,
                                     const uint8_t *transaction_id,
                                     uint8_t flags) {
 
-    struct response *response = tmalloc(sizeof(*response));
-    if (!response)
+    struct response *res = tmalloc(sizeof(*res));
+    if (!res)
         goto errnomem3;
 
-    response->dcontent = tmalloc(sizeof(struct data_content));
-    if (!response->dcontent)
+    res->d_pld = tmalloc(sizeof(struct data_payload));
+    if (!res->d_pld)
         goto errnomem2;
 
-    response->dcontent->header = tmalloc(sizeof(struct header));
-    if (!response->dcontent->header)
+    res->d_pld->hdr = tmalloc(sizeof(struct header));
+    if (!res->d_pld->hdr)
         goto errnomem1;
 
-    data_response_init(response, data, flags, (const char *) transaction_id);
+    data_response_init(res, data, flags, (const char *) transaction_id);
 
-    return response;
+    return res;
 
 errnomem1:
 
-    tfree(response->dcontent);
+    tfree(res->d_pld);
 
 errnomem2:
 
-    tfree(response);
+    tfree(res);
 
 errnomem3:
 
@@ -899,29 +887,29 @@ struct response *make_valuecontent_response(uint32_t value,
                                             const uint8_t *transaction_id,
                                             uint8_t flags) {
 
-    struct response *response = tmalloc(sizeof(*response));
-    if (!response)
+    struct response *res = tmalloc(sizeof(*res));
+    if (!res)
         goto errnomem3;
 
-    response->vcontent = tmalloc(sizeof(struct value_content));
-    if (!response->vcontent)
+    res->v_pld = tmalloc(sizeof(struct value_payload));
+    if (!res->v_pld)
         goto errnomem2;
 
-    response->vcontent->header = tmalloc(sizeof(struct header));
-    if (!response->vcontent->header)
+    res->v_pld->hdr = tmalloc(sizeof(struct header));
+    if (!res->v_pld->hdr)
         goto errnomem1;
 
-    value_response_init(response, value, flags, (const char *) transaction_id);
+    value_response_init(res, value, flags, (const char *) transaction_id);
 
-    return response;
+    return res;
 
 errnomem1:
 
-    tfree(response->vcontent);
+    tfree(res->v_pld);
 
 errnomem2:
 
-    tfree(response);
+    tfree(res);
 
 errnomem3:
 
@@ -933,29 +921,29 @@ struct response *make_list_response(const List *content,
                                     const uint8_t *transaction_id,
                                     uint8_t flags) {
 
-    struct response *response = tmalloc(sizeof(*response));
-    if (!response)
+    struct response *res = tmalloc(sizeof(*res));
+    if (!res)
         return NULL;
 
-    response->restype = LIST_CONTENT;
-    response->lcontent = tmalloc(sizeof(struct list_content));
-    if (!response->lcontent) {
-        tfree(response);
-        return NULL;
-    }
-
-    response->lcontent->header = tmalloc(sizeof(struct header));
-    if (!response->lcontent->header) {
-        tfree(response->lcontent);
-        tfree(response);
+    res->restype = LIST_PAYLOAD;
+    res->l_pld = tmalloc(sizeof(struct list_payload));
+    if (!res->l_pld) {
+        tfree(res);
         return NULL;
     }
 
-    header_init(response->lcontent->header, ACK,
-                HEADERLEN + sizeof(uint16_t), flags, (const char *) transaction_id);
+    res->l_pld->hdr = tmalloc(sizeof(struct header));
+    if (!res->l_pld->hdr) {
+        tfree(res->l_pld);
+        tfree(res);
+        return NULL;
+    }
 
-    response->lcontent->len = content->len;
-    response->lcontent->keys = tcalloc(content->len, sizeof(struct key));
+    header_init(res->l_pld->hdr, ACK, HEADERLEN + sizeof(uint16_t),
+                flags, (const char *) transaction_id);
+
+    res->l_pld->len = content->len;
+    res->l_pld->keys = tcalloc(content->len, sizeof(struct key));
 
     int i = 0;
 
@@ -963,13 +951,13 @@ struct response *make_list_response(const List *content,
         struct key *key = tmalloc(sizeof(*key));
         key->key = (uint8_t *) tstrdup((const char *) cur->data);
         key->keysize = strlen((const char *) cur->data);
-        response->lcontent->keys[i] = key;
-        response->lcontent->header->size +=
+        res->l_pld->keys[i] = key;
+        res->l_pld->hdr->size +=
             key->keysize + sizeof(uint16_t) + sizeof(uint8_t);
         i++;
     }
 
-    return response;
+    return res;
 }
 
 
@@ -977,30 +965,30 @@ struct response *make_kvlist_response(const List *content,
                                       const uint8_t *transaction_id,
                                       uint8_t flags) {
 
-    struct response *response = tmalloc(sizeof(*response));
-    if (!response)
+    struct response *res = tmalloc(sizeof(*res));
+    if (!res)
         return NULL;
 
-    response->restype = KEY_VAL_LIST_COMMAND;
-    response->kvlcontent = tmalloc(sizeof(struct kvlist_content));
-    if (!response->kvlcontent) {
-        tfree(response);
-        return NULL;
-    }
-
-    response->kvlcontent->header = tmalloc(sizeof(struct header));
-    if (!response->kvlcontent->header) {
-        tfree(response->kvlcontent);
-        tfree(response);
+    res->restype = KEY_VAL_LIST_COMMAND;
+    res->kvl_pld = tmalloc(sizeof(struct kvlist_payload));
+    if (!res->kvl_pld) {
+        tfree(res);
         return NULL;
     }
 
-    header_init(response->kvlcontent->header, CLUSTER_MEMBERS,
-                HEADERLEN + sizeof(uint16_t), flags, (const char *) transaction_id);
+    res->kvl_pld->hdr = tmalloc(sizeof(struct header));
+    if (!res->kvl_pld->hdr) {
+        tfree(res->kvl_pld);
+        tfree(res);
+        return NULL;
+    }
 
-    response->kvlcontent->len = content->len;
-    response->kvlcontent->pairs =
-        tmalloc(content->len * sizeof(struct keyval));
+    header_init(res->kvl_pld->hdr, CLUSTER_MEMBERS,
+                HEADERLEN + sizeof(uint16_t), flags,
+                (const char *) transaction_id);
+
+    res->kvl_pld->len = content->len;
+    res->kvl_pld->pairs = tmalloc(content->len * sizeof(struct keyval));
 
     int i = 0;
 
@@ -1012,50 +1000,48 @@ struct response *make_kvlist_response(const List *content,
         kv->val = (uint8_t *) tstrdup((const char *) nodekv->val);
         kv->valsize = nodekv->valsize;
         kv->is_prefix = 0;
-        response->kvlcontent->pairs[i] = kv;
-        response->kvlcontent->header->size += kv->keysize + kv->valsize +
+        res->kvl_pld->pairs[i] = kv;
+        res->kvl_pld->hdr->size += kv->keysize + kv->valsize +
             sizeof(uint16_t) + sizeof(uint32_t) + sizeof(uint8_t);
         i++;
     }
 
-    return response;
+    return res;
 }
 
 
-void ack_response_init(struct response *response,
-                       uint8_t code, int flags, const char *transaction_id) {
+void ack_response_init(struct response *res, uint8_t code,
+                       int flags, const char *transaction_id) {
 
-    response->restype = NO_CONTENT;
+    res->restype = EMPTY_PAYLOAD;
 
-    header_init(response->ncontent->header,
-                ACK, HEADERLEN + sizeof(uint8_t), flags, transaction_id);
+    header_init(res->e_pld->hdr, ACK,
+                HEADERLEN + sizeof(uint8_t), flags, transaction_id);
 
-    response->ncontent->code = code;
+    res->e_pld->code = code;
 }
 
 
-void data_response_init(struct response *response,
-                        const uint8_t *data, uint8_t flags,
-                        const char *transaction_id) {
+void data_response_init(struct response *res, const uint8_t *data,
+                        uint8_t flags, const char *transaction_id) {
 
-    response->restype = DATA_CONTENT;
+    res->restype = DATA_PAYLOAD;
 
     uint32_t len = HEADERLEN + sizeof(uint32_t) + strlen((char *) data);
-    header_init(response->dcontent->header, GET, len, flags, transaction_id);
+    header_init(res->d_pld->hdr, GET, len, flags, transaction_id);
 
-    response->dcontent->datalen = strlen((char *) data);
-    response->dcontent->data = (uint8_t *) tstrdup((const char *) data);
+    res->d_pld->datalen = strlen((char *) data);
+    res->d_pld->data = (uint8_t *) tstrdup((const char *) data);
 }
 
 
-void value_response_init(struct response *response,
-                         uint32_t value, uint8_t flags,
-                         const char *transaction_id) {
+void value_response_init(struct response *res, uint32_t value,
+                         uint8_t flags, const char *transaction_id) {
 
-    response->restype = VALUE_CONTENT;
+    res->restype = VALUE_PAYLOAD;
 
-    header_init(response->vcontent->header, ACK,
+    header_init(res->v_pld->hdr, ACK,
                 HEADERLEN + sizeof(uint32_t), flags, transaction_id);
 
-    response->vcontent->val = value;
+    res->v_pld->val = value;
 }

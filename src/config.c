@@ -105,34 +105,28 @@ static size_t read_time_with_mul(const char *time_string) {
 char *memory_to_string(size_t memory) {
 
     int numlen = 0;
-    int translated_memory = 0;
+    double translated_memory = 0;
 
-    char *mstring = NULL;
+    static char mstring[32];
+
+    memset(mstring, 0x00, 32);
 
     if (memory < 1024) {
         translated_memory = memory;
         numlen = number_len(translated_memory);
-        // +1 for 'b' +1 for nul terminating
-        mstring = tmalloc(numlen + 1);
-        snprintf(mstring, numlen + 1, "%db", translated_memory);
+        snprintf(mstring, numlen + 1, "%db", (int) translated_memory);
     } else if (memory < 1048576) {
-        translated_memory = memory / 1024;
+        translated_memory = memory / 1024.0;
         numlen = number_len(translated_memory);
-        // +2 for 'Kb' +1 for nul terminating
-        mstring = tmalloc(numlen + 2);
-        snprintf(mstring, numlen + 2, "%dKb", translated_memory);
+        snprintf(mstring, numlen + 5, "%.3fKb", translated_memory);
     } else if (memory < 1073741824) {
-        translated_memory = memory / (1024 * 1024);
+        translated_memory = memory / (1024.0 * 1024.0);
         numlen = number_len(translated_memory);
-        // +2 for 'Mb' +1 for nul terminating
-        mstring = tmalloc(numlen + 2);
-        snprintf(mstring, numlen + 2, "%dMb", translated_memory);
+        snprintf(mstring, numlen + 5, "%.3fMb", translated_memory);
     } else {
-        translated_memory = memory / (1024 * 1024 * 1024);
+        translated_memory = memory / (1024.0 * 1024.0 * 1024.0);
         numlen = number_len(translated_memory);
-        // +2 for 'Gb' +1 for nul terminating
-        mstring = tmalloc(numlen + 2);
-        snprintf(mstring, numlen + 2, "%dGb", translated_memory);
+        snprintf(mstring, numlen + 5, "%.3fGb", translated_memory);
     }
 
     return mstring;
@@ -142,35 +136,35 @@ char *memory_to_string(size_t memory) {
  * form, e.g. 2m or 4h instead of huge numbers */
 char *time_to_string(size_t time) {
 
-    int numlen = 0;
-    int translated_time = 0;
+    static char tstring[32];
 
-    char *tstring = NULL;
+    memset(tstring, 0x00, 32);
 
     if (time < 60) {
-        translated_time = time;
-        numlen = number_len(translated_time);
-        // +1 for 's' +1 for nul terminating
-        tstring = tmalloc(numlen + 1);
-        snprintf(tstring, numlen + 1, "%ds", translated_time);
+        int time_seconds = time;
+        int numlen = number_len(time_seconds);
+        snprintf(tstring, numlen + 1, "%ds", time_seconds);
     } else if (time < 60 * 60) {
-        translated_time = time / 60;
-        numlen = number_len(translated_time);
-        // +1 for 'm' +1 for nul terminating
-        tstring = tmalloc(numlen + 1);
-        snprintf(tstring, numlen + 1, "%dm", translated_time);
+        int time_minutes = time / 60;
+        int time_seconds = time % 60;
+        int minlen = number_len(time_minutes);
+        int seclen = number_len(time_seconds);
+        snprintf(tstring, minlen + seclen + 1,
+                 "%dm %ds", time_minutes, time_seconds);
     } else if (time < 60 * 60 * 24) {
-        translated_time = time / (60 * 60);
-        numlen = number_len(translated_time);
-        // +1 for 'h' +1 for nul terminating
-        tstring = tmalloc(numlen + 1);
-        snprintf(tstring, numlen + 1, "%dh", translated_time);
+        int time_hours = time / (60 * 60);
+        int time_minutes = time % (60 * 60);
+        int hrslen = number_len(time_hours);
+        int minlen = number_len(time_minutes);
+        snprintf(tstring, hrslen + minlen + 1,
+                 "%dh %dm", time_hours, time_minutes);
     } else {
-        translated_time = time / (60 * 60 * 24);
-        numlen = number_len(translated_time);
-        // +1 for 'd' +1 for nul terminating
-        tstring = tmalloc(numlen + 1);
-        snprintf(tstring, numlen + 1, "%dd", translated_time);
+        int time_days = time / (60 * 60 * 24);
+        int time_hours = time % (60 * 60 * 24);
+        int daylen = number_len(time_days);
+        int hrslen = number_len(time_hours);
+        snprintf(tstring, daylen + hrslen + 1,
+                 "%dd %dh", time_days, time_hours);
     }
 
     return tstring;
@@ -337,8 +331,5 @@ void config_print(void) {
         const char *human_time = time_to_string(config.mem_reclaim_time);
         tinfo("Max memory: %s", human_memory);
         tinfo("Memory reclaim time: %s", human_time);
-        tfree((char *) human_time);
-        tfree((char *) human_memory);
-        tfree((char *) human_rsize);
     }
 }

@@ -105,7 +105,7 @@ static void insert_node(struct cluster *cluster,
  * evenly around by using virtual nodes, in other words by replicating each
  * node multiple times around the circle.
  */
-int cluster_add_new_node(struct cluster *cluster, struct client *client,
+int cluster_add_new_node(struct cluster *cluster, const struct client *client,
                          const char *addr, const char *port, bool self) {
 
     char fulladdr[30];
@@ -127,7 +127,11 @@ int cluster_add_new_node(struct cluster *cluster, struct client *client,
     strcpy((char *) cnode->host, addr);
     strcpy((char *) cnode->port, port);
     cnode->upper_bound = upper_bound;
-    cnode->link = client;
+    /*
+     * Remove const, but semantically it is correct to let it const on argument
+     * list, no side-effect are done in the function
+     */
+    cnode->link = (struct client *) client;
 
     /* Set to false the vnode flag: The first is the real node */
     insert_node(cluster, cnode, false);
@@ -168,7 +172,7 @@ int cluster_add_new_node(struct cluster *cluster, struct client *client,
         strcpy((char *) vnode->host, addr);
         strcpy((char *) vnode->port, port);
         vnode->upper_bound = upper_bound;
-        vnode->link = client;
+        vnode->link = (struct client *) client;
 
         /*
          * Now we set to true the vnode flag indicating that this node is
@@ -187,7 +191,7 @@ int cluster_add_new_node(struct cluster *cluster, struct client *client,
  * obtained by doing CRC32(key) % RING_SIZE and represents a point in
  * the consistent hash ring
  */
-struct cluster_node *cluster_get_node(struct cluster *cluster,
+struct cluster_node *cluster_get_node(const struct cluster *cluster,
                                       uint16_t hash_value) {
 
     /*
@@ -221,12 +225,12 @@ struct cluster_node *cluster_get_node(struct cluster *cluster,
 }
 
 
-size_t cluster_size(struct cluster *cluster) {
+size_t cluster_size(const struct cluster *cluster) {
     return cluster->nodes->len;
 }
 
 
-void log_cluster_ring(struct cluster *cluster) {
+void log_cluster_ring(const struct cluster *cluster) {
 
     struct list_node *head = cluster->nodes->head;
     for (struct list_node *cur = head; cur; cur = cur->next) {

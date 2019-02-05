@@ -61,20 +61,20 @@ uint16_t hash(const char *);
  * Add new node into the cluster, create a new node to be inserted into the
  * list at the right index
  */
-int cluster_add_new_node(struct cluster *,
-        struct client *, const char *, const char *, bool);
+int cluster_add_new_node(struct cluster *, const struct client *,
+                         const char *, const char *, bool);
 
 /*
  * Retrieve a cluster node based on the index, cluster node list is sorted by
  * upper_bound limit of each node
  */
-struct cluster_node *cluster_get_node(struct cluster *, uint16_t);
+struct cluster_node *cluster_get_node(const struct cluster *, uint16_t);
 
 /* Return the size of the hash ring */
-size_t cluster_size(struct cluster *);
+size_t cluster_size(const struct cluster *);
 
 /* Utility function, log the hashring distribution of virtual node */
-void log_cluster_ring(struct cluster *);
+void log_cluster_ring(const struct cluster *);
 
 
 #endif

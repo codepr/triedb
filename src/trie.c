@@ -116,6 +116,7 @@ Trie *trie_create(void) {
     Trie *trie = tmalloc(sizeof(*trie));
     trie->root = trie_create_node(' ');
     trie->size = 0;
+    trie->longest_key = 0;
     return trie;
 }
 
@@ -266,6 +267,9 @@ static bool trie_node_search(const struct trie_node *root,
 struct node_data *trie_insert(Trie *trie, const char *key, const void *data) {
 
     assert(trie && key);
+
+    if (strlen(key) > trie->longest_key)
+        trie->longest_key = strlen(key);
 
     return trie_node_insert(trie->root, key, data, &trie->size);
 }
@@ -487,8 +491,8 @@ static void trie_node_prefix_find(const struct trie_node *node,
         // function recursively for child node, caring for the size of the
         // current string, if exceed bounds, double the size of the string
         // host
-        if (level == malloc_size(str))
-            str = trealloc(str, level * 2);
+        /* if (level == malloc_size(str)) */
+        /*     str = trealloc(str, level * 2); */
         str[level] = ((struct trie_node *) cur->data)->chr;
         trie_node_prefix_find(cur->data, str, level + 1, keys);
     }
@@ -509,14 +513,16 @@ List *trie_prefix_find(const Trie *trie, const char *prefix) {
     List *keys = list_create(NULL);
 
     // Check all possible sub-paths and add the resulting key to the result
-    char *str = tmalloc(32);
     size_t plen = strlen(prefix);
-    strcpy(str, prefix);
+    int len = plen < trie->longest_key ? plen : trie->longest_key;
+    char str[trie->longest_key];
+    strncpy(str, prefix, len);
+    str[len] = '\0';
 
     // Recursive function call
     trie_node_prefix_find(node, str, plen, keys);
 
-    tfree(str);
+    /* tfree(str); */
 
     return keys;
 }

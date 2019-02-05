@@ -65,6 +65,7 @@ struct trie_node {
 struct Trie {
     struct trie_node *root;
     size_t size;
+    int longest_key;
 };
 
 // Returns new trie node (initialized to NULLs)

@@ -44,13 +44,13 @@
 #define BULK_REQUEST            0x01
 
 /* Header flags */
-#define F_NOFLAG                1 << 0
-#define F_BULKREQUEST           1 << 1
-#define F_PREFIXREQUEST         1 << 2
-#define F_FROMNODEREQUEST       1 << 3
-#define F_FROMNODERESPONSE      1 << 4
-#define F_JOINREQUEST           1 << 5
-#define F_FROMNODEREPLY         1 << 6
+#define F_NOFLAG                (1 << 0)
+#define F_BULKREQUEST           (1 << 1)
+#define F_PREFIXREQUEST         (1 << 2)
+#define F_FROMNODEREQUEST       (1 << 3)
+#define F_FROMNODERESPONSE      (1 << 4)
+#define F_JOINREQUEST           (1 << 5)
+#define F_FROMNODEREPLY         (1 << 6)
 
 /* Command type */
 #define EMPTY_COMMAND           0x00
@@ -60,11 +60,11 @@
 #define KEY_VAL_LIST_COMMAND    0x04
 
 /* struct response type */
-#define NO_CONTENT              0x00
-#define DATA_CONTENT            0x01
-#define VALUE_CONTENT           0x02
-#define LIST_CONTENT            0x03
-#define KVLIST_CONTENT          0x04
+#define EMPTY_PAYLOAD           0x00
+#define DATA_PAYLOAD            0x01
+#define VALUE_PAYLOAD           0x02
+#define LIST_PAYLOAD            0x03
+#define KVLIST_PAYLOAD          0x04
 
 #define COMMAND_COUNT           16
 
@@ -124,9 +124,9 @@ struct header {
 };
 
 
-/********************************************
- *             REQUEST STRUCTS
- ********************************************/
+/********************************************/
+/*             REQUEST STRUCTS              */
+/********************************************/
 
 
 /*
@@ -159,7 +159,7 @@ struct keyval {
  * QUIT
  */
 struct empty_command {
-    struct header *header;
+    struct header *hdr;
 };
 
 /*
@@ -169,7 +169,7 @@ struct empty_command {
  * TODO: remove is_prefix
  */
 struct key_command {
-    struct header *header;
+    struct header *hdr;
     uint16_t keysize;
     uint8_t *key;
     uint8_t is_prefix;
@@ -182,7 +182,7 @@ struct key_command {
  * TODO: remove is_prefix
  */
 struct keyval_command {
-    struct header *header;
+    struct header *hdr;
     uint16_t keysize;
     uint32_t valsize;
     uint8_t *key;
@@ -196,14 +196,14 @@ struct keyval_command {
  * fields like the time to live (`ttl`) or the `is_prefix` flag e.g. DEL .. etc
  */
 struct key_list_command {
-    struct header *header;
+    struct header *hdr;
     uint32_t len;
     struct key **keys;
 };
 
 // For commands list formed by key-value complete pairs
 struct keyval_list_command {
-    struct header *header;
+    struct header *hdr;
     uint16_t len;
     struct keyvalue **pairs;
 };
@@ -216,10 +216,10 @@ struct keyval_list_command {
 struct command {
     uint8_t cmdtype;
     union {
-        struct empty_command *ecommand;
-        struct key_command *kcommand;
-        struct keyval_command *kvcommand;
-        struct key_list_command *klcommand;
+        struct empty_command *e_cmd;
+        struct key_command *k_cmd;
+        struct keyval_command *kv_cmd;
+        struct key_list_command *kl_cmd;
     };
 };
 
@@ -229,15 +229,15 @@ struct command {
  */
 struct bulk_command {
     uint32_t ncommands;
-    struct command **commands;
+    struct command **cmds;
 };
 
 /* A complete request, can be either a single command or a bulk one */
 struct request {
     uint8_t reqtype;
     union {
-        struct command *command;
-        struct bulk_command *bulk_command;
+        struct command *cmd;
+        struct bulk_command *bulk_cmd;
     };
 };
 
@@ -255,10 +255,10 @@ struct request *unpack_request(struct buffer *);
 
 /* Request builder functions, essentially mirroring of response builders */
 struct request *make_key_request(const uint8_t *, uint8_t, uint16_t, uint8_t);
-struct request *make_keyval_request(const uint8_t *,
-        const uint8_t *, uint8_t, uint16_t, uint8_t);
-struct request *make_keylist_request(const List *,
-        uint8_t, const uint8_t *, uint8_t);
+struct request *make_keyval_request(const uint8_t *, const uint8_t *,
+                                    uint8_t, uint16_t, uint8_t);
+struct request *make_keylist_request(const List *, uint8_t,
+                                     const uint8_t *, uint8_t);
 
 /* Cleanup functions */
 void free_request(struct request *);
@@ -270,34 +270,34 @@ void free_request(struct request *);
 
 
 // struct response structure without body, like ACK etc.
-struct no_content {
-    struct header *header;
+struct empty_payload {
+    struct header *hdr;
     uint8_t code;
 };
 
 // struct response with data, like GET etc.
-struct data_content {
-    struct header *header;
+struct data_payload {
+    struct header *hdr;
     uint32_t datalen;
     uint8_t *data;
 };
 
 // struct response with values, like COUNT etc.
-struct value_content {
-    struct header *header;
+struct value_payload {
+    struct header *hdr;
     uint32_t val;
 };
 
 // struct response with list, like glob GET etc.
-struct list_content {
-    struct header *header;
+struct list_payload {
+    struct header *hdr;
     uint16_t len;
     struct key **keys;
 };
 
 // Response with key-val pairs list
-struct kvlist_content {
-    struct header *header;
+struct kvlist_payload {
+    struct header *hdr;
     uint16_t len;
     struct keyval **pairs;
 };
@@ -306,11 +306,11 @@ struct kvlist_content {
 struct response {
     uint8_t restype;
     union {
-        struct no_content *ncontent;
-        struct data_content *dcontent;
-        struct value_content *vcontent;
-        struct list_content *lcontent;
-        struct kvlist_content *kvlcontent;
+        struct empty_payload *e_pld;
+        struct data_payload *d_pld;
+        struct value_payload *v_pld;
+        struct list_payload *l_pld;
+        struct kvlist_payload *kvl_pld;
     };
 };
 
@@ -328,8 +328,8 @@ struct response *make_kvlist_response(const List *, const uint8_t *, uint8_t);
 
 
 void ack_response_init(struct response *, uint8_t, int, const char *);
-void data_response_init(struct response *,
-        const uint8_t *, uint8_t, const char *);
+void data_response_init(struct response *, const uint8_t *,
+                        uint8_t, const char *);
 void value_response_init(struct response *, uint32_t, uint8_t, const char *);
 
 /*
