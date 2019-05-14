@@ -1,0 +1,143 @@
+0.5.1 - 2019/02/03
+==================
+
+- Add initial support for databases which uses hashtable as under the hood
+  data structure
+- Refactored some functions on server
+
+0.5.0 - 2019/01/25
+==================
+
+- Fixed bugs in cluster formation
+- Add naive virtual nodes implementation to distribute load between nodes more
+  evenly
+
+
+0.4.9 - 2019/01/24
+==================
+
+- First almost working cluster implementation, lot of corner case to be handled
+
+
+0.4.7 - 2019/01/20
+==================
+
+- Started implementation of distribution through consistent hash ring
+- Fixed some memory leaks
+- Splitted protocol.h into pack.h to move some responsibilities of
+  serialization and deserialization and let protocol to only handle structure
+  of packets and communication
+
+
+0.4.5 - 2019/01/15
+==================
+
+- Refactored code to address some readability issues and respecting a better
+  style of coding in not abusing typedef declaration that hides when a structure
+  is not encapsulated and accessed by only dedicated functions (e.g. containers).
+- Incrementing cluster mode, handling connection from nodes.
+- Add additional stats to information global structure.
+
+
+0.4.4 - 2019/01/14
+==================
+
+- Add basic database abstraction, for now it only gives a level of namespacing
+  to ease the management of key storing.
+- Add startup mode, standalone on a single node and cluster for a distributed
+  system, opening an additional port for bus communication.
+
+
+0.4.2 - 2019/01/13
+==================
+
+- Add max_request_size configuration and handling the case
+- Add bulk command handling on the PUT command, now it is possible to pipe
+  a stream of PUT commands into a single request
+- Add tcp backlog to configuration, if the value exceed
+  /proc/sys/net/core/somaxconn, it will be clipped to that value.
+
+
+0.3.6 - 2019/01/07
+==================
+
+- Add max_memory and mem_reclaim_time options on configuration, still to be implemented.
+
+
+0.3.5 - 2019/01/06
+==================
+
+- Client connections are now stored in a hashtable instead of a linked list
+
+
+0.3.4 - 2019/01/02
+==================
+
+- Add KEYS command, a naive implementation
+
+
+0.3.3 - 2019/01/01
+==================
+
+- Fixed bad-malloc_usable_size issue and re-implemented memory tracking
+- Fixed size of the trie update on prefix delete operation
+
+
+0.3.2 - 2018/12/31
+==================
+
+- Add prefix command handling to PUT, but sanitizers report an issue
+  bad-malloc_usable_size
+- Add vector structure, for further improvements on lookup-heavy parts of the
+  program
+
+
+0.3.1 - 2018/12/30
+==================
+
+- Refactored trie structure in order to reduce the homongous memory
+  requirements it demanded, while not decreasing that much the performance
+- Added INC and DEC support for prefix range query
+
+
+0.2.4 - 2018/12/28
+==================
+
+- Add prefix command handling to INC and DEC commands, now they can be applied
+  in a glob matching key
+
+
+0.2.3 - 2018/12/28
+==================
+
+- Add basic configuration handling
+- Add COUNT command, prefix command, return the number of keys matching a given
+  prefix
+- Fixed bug in insertion causing memory leaks while updating keys
+
+
+0.2.0 - 2018/12/27
+==================
+
+- Refactored binary protocol design and implementation
+- Started abstraction over EPOLL to create a more flexible event loop
+
+
+0.1.5 - 2018/12/24
+==================
+
+- Add custom memory management to track memory usage
+- Add array of keys to DEL command to delete set of keys at once
+- Fixed a moltitude of bugs, so now there's only a moltitude of bugs remaining
+
+
+0.1.0 - 2018/12/09
+==================
+
+- Add single thread EPOLL server, refined protocol
+
+
+0.0.1 - 2018/12/08
+==================
+
+- First commit, implemented basic trie data structure.
