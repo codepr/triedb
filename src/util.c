@@ -130,7 +130,6 @@ char *update_integer_string(char *str, int num) {
     size_t len = strlen(tmp);
     str = trealloc(str, len + 1);
     sprintf(str, "%s", tmp);
-    /* strncpy(str, tmp, len + 1); */
 
     return str;
 }

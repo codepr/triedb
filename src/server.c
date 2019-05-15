@@ -314,7 +314,7 @@ exit:
 static int read_data(int fd, unsigned char *buffer, union triedb_packet *pkt) {
 
     ssize_t bytes = 0;
-    unsigned char opcode = 0;
+    unsigned char header = 0;
 
     /*
      * We must read all incoming bytes till an entire packet is received. This
@@ -322,7 +322,7 @@ static int read_data(int fd, unsigned char *buffer, union triedb_packet *pkt) {
      * send the size of the remaining packet as the second byte. By knowing it
      * we know if the packet is ready to be deserialized and used.
      */
-    bytes = recv_packet(fd, &buffer, &opcode);
+    bytes = recv_packet(fd, &buffer, &header);
 
     /*
      * Looks like we got a client disconnection.
@@ -347,7 +347,7 @@ static int read_data(int fd, unsigned char *buffer, union triedb_packet *pkt) {
      * Unpack received bytes into a triedb_packet structure and execute the
      * correct handler based on the type of the operation.
      */
-    unpack_triedb_packet(buffer, pkt, opcode, bytes);
+    unpack_triedb_packet(buffer, pkt, header, bytes);
 
     return 0;
 
@@ -497,7 +497,7 @@ static void *worker(void *arg) {
 
             } else if (e_events[i].events & EPOLLIN) {
                 struct io_event *event = e_events[i].data.ptr;
-                handlers[event->payload->header.bits.type](event);
+                handlers[event->payload->header.bits.opcode](event);
                 epoll_mod(event->epollfd, event->client->fd, EPOLLOUT, event);
                 close(event->io_event);
                 triedb_packet_destroy(event->payload);
@@ -525,7 +525,7 @@ exit:
  * - flags -> flags pointer, copy the flag setting of the incoming packet,
  *            again for simplicity and convenience of the caller.
  */
-ssize_t recv_packet(int clientfd, unsigned char **buf, unsigned char *opcode) {
+ssize_t recv_packet(int clientfd, unsigned char **buf, unsigned char *header) {
 
     ssize_t nbytes = 0;
     unsigned char *tmpbuf = *buf;
@@ -534,10 +534,10 @@ ssize_t recv_packet(int clientfd, unsigned char **buf, unsigned char *opcode) {
     if ((nbytes = recv_bytes(clientfd, *buf, 4)) <= 0)
         return -ERRCLIENTDC;
 
-    *opcode = *tmpbuf;
+    *header = *tmpbuf;
     tmpbuf++;
 
-    if (DEL < *opcode || PUT > *opcode)
+    if (DEL < *header >> 4 || PUT > *header >> 4)
         return -ERRPACKETERR;
 
     /*

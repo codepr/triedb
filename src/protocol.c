@@ -161,10 +161,8 @@ static size_t unpack_triedb_get(const unsigned char *raw,
     pkt->get = get;
 
     /* Read topic length and topic of the soon-to-be-published message */
-    uint16_t keylen = unpack_u16((const uint8_t **) &raw);
-    pkt->get.keylen = keylen;
-    pkt->get.key = tmalloc(keylen + 1);
-    unpack_bytes((const uint8_t **) &raw, keylen, pkt->get.key);
+    pkt->get.key = tmalloc(len + 1);
+    unpack_bytes((const uint8_t **) &raw, len, pkt->get.key);
 
     return len;
 }
@@ -180,7 +178,7 @@ int unpack_triedb_packet(const unsigned char *raw,
     union header header = { .byte = opcode };
 
     /* Call the appropriate unpack handler based on the message type */
-    rc = unpack_handlers[header.bits.type](raw, &header, pkt, len);
+    rc = unpack_handlers[header.bits.opcode](raw, &header, pkt, len);
 
     return rc;
 }
@@ -188,12 +186,12 @@ int unpack_triedb_packet(const unsigned char *raw,
 
 void triedb_packet_destroy(union triedb_packet *pkt) {
 
-    switch (pkt->header.bits.type) {
-        case PUT_TYPE:
+    switch (pkt->header.bits.opcode) {
+        case PUT:
             tfree(pkt->put.key);
             tfree(pkt->put.val);
             break;
-        case GET_TYPE:
+        case GET:
             tfree(pkt->get.key);
             break;
     }

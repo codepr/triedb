@@ -92,16 +92,12 @@
 
 /* Message types */
 enum opcode {
-    PUT = 0x10,
-    GET = 0x20,
-    DEL = 0x30
-};
-
-
-enum optype {
-    PUT_TYPE = 1,
-    GET_TYPE = 2,
-    DEL_TYPE = 3
+    PUT = 1,
+    GET = 2,
+    DEL = 3,
+    TTL = 4,
+    INC = 5,
+    DEC = 6
 };
 
 
@@ -111,8 +107,8 @@ union header {
 
     struct {
         unsigned reserved : 3;
-        unsigned prefix: 1;
-        unsigned type : 4;
+        unsigned prefix : 1;
+        unsigned opcode : 4;
     } bits;
 };
 
@@ -132,12 +128,24 @@ struct get {
 
     union header header;
 
-    unsigned short keylen;
     unsigned char *key;
 };
 
 
 typedef struct get del;
+
+typedef struct get inc;
+
+typedef struct get dec;
+
+
+struct ttl {
+
+    union header header;
+
+    int ttl;
+    unsigned char *key;
+};
 
 
 struct ack {
@@ -156,6 +164,7 @@ union triedb_packet {
 
     struct put put;
     struct get get;
+    struct ttl ttl;
 
 };
 
