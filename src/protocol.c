@@ -64,6 +64,18 @@ static unpack_handler *unpack_handlers[4] = {
 };
 
 
+typedef void pack_handler(unsigned char *, const union tritedb_response *);
+
+static void pack_response_ack(unsigned char *, const union tritedb_response *);
+
+static pack_handler *pack_handlers[4] = {
+    NULL,
+    pack_response_ack,
+    NULL,
+    pack_response_ack
+};
+
+
 static const int MAX_LEN_BYTES = 4;
 
 
@@ -198,6 +210,40 @@ void triedb_packet_destroy(union triedb_packet *pkt) {
 
     tfree(pkt);
 }
+
+
+struct ack_response *ack_response(unsigned char byte, unsigned char rc) {
+    struct ack_response *response = tmalloc(sizeof(*response));
+    response->header.byte = byte;
+    response->rc = rc;
+    return response;
+}
+
+
+static void pack_response_ack(unsigned char *raw,
+                              const union tritedb_response *res) {
+    pack_u8(&raw, res->ack_res.header.byte);
+    encode_length(raw, 1);
+    pack_u8(&raw, res->ack_res.rc);
+}
+
+
+bstring pack_ack(unsigned char byte, unsigned rc) {
+    unsigned char raw[3];
+    unsigned char *praw = &raw[0];
+    pack_u8(&praw, byte);
+    encode_length(praw, 1);
+    pack_u8(&praw, rc);
+    return bstring_copy((const char *) raw, 3);
+}
+
+
+void pack_response(unsigned char *raw,
+                   const union tritedb_response *res, unsigned type) {
+    pack_handlers[type](raw, res);
+}
+
+
 /* #<{(| */
 /*  * Conversion table for request, maps OPCODE -> COMMAND_TYPE, it's still a */
 /*  * shitty abstraction, further improvements planned on future refactoring */

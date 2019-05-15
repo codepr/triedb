@@ -96,6 +96,9 @@ static handler *handlers[4] = {
 };
 
 
+static bstring ack_replies[3];
+
+
 static int put_handler(struct io_event *event) {
 
     union triedb_packet *packet = event->payload;
@@ -105,20 +108,20 @@ static int put_handler(struct io_event *event) {
     pthread_spin_lock(&spinlock);
 #endif
 
-    /* if (packet->header.bits.prefix == 1) { */
-    /*     database_prefix_set(c->db, (const char *) packet->put.key, */
-    /*                         packet->put.val, packet->put.ttl); */
-    /* } else { */
+    if (packet->header.bits.prefix == 1) {
+        database_prefix_set(c->db, (const char *) packet->put.key,
+                            packet->put.val, packet->put.ttl);
+    } else {
         database_insert(c->db, (const char *) packet->put.key,
                         packet->put.val, packet->put.ttl);
         // Update total counter of keys
         triedb.keyspace_size++;
-    /* } */
+    }
 
 #if WORKERS > 1
     pthread_spin_unlock(&spinlock);
 #endif
-    event->reply = bstring_new("OK");
+    event->reply = ack_replies[OK];
 
     return 0;
 }
@@ -149,7 +152,7 @@ static int get_handler(struct io_event *event) {
 
 nok:
 
-    event->reply = bstring_new("NO");
+    event->reply = ack_replies[NOK];
 
     return 0;
 
@@ -187,23 +190,83 @@ static int del_handler(struct io_event *event) {
         // Update total keyspace counter
         triedb.keyspace_size -= currsize - database_size(c->db);
 
-        event->reply = bstring_new("OK");
+        event->reply = ack_replies[OK];
 
     } else {
 #if WORKERS > 1
         pthread_spin_lock(&spinlock);
 #endif
-        /* bool found = database_remove(c->db, (const char *) packet->get.key); */
+        bool found = database_remove(c->db, (const char *) packet->get.key);
 #if WORKERS > 1
         pthread_spin_unlock(&spinlock);
 #endif
-        /* if (found == false) */
-        /*     event->reply = bstring_new("NO"); */
-        /* else { */
-        /*     // Update total keyspace counter */
-        /*     triedb.keyspace_size--; */
-        /*     event->reply = bstring_new("OK"); */
-        /* } */
+        if (found == false)
+            event->reply = ack_replies[NOK];
+        else {
+            // Update total keyspace counter
+            triedb.keyspace_size--;
+            event->reply = ack_replies[OK];
+        }
+    }
+
+    return 0;
+}
+
+
+static bool compare_ttl(void *arg1, void *arg2) {
+
+    time_t now = time(NULL);
+
+    /* cast to cluster_node */
+    const struct db_item *n1 = ((struct expiring_key *) arg1)->item;
+    const struct db_item *n2 = ((struct expiring_key *) arg2)->item;
+
+    time_t delta_l1 = (n1->ctime + n1->ttl) - now;
+    time_t delta_l2 = (n2->ctime + n2->ttl) - now;
+
+    return delta_l1 <= delta_l2;
+}
+
+
+static int ttl_handler(struct io_event *event) {
+
+    union triedb_packet *packet = event->payload;
+    struct client *c = event->client;
+    void *val = NULL;
+
+    // Check for key presence in the trie structure
+    bool found = trie_find(c->db->data, (const char *) packet->ttl.key, &val);
+
+    if (found == false || val == NULL) {
+        event->reply = ack_replies[NOK];
+    } else {
+        struct db_item *item = val;
+        bool has_ttl = !(item->ttl < 0);
+        item->ttl = packet->ttl.ttl;
+
+        /*
+         * It's a new TTL, so we update creation_time to now in order to
+         * calculate the effective expiration of the key
+         */
+        item->ctime = item->lstime = time(NULL);
+        struct expiring_key *ek = tmalloc(sizeof(*ek));
+        ek->item = item;
+        ek->key = tstrdup((const char *) packet->ttl.key);
+        ek->data_ptr = c->db->data;
+
+        /*
+         * Push into the expiring keys list and merge sort it shortly after,
+         * this way we have a mostly updated list of expiring keys at each
+         * insert, making it simpler and more efficient to cycle through them
+         * and remove it later.
+         */
+        if (!has_ttl)
+            vector_append(triedb.expiring_keys, ek);
+
+        vector_qsort(triedb.expiring_keys,
+                     compare_ttl, sizeof(struct expiring_key));
+
+        event->reply = ack_replies[OK];
     }
 
     return 0;
@@ -653,6 +716,9 @@ static inline int database_destructor(struct hashtable_entry *entry) {
 
 int start_server(const char *addr, const char *port) {
 
+    for (int i = 0; i < 3; i++)
+        ack_replies[i] = pack_ack(ACK, i);
+
 #if WORKERS > 1
     pthread_spin_init(&spinlock, PTHREAD_PROCESS_SHARED);
 #endif
@@ -696,6 +762,9 @@ int start_server(const char *addr, const char *port) {
 
     hashtable_destroy(triedb.dbs);
     hashtable_destroy(triedb.clients);
+
+    for (int i = 0; i < 3; i++)
+        bstring_destroy(ack_replies[i]);
 
     tinfo("triedb v%s exiting", VERSION);
 
@@ -1216,7 +1285,7 @@ int start_server(const char *addr, const char *port) {
 /*     uint64_t now = time(NULL); */
 /*  */
 /*     #<{(| cast to cluster_node |)}># */
-/*     const struct node_data *n1 = ((struct expiring_key *) arg1)->nd; */
+/*     const struct node_data *n1 = ((struct expiring_key *) arg1)->item; */
 /*     const struct node_data *n2 = ((struct expiring_key *) arg2)->nd; */
 /*  */
 /*     uint64_t delta_l1 = (n1->ctime + n1->ttl) - now; */

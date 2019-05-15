@@ -32,7 +32,7 @@
 // #include <stdint.h>
 // #include "list.h"
 // #include "util.h"
-// #include "pack.h"
+#include "pack.h"
 
 /* Error codes */
 #define OK                      0x00
@@ -92,6 +92,7 @@
 
 /* Message types */
 enum opcode {
+    ACK = 0,
     PUT = 1,
     GET = 2,
     DEL = 3,
@@ -171,6 +172,15 @@ union triedb_packet {
 
 /* RESPONSE */
 
+
+struct tuple {
+    unsigned ttl;
+    unsigned short keylen;
+    unsigned char *key;
+    unsigned char *val;
+};
+
+
 struct ack_response {
 
     union header header;
@@ -185,12 +195,14 @@ struct get_response {
 
     unsigned short tuples_len;
 
-    struct {
-        unsigned ttl;
-        unsigned short keylen;
-        unsigned char *key;
-        unsigned char *val;
-    } *tuples;
+    struct tuple *tuples;
+};
+
+
+union tritedb_response {
+
+    struct ack_response ack_res;
+    struct get_response get_res;
 };
 
 
@@ -204,6 +216,14 @@ int unpack_triedb_packet(const unsigned char *,
 unsigned char *pack_triedb_packet(const union triedb_packet *, unsigned);
 
 void triedb_packet_destroy(union triedb_packet *);
+
+struct ack_response *ack_response(unsigned char , unsigned char);
+
+struct get_response *get_response(unsigned char, unsigned short, struct tuple *);
+
+void pack_response(unsigned char *, const union tritedb_response *, unsigned);
+
+bstring pack_ack(unsigned char, unsigned);
 
 
 /*

@@ -47,6 +47,12 @@ size_t bstring_len(const bstring);
  */
 bstring bstring_new(const char *);
 
+/*
+ * Copy the content of a bstring returning another one with the copied
+ * content till a given nr of bytes
+ */
+bstring bstring_copy(const char *, size_t);
+
 /* Bytestring constructor, it creates a new empty bytstring of a given size */
 bstring bstring_empty(size_t);
 
