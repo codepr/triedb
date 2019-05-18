@@ -58,7 +58,7 @@ struct io_event {
     eventfd_t io_event;
     struct client *client;
     bstring reply;
-    union triedb_packet *payload;
+    union triedb_request *payload;
 };
 
 /* Global information structure */
@@ -101,7 +101,7 @@ static bstring ack_replies[3];
 
 static int put_handler(struct io_event *event) {
 
-    union triedb_packet *packet = event->payload;
+    union triedb_request *packet = event->payload;
     struct client *c = event->client;
 
 #if WORKERS > 1
@@ -129,7 +129,7 @@ static int put_handler(struct io_event *event) {
 
 static int get_handler(struct io_event *event) {
 
-    union triedb_packet *packet = event->payload;
+    union triedb_request *packet = event->payload;
     struct client *c = event->client;
 
     void *val = NULL;
@@ -161,7 +161,7 @@ nok:
 
 static int del_handler(struct io_event *event) {
 
-    union triedb_packet *packet = event->payload;
+    union triedb_request *packet = event->payload;
     struct client *c = event->client;
 
     size_t currsize = 0;
@@ -230,7 +230,7 @@ static bool compare_ttl(void *arg1, void *arg2) {
 
 static int ttl_handler(struct io_event *event) {
 
-    union triedb_packet *packet = event->payload;
+    union triedb_request *packet = event->payload;
     struct client *c = event->client;
     void *val = NULL;
 
@@ -374,7 +374,7 @@ exit:
 }
 
 /* Handle incoming requests, after being accepted or after a reply */
-static int read_data(int fd, unsigned char *buffer, union triedb_packet *pkt) {
+static int read_data(int fd, unsigned char *buffer, union triedb_request *pkt) {
 
     ssize_t bytes = 0;
     unsigned char header = 0;
@@ -407,10 +407,10 @@ static int read_data(int fd, unsigned char *buffer, union triedb_packet *pkt) {
     info.bytes_recv += bytes;
 
     /*
-     * Unpack received bytes into a triedb_packet structure and execute the
+     * Unpack received bytes into a triedb_request structure and execute the
      * correct handler based on the type of the operation.
      */
-    unpack_triedb_packet(buffer, pkt, header, bytes);
+    unpack_triedb_request(buffer, pkt, header, bytes);
 
     return 0;
 
@@ -563,7 +563,7 @@ static void *worker(void *arg) {
                 handlers[event->payload->header.bits.opcode](event);
                 epoll_mod(event->epollfd, event->client->fd, EPOLLOUT, event);
                 close(event->io_event);
-                triedb_packet_destroy(event->payload);
+                triedb_request_destroy(event->payload);
             }
         }
     }

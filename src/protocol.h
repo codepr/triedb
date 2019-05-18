@@ -92,13 +92,18 @@
 
 /* Message types */
 enum opcode {
-    ACK = 0,
-    PUT = 1,
-    GET = 2,
-    DEL = 3,
-    TTL = 4,
-    INC = 5,
-    DEC = 6
+    ACK  = 0,
+    PUT  = 1,
+    GET  = 2,
+    DEL  = 3,
+    TTL  = 4,
+    INC  = 5,
+    DEC  = 6,
+    CNT  = 7,
+    USE  = 8,
+    KEYS = 9,
+    PING = 10,
+    QUIT = 11
 };
 
 
@@ -157,7 +162,7 @@ struct ack {
 };
 
 
-union triedb_packet {
+union triedb_request {
 
     struct ack ack;
 
@@ -199,7 +204,7 @@ struct get_response {
 };
 
 
-union tritedb_response {
+union triedb_response {
 
     struct ack_response ack_res;
     struct get_response get_res;
@@ -210,18 +215,18 @@ int encode_length(unsigned char *, size_t);
 
 size_t decode_length(const unsigned char **, unsigned *);
 
-int unpack_triedb_packet(const unsigned char *,
-                          union triedb_packet *, unsigned char, size_t);
+int unpack_triedb_request(const unsigned char *,
+                          union triedb_request *, unsigned char, size_t);
 
-unsigned char *pack_triedb_packet(const union triedb_packet *, unsigned);
+unsigned char *pack_triedb_request(const union triedb_request *, unsigned);
 
-void triedb_packet_destroy(union triedb_packet *);
+void triedb_request_destroy(union triedb_request *);
 
 struct ack_response *ack_response(unsigned char , unsigned char);
 
 struct get_response *get_response(unsigned char, unsigned short, struct tuple *);
 
-void pack_response(unsigned char *, const union tritedb_response *, unsigned);
+void pack_response(unsigned char *, const union triedb_response *, unsigned);
 
 bstring pack_ack(unsigned char, unsigned);
 

@@ -38,17 +38,17 @@
 
 typedef size_t unpack_handler(const unsigned char *,
                               union header *,
-                              union triedb_packet *,
+                              union triedb_request *,
                               size_t);
 
 static size_t unpack_triedb_put(const unsigned char *,
                                  union header *,
-                                 union triedb_packet *,
+                                 union triedb_request *,
                                  size_t);
 
 static size_t unpack_triedb_get(const unsigned char *,
                                  union header *,
-                                 union triedb_packet *,
+                                 union triedb_request *,
                                  size_t);
 
 
@@ -64,9 +64,9 @@ static unpack_handler *unpack_handlers[4] = {
 };
 
 
-typedef void pack_handler(unsigned char *, const union tritedb_response *);
+typedef void pack_handler(unsigned char *, const union triedb_response *);
 
-static void pack_response_ack(unsigned char *, const union tritedb_response *);
+static void pack_response_ack(unsigned char *, const union triedb_response *);
 
 static pack_handler *pack_handlers[4] = {
     NULL,
@@ -135,7 +135,7 @@ size_t decode_length(const unsigned char **buf, unsigned *pos) {
 
 static size_t unpack_triedb_put(const unsigned char *raw,
                                  union header *hdr,
-                                 union triedb_packet *pkt,
+                                 union triedb_request *pkt,
                                  size_t len) {
 
     struct put put = { .header = *hdr };
@@ -166,7 +166,7 @@ static size_t unpack_triedb_put(const unsigned char *raw,
 
 static size_t unpack_triedb_get(const unsigned char *raw,
                                  union header *hdr,
-                                 union triedb_packet *pkt,
+                                 union triedb_request *pkt,
                                  size_t len) {
 
     struct get get = { .header = *hdr };
@@ -180,8 +180,8 @@ static size_t unpack_triedb_get(const unsigned char *raw,
 }
 
 
-int unpack_triedb_packet(const unsigned char *raw,
-                          union triedb_packet *pkt,
+int unpack_triedb_request(const unsigned char *raw,
+                          union triedb_request *pkt,
                           unsigned char opcode,
                           size_t len) {
 
@@ -196,7 +196,7 @@ int unpack_triedb_packet(const unsigned char *raw,
 }
 
 
-void triedb_packet_destroy(union triedb_packet *pkt) {
+void triedb_request_destroy(union triedb_request *pkt) {
 
     switch (pkt->header.bits.opcode) {
         case PUT:
@@ -221,7 +221,7 @@ struct ack_response *ack_response(unsigned char byte, unsigned char rc) {
 
 
 static void pack_response_ack(unsigned char *raw,
-                              const union tritedb_response *res) {
+                              const union triedb_response *res) {
     pack_u8(&raw, res->ack_res.header.byte);
     encode_length(raw, 1);
     pack_u8(&raw, res->ack_res.rc);
@@ -239,7 +239,7 @@ bstring pack_ack(unsigned char byte, unsigned rc) {
 
 
 void pack_response(unsigned char *raw,
-                   const union tritedb_response *res, unsigned type) {
+                   const union triedb_response *res, unsigned type) {
     pack_handlers[type](raw, res);
 }
 
