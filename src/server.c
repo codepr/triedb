@@ -61,7 +61,7 @@
  * returned back to the IO thread that will write back to the client the
  * response packed into a bytestream.
  *
- *      MAIN
+ *      MAIN              1...N              1...N
  *
  *     [EPOLL]         [IO EPOLL]         [WORK EPOLL]
  *  ACCEPT THREAD    IO THREAD POOL    WORKER THREAD POOL
@@ -93,7 +93,13 @@
  */
 static pthread_spinlock_t spinlock;
 
-
+/*
+ * IO event strucuture, it's the main information that will be communicated
+ * between threads, every request packet will be wrapped into an IO event and
+ * passed to the work EPOLL, in order to be handled by the worker thread pool.
+ * Then finally, after the execution of the command, it will be updated and
+ * passed back to the IO epoll loop to be written back to the requesting client
+ */
 struct io_event {
     int epollfd;
     eventfd_t io_event;
@@ -117,6 +123,10 @@ static struct triedb triedb;
 /* Number of Worker threads, or the size of the worker pool */
 #define WORKERS 2
 
+/*
+ * Shared epoll object, contains the IO epoll and Worker epoll descriptors,
+ * as well as the server descriptor and the timer fd for repeated routines
+ */
 struct epoll {
     int io_epollfd;
     int w_epollfd;
@@ -636,7 +646,7 @@ static int read_data(int fd, unsigned char *buffer, union triedb_request *pkt) {
 
     /*
      * We must read all incoming bytes till an entire packet is received. This
-     * is achieved by following the MQTT v3.1.1 protocol specifications, which
+     * is achieved by following the TrieDB protocol specifications, which
      * send the size of the remaining packet as the second byte. By knowing it
      * we know if the packet is ready to be deserialized and used.
      */

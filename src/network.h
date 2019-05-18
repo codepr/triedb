@@ -92,7 +92,11 @@ ssize_t send_bytes(int, const unsigned char *, size_t);
  */
 ssize_t recv_bytes(int, unsigned char *, size_t);
 
-
+/*
+ * Register a timer descriptor to an epoll fd, struct itimerspec defines the
+ * interval of activation of the descriptor, which can be used to trigger
+ * routines that need to be repeated every N time slices
+ */
 int add_cron_task(int, const struct itimerspec *);
 
 
