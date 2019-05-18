@@ -39,53 +39,6 @@
 #define NOK                     0x01
 #define EOOM                    0x01
 
-/* struct request type */
-// #define SINGLE_REQUEST          0x00
-// #define BULK_REQUEST            0x01
-//
-// /* Header flags */
-// #define F_NOFLAG                1 << 0
-// #define F_BULKREQUEST           1 << 1
-// #define F_PREFIXREQUEST         1 << 2
-// #define F_FROMNODEREQUEST       1 << 3
-// #define F_FROMNODERESPONSE      1 << 4
-// #define F_JOINREQUEST           1 << 5
-// #define F_FROMNODEREPLY         1 << 6
-//
-// /* Command type */
-// #define EMPTY_COMMAND           0x00
-// #define KEY_COMMAND             0x01
-// #define KEY_VAL_COMMAND         0x02
-// #define KEY_LIST_COMMAND        0x03
-// #define KEY_VAL_LIST_COMMAND    0x04
-//
-// /* struct response type */
-// #define NO_CONTENT              0x00
-// #define DATA_CONTENT            0x01
-// #define VALUE_CONTENT           0x02
-// #define LIST_CONTENT            0x03
-// #define KVLIST_CONTENT          0x04
-//
-// #define COMMAND_COUNT           16
-//
-// /* Operation codes */
-// #define ACK                     0x00
-// #define PUT                     0x01
-// #define GET                     0x02
-// #define DEL                     0x03
-// #define TTL                     0x04
-// #define INC                     0x05
-// #define DEC                     0x06
-// #define COUNT                   0x07
-// #define KEYS                    0x08
-// #define USE                     0x09
-// #define CLUSTER_JOIN            0x0a
-// #define CLUSTER_MEMBERS         0x0b
-// #define PING                    0xfc
-// #define DB                      0xfd
-// #define INFO                    0xfe
-// #define QUIT                    0xff
-
 
 #define HEADER_LEN 2
 #define ACK_LEN    2
@@ -103,7 +56,8 @@ enum opcode {
     USE  = 8,
     KEYS = 9,
     PING = 10,
-    QUIT = 11
+    QUIT = 11,
+    DB   = 12
 };
 
 /*
@@ -194,6 +148,8 @@ typedef struct ack ping;
 
 typedef struct ack quit;
 
+typedef struct ack db;
+
 
 /*
  * Definition of a request, a union which encloses all possible command
@@ -211,6 +167,7 @@ union triedb_request {
     inc incr;
     cnt count;
     use usec;
+    db  get_db;
 
 };
 
