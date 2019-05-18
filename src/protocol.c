@@ -68,11 +68,17 @@ typedef void pack_handler(unsigned char *, const union triedb_response *);
 
 static void pack_response_ack(unsigned char *, const union triedb_response *);
 
-static pack_handler *pack_handlers[4] = {
+static void pack_response_cnt(unsigned char *, const union triedb_response *);
+
+static pack_handler *pack_handlers[8] = {
     NULL,
     pack_response_ack,
     NULL,
-    pack_response_ack
+    pack_response_ack,
+    pack_response_ack,
+    pack_response_ack,
+    pack_response_ack,
+    pack_response_cnt
 };
 
 
@@ -220,11 +226,27 @@ struct ack_response *ack_response(unsigned char byte, unsigned char rc) {
 }
 
 
+struct cnt_response *cnt_response(unsigned char byte, unsigned long long val) {
+    struct cnt_response *response = tmalloc(sizeof(*response));
+    response->header.byte = byte;
+    response->val = val;
+    return response;
+}
+
+
 static void pack_response_ack(unsigned char *raw,
                               const union triedb_response *res) {
     pack_u8(&raw, res->ack_res.header.byte);
     encode_length(raw, 1);
     pack_u8(&raw, res->ack_res.rc);
+}
+
+
+static void pack_response_cnt(unsigned char *raw,
+                              const union triedb_response *res) {
+    pack_u8(&raw, res->cnt_res.header.byte);
+    encode_length(raw, 1);
+    pack_u64(&raw, res->cnt_res.val);
 }
 
 
@@ -235,6 +257,16 @@ bstring pack_ack(unsigned char byte, unsigned rc) {
     encode_length(praw, 1);
     pack_u8(&praw, rc);
     return bstring_copy((const char *) raw, 3);
+}
+
+
+bstring pack_cnt(unsigned char byte, unsigned long long val) {
+    unsigned char raw[10];
+    unsigned char *praw = &raw[0];
+    pack_u8(&praw, byte);
+    encode_length(praw, 1);
+    pack_u64(&praw, val);
+    return bstring_copy((const char *) raw, 10);
 }
 
 

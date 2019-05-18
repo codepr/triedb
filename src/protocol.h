@@ -144,6 +144,8 @@ typedef struct get inc;
 
 typedef struct get dec;
 
+typedef struct get cnt;
+
 typedef struct get keys;
 
 
@@ -164,8 +166,6 @@ struct ack {
 };
 
 
-typedef struct ack cnt;
-
 typedef struct ack ping;
 
 typedef struct ack quit;
@@ -181,6 +181,7 @@ union triedb_request {
     struct ttl ttl;
 
     inc incr;
+    cnt count;
 
 };
 
@@ -214,10 +215,19 @@ struct get_response {
 };
 
 
+struct cnt_response {
+
+    union header header;
+
+    unsigned long long val;
+};
+
+
 union triedb_response {
 
     struct ack_response ack_res;
     struct get_response get_res;
+    struct cnt_response cnt_res;
 };
 
 
@@ -236,9 +246,13 @@ struct ack_response *ack_response(unsigned char , unsigned char);
 
 struct get_response *get_response(unsigned char, unsigned short, struct tuple *);
 
+struct cnt_response *cnt_response(unsigned char, unsigned long long);
+
 void pack_response(unsigned char *, const union triedb_response *, unsigned);
 
 bstring pack_ack(unsigned char, unsigned);
+
+bstring pack_cnt(unsigned char, unsigned long long);
 
 
 /*

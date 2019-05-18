@@ -362,6 +362,21 @@ static int dec_handler(struct io_event *event) {
 
 
 static int cnt_handler(struct io_event *event) {
+
+    int count = 0;
+    union triedb_request *packet = event->payload;
+    struct client *c = event->client;
+
+    /*
+     * Prefix operation by default, get the size of each key below the
+     * requested one, glob operation or the entire trie size in case of NULL
+     * key
+     */
+    count = !packet->count.key ? database_size(c->db) :
+        database_prefix_count(c->db, (const char *) packet->count.key);
+
+    event->reply = pack_cnt(CNT, count);
+
     return 0;
 }
 
