@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <time.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <netdb.h>
@@ -34,7 +35,6 @@
 #include <arpa/inet.h>
 #include <sys/un.h>
 #include <sys/epoll.h>
-#include <sys/timerfd.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/types.h>
@@ -299,4 +299,28 @@ int epoll_mod(int efd, int fd, int evs, void *data) {
 
 int epoll_del(int efd, int fd) {
     return epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL);
+}
+
+
+int add_cron_task(int epollfd, const struct itimerspec *timervalue) {
+
+    int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+
+    if (timerfd_settime(timerfd, 0, timervalue, NULL) < 0)
+        goto err;
+
+    // Add the timer to the event loop
+    struct epoll_event ev;
+    ev.data.fd = timerfd;
+    ev.events = EPOLLIN;
+
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, timerfd, &ev) < 0)
+        goto err;
+
+    return timerfd;
+
+err:
+
+    perror("add_cron_task");
+    return -1;
 }

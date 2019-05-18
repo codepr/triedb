@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/timerfd.h>
 #include "util.h"
 
 
@@ -90,6 +91,9 @@ ssize_t send_bytes(int, const unsigned char *, size_t);
  * store them in a buffer
  */
 ssize_t recv_bytes(int, unsigned char *, size_t);
+
+
+int add_cron_task(int, const struct itimerspec *);
 
 
 #endif

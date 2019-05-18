@@ -33,7 +33,6 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/epoll.h>
-#include <sys/timerfd.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <netinet/in.h>
@@ -75,7 +74,11 @@ struct epoll {
     int io_epollfd;
     int w_epollfd;
     int serverfd;
+    int expirefd;
 };
+
+
+static void expire_keys(void);
 
 /* Prototype for a command handler */
 typedef int handler(struct io_event *);
@@ -682,6 +685,7 @@ static void *worker(void *arg) {
     struct epoll *epoll = arg;
     int events = 0;
     eventfd_t val;
+    long int timers = 0;
 
     struct epoll_event *e_events =
         tmalloc(sizeof(struct epoll_event) * EPOLL_MAX_EVENTS);
@@ -720,7 +724,10 @@ static void *worker(void *arg) {
                        (void *) pthread_self());
 
                 goto exit;
-
+            } else if (e_events[i].data.fd == epoll->expirefd) {
+                (void) read(e_events[i].data.fd, &timers, sizeof(timers));
+                // Check for keys about to expire out
+                expire_keys();
             } else if (e_events[i].events & EPOLLIN) {
                 struct io_event *event = e_events[i].data.ptr;
                 // TODO free client and remove it from the global map in case
@@ -879,6 +886,21 @@ static inline int database_destructor(struct hashtable_entry *entry) {
 }
 
 
+static inline void expiring_keys_destructor(void *item) {
+
+    if (!item)
+        return;
+
+    struct expiring_key *ek = item;
+
+    if (ek->key)
+        tfree((char *) ek->key);
+
+    tfree(ek);
+
+}
+
+
 int start_server(const char *addr, const char *port) {
 
     for (int i = 0; i < 3; i++)
@@ -895,6 +917,7 @@ int start_server(const char *addr, const char *port) {
     /* Initialize global triedb instance */
     triedb.dbs = hashtable_new(database_destructor);
     triedb.clients = hashtable_new(client_destructor);
+    triedb.expiring_keys = vector_new(expiring_keys_destructor);
 
     /* Add it to the global map */
     hashtable_put(triedb.dbs, tstrdup(default_db->name), default_db);
@@ -906,6 +929,22 @@ int start_server(const char *addr, const char *port) {
         .w_epollfd = epoll_create1(0),
         .serverfd = sfd
     };
+
+
+    /* Start the expiration keys check routine */
+    struct itimerspec timervalue;
+
+    memset(&timervalue, 0x00, sizeof(timervalue));
+
+    timervalue.it_value.tv_sec = 0;
+    timervalue.it_value.tv_nsec = TTL_CHECK_INTERVAL;
+    timervalue.it_interval.tv_sec = 0;
+    timervalue.it_interval.tv_nsec = TTL_CHECK_INTERVAL;
+
+    // add expiration keys cron task
+    int exptimerfd = add_cron_task(epoll.w_epollfd, &timervalue);
+
+    epoll.expirefd = exptimerfd;
 
     epoll_add(epoll.io_epollfd, conf->run, EPOLLIN, NULL);
     epoll_add(epoll.w_epollfd, conf->run, EPOLLIN, NULL);
@@ -927,6 +966,7 @@ int start_server(const char *addr, const char *port) {
 
     hashtable_destroy(triedb.dbs);
     hashtable_destroy(triedb.clients);
+    vector_destroy(triedb.expiring_keys);
 
     for (int i = 0; i < 3; i++)
         bstring_destroy(ack_replies[i]);
