@@ -69,7 +69,7 @@ bool database_search(const struct database *db, const char *key, void **ret) {
     if (db_item->ttl > -1 && db_item->ttl <= (time(NULL) - db_item->ctime))
         // TODO free
         found = false;
-    *ret = (found && item) ? ((struct db_item *) item)->data : NULL;
+    *ret = (found && item) ? db_item : NULL;
     return found;
 }
 

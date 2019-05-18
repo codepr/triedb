@@ -170,7 +170,7 @@ static int get_handler(struct io_event *event) {
     if (found == false || val == NULL)
         goto nok;
 
-    event->reply = bstring_new(val);
+    event->reply = bstring_new(((struct db_item *) val)->data);
 
     return 0;
 
@@ -298,11 +298,65 @@ static int ttl_handler(struct io_event *event) {
 
 
 static int inc_handler(struct io_event *event) {
+
+    union triedb_request *packet = event->payload;
+    struct client *c = event->client;
+
+    if (packet->incr.header.bits.prefix == 1) {
+        database_prefix_inc(c->db, (const char *) packet->incr.key);
+    } else {
+
+        bool found = false;
+        void *val = NULL;
+
+        /* check for presence and increment it by one */
+        found = database_search(c->db, (const char *) packet->incr.key, &val);
+
+        if (found == false || !val) {
+            event->reply = ack_replies[NOK];
+        } else {
+
+            struct db_item *item = val;
+
+            if (!is_integer(item->data))
+                event->reply = ack_replies[NOK];
+            else
+                item->data = update_integer_string(item->data, 1);
+        }
+    }
+
     return 0;
 }
 
 
 static int dec_handler(struct io_event *event) {
+
+    union triedb_request *packet = event->payload;
+    struct client *c = event->client;
+
+    if (packet->incr.header.bits.prefix == 1) {
+        database_prefix_dec(c->db, (const char *) packet->incr.key);
+    } else {
+
+        bool found = false;
+        void *val = NULL;
+
+        /* check for presence and increment it by one */
+        found = database_search(c->db, (const char *) packet->incr.key, &val);
+
+        if (found == false || !val) {
+            event->reply = ack_replies[NOK];
+        } else {
+
+            struct db_item *item = val;
+
+            if (!is_integer(item->data))
+                event->reply = ack_replies[NOK];
+            else
+                item->data = update_integer_string(item->data, -1);
+        }
+    }
+
     return 0;
 }
 

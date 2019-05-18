@@ -180,6 +180,8 @@ union triedb_request {
     struct get get;
     struct ttl ttl;
 
+    inc incr;
+
 };
 
 
