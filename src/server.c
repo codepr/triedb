@@ -416,12 +416,23 @@ static int keys_handler(struct io_event *event) {
 
 
 static int ping_handler(struct io_event *event) {
+
+    // TODO send out a PONG
+    event->reply = ack_replies[OK];
+
     return 0;
 }
 
 
 static int quit_handler(struct io_event *event) {
-    return 0;
+
+    close(event->client->fd);
+    info.nclients--;
+
+    // Remove client from the clients map
+    hashtable_del(triedb.clients, event->client->uuid);
+
+    return -1;
 }
 
 
@@ -712,6 +723,8 @@ static void *worker(void *arg) {
 
             } else if (e_events[i].events & EPOLLIN) {
                 struct io_event *event = e_events[i].data.ptr;
+                // TODO free client and remove it from the global map in case
+                // of QUIT command (check return code)
                 handlers[event->payload->header.bits.opcode](event);
                 epoll_mod(event->epollfd, event->client->fd, EPOLLOUT, event);
                 close(event->io_event);
