@@ -146,6 +146,8 @@ typedef struct get dec;
 
 typedef struct get cnt;
 
+typedef struct get use;
+
 typedef struct get keys;
 
 
@@ -182,6 +184,7 @@ union triedb_request {
 
     inc incr;
     cnt count;
+    use usec;
 
 };
 

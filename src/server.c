@@ -363,7 +363,7 @@ static int dec_handler(struct io_event *event) {
 
 static int cnt_handler(struct io_event *event) {
 
-    int count = 0;
+    unsigned long long count = 0;
     union triedb_request *packet = event->payload;
     struct client *c = event->client;
 
@@ -382,6 +382,30 @@ static int cnt_handler(struct io_event *event) {
 
 
 static int use_handler(struct io_event *event) {
+
+    union triedb_request *packet = event->payload;
+    struct client *c = event->client;
+
+    /* Check for presence first */
+    struct database *database =
+        hashtable_get(triedb.dbs, (const char *) packet->usec.key);
+
+    /*
+     * It doesn't exist, we create a new database with the given name,
+     * otherwise just assign it to the current db of the client
+     */
+    if (!database) {
+        // TODO check for OOM
+        database = tmalloc(sizeof(*database));
+        database_init(database, tstrdup((const char *) packet->usec.key), NULL);
+
+        // Add it to the databases table
+        hashtable_put(triedb.dbs, tstrdup(database->name), database);
+        c->db = database;
+    } else {
+        c->db = database;
+    }
+
     return 0;
 }
 
