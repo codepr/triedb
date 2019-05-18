@@ -87,12 +87,36 @@ static int get_handler(struct io_event *);
 
 static int del_handler(struct io_event *);
 
+static int ttl_handler(struct io_event *);
+
+static int inc_handler(struct io_event *);
+
+static int dec_handler(struct io_event *);
+
+static int cnt_handler(struct io_event *);
+
+static int use_handler(struct io_event *);
+
+static int keys_handler(struct io_event *);
+
+static int ping_handler(struct io_event *);
+
+static int quit_handler(struct io_event *);
+
 /* Command handler mapped usign their position paired with their type */
-static handler *handlers[4] = {
+static handler *handlers[12] = {
     NULL,
     put_handler,
     get_handler,
-    del_handler
+    del_handler,
+    ttl_handler,
+    inc_handler,
+    dec_handler,
+    cnt_handler,
+    use_handler,
+    keys_handler,
+    ping_handler,
+    quit_handler
 };
 
 
@@ -269,6 +293,41 @@ static int ttl_handler(struct io_event *event) {
         event->reply = ack_replies[OK];
     }
 
+    return 0;
+}
+
+
+static int inc_handler(struct io_event *event) {
+    return 0;
+}
+
+
+static int dec_handler(struct io_event *event) {
+    return 0;
+}
+
+
+static int cnt_handler(struct io_event *event) {
+    return 0;
+}
+
+
+static int use_handler(struct io_event *event) {
+    return 0;
+}
+
+
+static int keys_handler(struct io_event *event) {
+    return 0;
+}
+
+
+static int ping_handler(struct io_event *event) {
+    return 0;
+}
+
+
+static int quit_handler(struct io_event *event) {
     return 0;
 }
 

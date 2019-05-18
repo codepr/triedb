@@ -31,6 +31,12 @@
 #include "util.h"
 
 
+/*
+ * Return the length of the string without having to call strlen, thus this
+ * works also with non-nul terminated string. The length of the string is in
+ * fact stored in memory in an unsigned long just before the position of the
+ * string itself.
+ */
 size_t bstring_len(const bstring s) {
     return *((size_t *) (s - sizeof(size_t)));
 }
@@ -45,12 +51,19 @@ bstring bstring_new(const char *init) {
 
 
 bstring bstring_copy(const char *init, size_t len) {
+    /*
+     * The strategy would be to piggyback the real string to its stored length
+     * in memory, having already implemented this logic before to actually
+     * track memory usage of the system, we just need to malloc it with the
+     * custom malloc in utils
+     */
     unsigned char *str = tmalloc(len);
     memcpy(str, init, len);
     return str;
 }
 
 
+/* Same as bstring_copy but setting the entire content of the string to 0 */
 bstring bstring_empty(size_t len) {
     unsigned char *str = tmalloc(len);
     memset(str, 0x00, len);
@@ -59,6 +72,10 @@ bstring bstring_empty(size_t len) {
 
 
 void bstring_destroy(bstring s) {
+    /*
+     * Being allocated with utils custom functions just free it with the
+     * corrispective free function
+     */
     tfree(s);
 }
 

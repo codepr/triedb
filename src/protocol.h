@@ -144,6 +144,8 @@ typedef struct get inc;
 
 typedef struct get dec;
 
+typedef struct get keys;
+
 
 struct ttl {
 
@@ -162,12 +164,18 @@ struct ack {
 };
 
 
-union triedb_request {
+typedef struct ack cnt;
 
-    struct ack ack;
+typedef struct ack ping;
+
+typedef struct ack quit;
+
+
+union triedb_request {
 
     union header header;
 
+    struct ack ack;
     struct put put;
     struct get get;
     struct ttl ttl;
