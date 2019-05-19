@@ -91,6 +91,9 @@ void pack_u8(uint8_t **, uint8_t);
 // append a uint16_t -> bytes into the bytestring
 void pack_u16(uint8_t **, uint16_t);
 
+// append a int32_t -> bytes into the bytestring
+void pack_i32(uint8_t **, int32_t);
+
 // append a uint32_t -> bytes into the bytestring
 void pack_u32(uint8_t **, uint32_t);
 

@@ -53,23 +53,22 @@ class TrieDBTest(unittest.TestCase):
             put_opcode,
             keylen + vallen + 6,  # 6 = sizeof(i) + sizeof(H)
             ttl,
-            htons(keylen),
+            keylen,
             key.encode(),
             value.encode()
         )
 
         self.connection.send(put)
-        header = self.connection.recv(2)
-        byte, rc = struct.unpack('!BB', header)
+        header = self.connection.recv(3)
+        byte, _, rc = struct.unpack('!BBB', header)
         return byte, rc
 
     def _send_get(self, key):
         keylen = len(key)
         get = struct.pack(
-            f'!BBH{keylen}s',
+            f'!BB{keylen}s',
             self.opcodes['GET'],
-            htons(2 + keylen),  # 2 = sizeof(H)
-            htons(keylen),
+            keylen,
             key.encode()
         )
         self.connection.send(get)

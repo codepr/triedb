@@ -318,6 +318,7 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
         for (int i = 0; i < res->get_res.tuples_len; ++i)
             length += res->get_res.tuples[i].keylen
                 + strlen((const char *) res->get_res.tuples[i].val)
+                + sizeof(int)
                 + sizeof(unsigned);
 
         unsigned char *praw = tmalloc(length + 2);
@@ -331,7 +332,7 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
         /* Start encoding the tuples */
         pack_u16(&praw, res->get_res.tuples_len);
         for (int i = 0; i < res->get_res.tuples_len; ++i) {
-            pack_u16(&praw, res->get_res.tuples[i].ttl);
+            pack_i32(&praw, res->get_res.tuples[i].ttl);
             pack_u16(&praw, res->get_res.tuples[i].keylen);
             pack_bytes(&praw, res->get_res.tuples[i].key);
             pack_bytes(&praw, res->get_res.tuples[i].val);
@@ -339,13 +340,14 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
     } else {
         length = res->get_res.val.keylen
             + strlen((const char *) res->get_res.val.val)
+            + sizeof(int)
             + sizeof(unsigned);
         unsigned char *praw = tmalloc(length + 2);
         raw = praw;
         /* Pack header byte */
         pack_u8(&praw, res->get_res.header.byte);
         encode_length(praw, length);
-        pack_u16(&praw, res->get_res.val.ttl);
+        pack_i32(&praw, res->get_res.val.ttl);
         pack_u16(&praw, res->get_res.val.keylen);
         pack_bytes(&praw, res->get_res.val.key);
         pack_bytes(&praw, res->get_res.val.val);

@@ -835,8 +835,8 @@ static void *io_worker(void *arg) {
                  * reply buffer to the reply file descriptor.
                  */
                 if ((sent = send_bytes(event->client->fd,
-                               (const unsigned char *) event->reply,
-                               bstring_len(event->reply))) < 0) {
+                                       (const unsigned char *) event->reply,
+                                       bstring_len(event->reply))) < 0) {
                     close(event->client->fd);
                 }
 
