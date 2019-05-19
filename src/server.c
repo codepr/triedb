@@ -283,11 +283,9 @@ static int get_handler(struct io_event *event) {
 
     union triedb_response r = { .get_res = *response };
 
-    unsigned char *packed = pack_response(&r, packet->get.header.bits.opcode);
+    event->reply = pack_response(&r, packet->get.header.bits.opcode);
 
-    event->reply = bstring_new((const char *) packed);
-
-    tfree(packed);
+    // TODO destroy response
 
     return 0;
 
@@ -828,7 +826,9 @@ static void *io_worker(void *arg) {
                 else if (rc == -ERRCLIENTDC)
                     close(event->client->fd);
             } else if (e_events[i].events & EPOLLOUT) {
+
                 struct io_event *event = e_events[i].data.ptr;
+
                 /*
                  * Write out to client, after a request has been processed in
                  * worker thread routine. Just send out all bytes stored in the
@@ -839,6 +839,7 @@ static void *io_worker(void *arg) {
                                bstring_len(event->reply))) < 0) {
                     close(event->client->fd);
                 }
+
                 // Update information stats
                 info.bytes_sent += sent;
 
@@ -849,7 +850,12 @@ static void *io_worker(void *arg) {
                  */
                 epoll_mod(epoll->io_epollfd,
                           event->client->fd, EPOLLIN, event->client);
-                bstring_destroy(event->reply);
+
+                /* Free resource, ACKs will be free'd closing the server */
+                if ((*event->reply >> 4) != ACK)
+                    bstring_destroy(event->reply);
+
+                tfree(event);
             }
         }
     }

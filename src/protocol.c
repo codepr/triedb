@@ -152,9 +152,9 @@ size_t decode_length(const unsigned char **buf, unsigned *pos) {
 
 
 static size_t unpack_triedb_put(const unsigned char *raw,
-                                 union header *hdr,
-                                 union triedb_request *pkt,
-                                 size_t len) {
+                                union header *hdr,
+                                union triedb_request *pkt,
+                                size_t len) {
 
     struct put put = { .header = *hdr };
     pkt->put = put;
@@ -183,9 +183,9 @@ static size_t unpack_triedb_put(const unsigned char *raw,
 
 
 static size_t unpack_triedb_get(const unsigned char *raw,
-                                 union header *hdr,
-                                 union triedb_request *pkt,
-                                 size_t len) {
+                                union header *hdr,
+                                union triedb_request *pkt,
+                                size_t len) {
 
     struct get get = { .header = *hdr };
     pkt->get = get;
@@ -320,33 +320,35 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
                 + strlen((const char *) res->get_res.tuples[i].val)
                 + sizeof(unsigned);
 
-        raw = tmalloc(length + 2);
+        unsigned char *praw = tmalloc(length + 2);
+        raw = praw;
 
         /* Pack header byte */
-        pack_u8(&raw, res->get_res.header.byte);
+        pack_u8(&praw, res->get_res.header.byte);
 
-        encode_length(raw, length);
+        encode_length(praw, length);
 
         /* Start encoding the tuples */
-        pack_u16(&raw, res->get_res.tuples_len);
+        pack_u16(&praw, res->get_res.tuples_len);
         for (int i = 0; i < res->get_res.tuples_len; ++i) {
-            pack_u16(&raw, res->get_res.tuples[i].ttl);
-            pack_u16(&raw, res->get_res.tuples[i].keylen);
-            pack_bytes(&raw, res->get_res.tuples[i].key);
-            pack_bytes(&raw, res->get_res.tuples[i].val);
+            pack_u16(&praw, res->get_res.tuples[i].ttl);
+            pack_u16(&praw, res->get_res.tuples[i].keylen);
+            pack_bytes(&praw, res->get_res.tuples[i].key);
+            pack_bytes(&praw, res->get_res.tuples[i].val);
         }
     } else {
         length = res->get_res.val.keylen
             + strlen((const char *) res->get_res.val.val)
             + sizeof(unsigned);
-        raw = tmalloc(length + 2);
+        unsigned char *praw = tmalloc(length + 2);
+        raw = praw;
         /* Pack header byte */
-        pack_u8(&raw, res->get_res.header.byte);
-        encode_length(raw, length);
-        pack_u16(&raw, res->get_res.val.ttl);
-        pack_u16(&raw, res->get_res.val.keylen);
-        pack_bytes(&raw, res->get_res.val.key);
-        pack_bytes(&raw, res->get_res.val.val);
+        pack_u8(&praw, res->get_res.header.byte);
+        encode_length(praw, length);
+        pack_u16(&praw, res->get_res.val.ttl);
+        pack_u16(&praw, res->get_res.val.keylen);
+        pack_bytes(&praw, res->get_res.val.key);
+        pack_bytes(&praw, res->get_res.val.val);
     }
 
     return raw;
