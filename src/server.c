@@ -235,6 +235,8 @@ static int get_handler(struct io_event *event) {
 
     if (packet->get.header.bits.prefix == 0) {
 
+        // Single value response
+
 #if WORKERPOOLSIZE > 1
         pthread_spin_lock(&spinlock);
 #endif
@@ -247,6 +249,8 @@ static int get_handler(struct io_event *event) {
         if (found == false || val == NULL)
             goto nok;
 
+        // XXX Lot of boilerplate, to be refactored
+
         struct db_item *item = val;
 
         struct tuple t = {
@@ -257,7 +261,11 @@ static int get_handler(struct io_event *event) {
         };
 
         response = get_response(packet->get.header.byte, &t);
+
     } else {
+
+        // Multiple values response
+
 #if WORKERPOOLSIZE > 1
         pthread_spin_lock(&spinlock);
 #endif
@@ -270,6 +278,8 @@ static int get_handler(struct io_event *event) {
 #endif
         response = get_response(packet->get.header.byte, v);
     }
+
+    // XXX Lot of boilerplate, to be refactored
 
     union triedb_response r = { .get_res = *response };
 
@@ -313,7 +323,8 @@ static int del_handler(struct io_event *event) {
          * We are dealing with a wildcard, so we apply the deletion
          * to all keys below the wildcard
          */
-        /* database_prefix_remove(c->db, (const char *) packet->get.key); */
+        database_prefix_remove(c->db, (const char *) packet->get.key);
+
 #if WORKERPOOLSIZE > 1
         pthread_spin_unlock(&spinlock);
 #endif
@@ -324,6 +335,7 @@ static int del_handler(struct io_event *event) {
         event->reply = ack_replies[OK];
 
     } else {
+
 #if WORKERPOOLSIZE > 1
         pthread_spin_lock(&spinlock);
 #endif
@@ -343,7 +355,12 @@ static int del_handler(struct io_event *event) {
     return 0;
 }
 
-
+/*
+ * Utility function, compare TTL of two database items and return a bool value
+ * based on the order of them, true if the first item has a lower delta (e.g.
+ * difference between current time and the time of creation) the the second one.
+ * Meant to be passed in to a sort function below
+ */
 static bool compare_ttl(void *arg1, void *arg2) {
 
     time_t now = time(NULL);
@@ -437,6 +454,8 @@ static int inc_handler(struct io_event *event) {
         }
     }
 
+    event->reply = ack_replies[OK];
+
     return 0;
 }
 
@@ -473,6 +492,8 @@ static int dec_handler(struct io_event *event) {
                 item->data = update_integer_string(item->data, -1);
         }
     }
+
+    event->reply = ack_replies[OK];
 
     return 0;
 }
@@ -522,6 +543,8 @@ static int use_handler(struct io_event *event) {
     } else {
         c->db = database;
     }
+
+    event->reply = ack_replies[OK];
 
     return 0;
 }
