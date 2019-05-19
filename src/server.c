@@ -116,7 +116,9 @@ static struct triedb triedb;
 
 /*
  * Shared epoll object, contains the IO epoll and Worker epoll descriptors,
- * as well as the server descriptor and the timer fd for repeated routines
+ * as well as the server descriptor and the timer fd for repeated routines.
+ * Each thread will receive a copy of a pointer to this structure, to have
+ * access to all file descriptor running the application
  */
 struct epoll {
     int io_epollfd;
@@ -227,8 +229,11 @@ static int get_handler(struct io_event *event) {
 
     union triedb_request *packet = event->payload;
     struct client *c = event->client;
+    Vector *v;
 
     void *val = NULL;
+
+    if (packet->get.header.bits.prefix == 0) {
 
 #if WORKERPOOLSIZE > 1
     pthread_spin_lock(&spinlock);
@@ -241,9 +246,11 @@ static int get_handler(struct io_event *event) {
 
     if (found == false || val == NULL)
         goto nok;
+    }
 
     // TODO forge GET response
-    event->reply = bstring_new(((struct db_item *) val)->data);
+    /* event->reply = bstring_new(((struct db_item *) val)->data); */
+    struct get_response *response = get_response(0x20, `
 
     return 0;
 

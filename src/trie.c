@@ -32,7 +32,7 @@
 #include "util.h"
 
 
-static void bst_node_free_fn(struct bst_node *);
+static void children_destroy(struct bst_node *, size_t *);
 
 /*
  * Check for children in a struct trie_node, if a node has no children is
@@ -275,7 +275,7 @@ void trie_prefix_delete(Trie *trie, const char *prefix) {
         return;
     }
 
-    bst_node_free_fn(cursor->children);
+    children_destroy(cursor->children, &trie->size);
     cursor->children = NULL;
 
     trie_delete(trie, prefix);
@@ -306,13 +306,13 @@ static void trie_node_prefix_find(const struct trie_node *,
                                   char *, int , Vector *);
 
 
-static void bst_prefix_find(const struct bst_node *node,
-                            char str[], int level, Vector *keys) {
+static void children_prefix_find(const struct bst_node *node,
+                                 char str[], int level, Vector *keys) {
     trie_node_prefix_find(node->data, str, level, keys);
     if (node->left)
-        bst_prefix_find(node->left, str, level, keys);
+        children_prefix_find(node->left, str, level, keys);
     if (node->right)
-        bst_prefix_find(node->right, str, level, keys);
+        children_prefix_find(node->right, str, level, keys);
 }
 
 
@@ -344,7 +344,7 @@ static void trie_node_prefix_find(const struct trie_node *node,
     }
 
     if (node->children)
-        bst_prefix_find(node->children, str, level + 1, keys);
+        children_prefix_find(node->children, str, level + 1, keys);
 }
 
 
@@ -376,14 +376,14 @@ Vector *trie_prefix_find(const Trie *trie, const char *prefix) {
 }
 
 
-static void bst_node_free_fn(struct bst_node *node) {
+static void children_destroy(struct bst_node *node, size_t *len) {
     if (!node)
         return;
-    trie_node_destroy(node->data, &(size_t) {0});
+    trie_node_destroy(node->data, len);
     if (node->left)
-        bst_node_free_fn(node->left);
+        children_destroy(node->left,len);
     if (node->right)
-        bst_node_free_fn(node->right);
+        children_destroy(node->right, len);
     tfree(node);
 }
 
@@ -395,7 +395,7 @@ void trie_node_destroy(struct trie_node *node, size_t *size) {
         return;
 
     // Recursive call to all children of the node
-    bst_node_free_fn(node->children);
+    children_destroy(node->children, size);
     node->children = NULL;
 
     // Release memory on data stored on the node

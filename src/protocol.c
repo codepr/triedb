@@ -246,24 +246,39 @@ struct cnt_response *cnt_response(unsigned char byte, unsigned long long val) {
 }
 
 
-struct get_response *get_response(unsigned char byte, Vector *tuples) {
+struct get_response *get_response(unsigned char byte, const void *arg) {
 
     struct get_response *response = tmalloc(sizeof(*response));
     response->header.byte = byte;
-    response->tuples_len = tuples->size;
-    response->tuples = tmalloc(tuples->size * sizeof(struct tuple));
 
     /*
-     * Create the tuples array containing required informations from the
-     * vector returned from the range query on the Trie
+     * Get response can be either single or prefix, the latter returns a list
+     * of items instead of a single one, where each item corresponds to an
+     * existing key in the database
      */
-    for (int i = 0; i < vector_size(tuples); ++i) {
-        struct kv_obj *kv = vector_get(tuples, i);
-        const struct db_item *item = kv->data;
-        response->tuples[i].key = (unsigned char *) kv->key;
-        response->tuples[i].val = item->data;
-        response->tuples[i].keylen = strlen(kv->key);
-        response->tuples[i].ttl = item->ttl;
+    if (response->header.bits.prefix == 1) {
+        Vector *tuples = (Vector *) arg;
+        response->tuples_len = tuples->size;
+        response->tuples = tmalloc(tuples->size * sizeof(struct tuple));
+
+        /*
+         * Create the tuples array containing required informations from the
+         * vector returned from the range query on the Trie
+         */
+        for (int i = 0; i < vector_size(tuples); ++i) {
+            struct kv_obj *kv = vector_get(tuples, i);
+            const struct db_item *item = kv->data;
+            response->tuples[i].key = (unsigned char *) kv->key;
+            response->tuples[i].val = item->data;
+            response->tuples[i].keylen = strlen(kv->key);
+            response->tuples[i].ttl = item->ttl;
+        }
+    } else {
+        // Single response here
+        struct tuple *tuple = (struct tuple *) arg;
+
+        // Copy content of the tuple
+        response->val = *tuple;
     }
 
     return response;
@@ -290,24 +305,37 @@ static void pack_response_get(unsigned char *raw,
                               const union triedb_response *res) {
     /* Pack header byte */
     pack_u8(&raw, res->get_res.header.byte);
+    size_t length = 0;
 
-    /* Init length with the size of the tuples_len field (u16) */
-    size_t length = sizeof(unsigned);
+    if (res->get_res.header.bits.prefix == 1) {
 
-    /* Pre-compute the total length of the entire packet and encode it */
-    for (int i = 0; i < res->get_res.tuples_len; ++i)
-        length += res->get_res.tuples[i].keylen
-            + strlen((const char *) res->get_res.tuples[i].val)
+        /* Init length with the size of the tuples_len field (u16) */
+        length = sizeof(unsigned);
+
+        /* Pre-compute the total length of the entire packet and encode it */
+        for (int i = 0; i < res->get_res.tuples_len; ++i)
+            length += res->get_res.tuples[i].keylen
+                + strlen((const char *) res->get_res.tuples[i].val)
+                + sizeof(unsigned);
+        encode_length(raw, length);
+
+        /* Start encoding the tuples */
+        pack_u16(&raw, res->get_res.tuples_len);
+        for (int i = 0; i < res->get_res.tuples_len; ++i) {
+            pack_u16(&raw, res->get_res.tuples[i].ttl);
+            pack_u16(&raw, res->get_res.tuples[i].keylen);
+            pack_bytes(&raw, res->get_res.tuples[i].key);
+            pack_bytes(&raw, res->get_res.tuples[i].val);
+        }
+    } else {
+        length = res->get_res.val.keylen
+            + strlen((const char *) res->get_res.val.val)
             + sizeof(unsigned);
-    encode_length(raw, length);
-
-    /* Start encoding the tuples */
-    pack_u16(&raw, res->get_res.tuples_len);
-    for (int i = 0; i < res->get_res.tuples_len; ++i) {
-        pack_u16(&raw, res->get_res.tuples[i].ttl);
-        pack_u16(&raw, res->get_res.tuples[i].keylen);
-        pack_bytes(&raw, res->get_res.tuples[i].key);
-        pack_bytes(&raw, res->get_res.tuples[i].val);
+        encode_length(raw, length);
+        pack_u16(&raw, res->get_res.val.ttl);
+        pack_u16(&raw, res->get_res.val.keylen);
+        pack_bytes(&raw, res->get_res.val.key);
+        pack_bytes(&raw, res->get_res.val.val);
     }
 }
 

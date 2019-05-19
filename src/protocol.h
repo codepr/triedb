@@ -219,9 +219,15 @@ struct get_response {
 
     union header header;
 
-    unsigned short tuples_len;
+    union {
 
-    struct tuple *tuples;
+        struct {
+            unsigned short tuples_len;
+            struct tuple *tuples;
+        };
+
+        struct tuple val;
+    };
 };
 
 
@@ -262,7 +268,7 @@ void triedb_request_destroy(union triedb_request *);
 
 struct ack_response *ack_response(unsigned char , unsigned char);
 
-struct get_response *get_response(unsigned char, Vector *);
+struct get_response *get_response(unsigned char, const void *);
 
 struct cnt_response *cnt_response(unsigned char, unsigned long long);
 
