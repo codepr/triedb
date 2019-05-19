@@ -264,12 +264,20 @@ static int get_handler(struct io_event *event) {
 
         Vector *v = database_prefix_search(c->db,
                                            (const char *) packet->get.key);
+
+#if WORKERPOOLSIZE > 1
+        pthread_spin_unlock(&spinlock);
+#endif
         response = get_response(packet->get.header.byte, v);
     }
 
     union triedb_response r = { .get_res = *response };
 
-    event->reply = pack_response(&r, packet->get.header.bits.opcode);
+    unsigned char *packed = pack_response(&r, packet->get.header.bits.opcode);
+
+    event->reply = bstring_new((const char *) packed);
+
+    tfree(packed);
 
     return 0;
 
