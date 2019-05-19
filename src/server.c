@@ -855,7 +855,7 @@ static void *io_worker(void *arg) {
                 if ((*event->reply >> 4) != ACK)
                     bstring_destroy(event->reply);
 
-                tfree(event);
+                /* tfree(event); */
             }
         }
     }

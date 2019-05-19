@@ -287,18 +287,20 @@ struct get_response *get_response(unsigned char byte, const void *arg) {
 
 static unsigned char *pack_response_ack(const union triedb_response *res) {
     unsigned char *raw = tmalloc(3);
-    pack_u8(&raw, res->ack_res.header.byte);
-    encode_length(raw, 1);
-    pack_u8(&raw, res->ack_res.rc);
+    unsigned char *p = raw;
+    pack_u8(&p, res->ack_res.header.byte);
+    encode_length(p++, 1);
+    pack_u8(&p, res->ack_res.rc);
     return raw;
 }
 
 
 static unsigned char *pack_response_cnt(const union triedb_response *res) {
     unsigned char *raw = tmalloc(10);
-    pack_u8(&raw, res->cnt_res.header.byte);
-    encode_length(raw, 1);
-    pack_u64(&raw, res->cnt_res.val);
+    unsigned char *p = raw;
+    pack_u8(&p, res->cnt_res.header.byte);
+    encode_length(p++, 1);
+    pack_u64(&p, res->cnt_res.val);
     return raw;
 }
 
@@ -312,56 +314,66 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
     if (res->get_res.header.bits.prefix == 1) {
 
         /* Init length with the size of the tuples_len field (u16) */
-        length = sizeof(unsigned);
+        length = sizeof(unsigned short);
 
         /* Pre-compute the total length of the entire packet and encode it */
         for (int i = 0; i < res->get_res.tuples_len; ++i)
             length += res->get_res.tuples[i].keylen
                 + strlen((const char *) res->get_res.tuples[i].val)
                 + sizeof(int)
-                + sizeof(unsigned);
+                + sizeof(unsigned short) * 2;
 
-        unsigned char *praw = tmalloc(length + 2);
-        raw = praw;
+        raw = tmalloc(length + 2);
+        unsigned char *p = raw;
 
         /* Pack header byte */
-        pack_u8(&praw, res->get_res.header.byte);
+        pack_u8(&p, res->get_res.header.byte);
 
-        encode_length(praw, length);
+        int step = encode_length(p, length);
+        p += step;
 
         /* Start encoding the tuples */
-        pack_u16(&praw, res->get_res.tuples_len);
+        pack_u16(&p, res->get_res.tuples_len);
         for (int i = 0; i < res->get_res.tuples_len; ++i) {
-            pack_i32(&praw, res->get_res.tuples[i].ttl);
-            pack_u16(&praw, res->get_res.tuples[i].keylen);
-            pack_bytes(&praw, res->get_res.tuples[i].key);
-            pack_bytes(&praw, res->get_res.tuples[i].val);
+            pack_i32(&p, res->get_res.tuples[i].ttl);
+            pack_u16(&p, res->get_res.tuples[i].keylen);
+            pack_bytes(&p, res->get_res.tuples[i].key);
+            pack_u16(&p, strlen((const char *) res->get_res.tuples[i].val));
+            pack_bytes(&p, res->get_res.tuples[i].val);
         }
     } else {
         length = res->get_res.val.keylen
             + strlen((const char *) res->get_res.val.val)
             + sizeof(int)
-            + sizeof(unsigned);
-        unsigned char *praw = tmalloc(length + 2);
-        raw = praw;
+            + sizeof(unsigned short);
+        raw = tmalloc(length + 2);
+        /* unsigned char *p = raw; */
+
+        char fmt[100];
+        sprintf(fmt, "BBiH%ds%lds", res->get_res.val.keylen,
+                strlen((const char *) res->get_res.val.val));
+        pack(raw, fmt, res->get_res.header.byte, (unsigned char) length,
+             (int) res->get_res.val.ttl, (unsigned short) res->get_res.val.keylen,
+             res->get_res.val.key, res->get_res.val.val);
         /* Pack header byte */
-        pack_u8(&praw, res->get_res.header.byte);
-        encode_length(praw, length);
-        pack_i32(&praw, res->get_res.val.ttl);
-        pack_u16(&praw, res->get_res.val.keylen);
-        pack_bytes(&praw, res->get_res.val.key);
-        pack_bytes(&praw, res->get_res.val.val);
+        /* pack_u8(&p, res->get_res.header.byte); */
+        /* int step = encode_length(p, length); */
+        /* p += step; */
+        /* pack_i32(&p, res->get_res.val.ttl); */
+        /* pack_u16(&p, res->get_res.val.keylen); */
+        /* pack_bytes(&p, res->get_res.val.key); */
+        /* pack_bytes(&p, res->get_res.val.val); */
     }
 
     return raw;
 }
 
 
-bstring pack_ack(unsigned char byte, unsigned rc) {
+bstring pack_ack(unsigned char byte, unsigned char rc) {
     unsigned char raw[3];
     unsigned char *praw = &raw[0];
     pack_u8(&praw, byte);
-    encode_length(praw, 1);
+    encode_length(praw++, 1);
     pack_u8(&praw, rc);
     return bstring_copy((const char *) raw, 3);
 }
@@ -371,7 +383,7 @@ bstring pack_cnt(unsigned char byte, unsigned long long val) {
     unsigned char raw[10];
     unsigned char *praw = &raw[0];
     pack_u8(&praw, byte);
-    encode_length(praw, 1);
+    encode_length(praw++, 1);
     pack_u64(&praw, val);
     return bstring_copy((const char *) raw, 10);
 }

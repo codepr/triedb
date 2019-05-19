@@ -200,7 +200,7 @@ union triedb_request {
 
 
 struct tuple {
-    unsigned ttl;
+    int ttl;
     unsigned short keylen;
     unsigned char *key;
     unsigned char *val;
@@ -279,7 +279,7 @@ struct cnt_response *cnt_response(unsigned char, unsigned long long);
 unsigned char *pack_response(const union triedb_response *, unsigned);
 
 /* Helper function to create a bytearray with a ACK code */
-bstring pack_ack(unsigned char, unsigned);
+bstring pack_ack(unsigned char, unsigned char);
 
 /* Helper function to create a bytearray with a CNT value */
 bstring pack_cnt(unsigned char, unsigned long long);

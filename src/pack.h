@@ -104,4 +104,10 @@ void pack_u64(uint8_t **, uint64_t);
 void pack_bytes(uint8_t **, uint8_t *);
 
 
+unsigned int pack(unsigned char *, char *, ...);
+
+
+void unpack(unsigned char *, char *, ...);
+
+
 #endif
