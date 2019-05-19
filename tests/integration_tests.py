@@ -23,59 +23,52 @@ class TrieDBTest(unittest.TestCase):
         cls.connection = socket()
         cls.connection.connect(('127.0.0.1', 9090))
 
+        cls.opcodes = {
+            'PUT': 0b00010000,
+            'GET': 0b00100000,
+            'DEL': 0b00110000,
+            'TTL': 0b01000000,
+            'INC': 0b01010000,
+            'DEC': 0b01100000,
+            'CNT': 0b01110000,
+            'USE': 0b10000000,
+            'KEYS': 0b10010000,
+            'PING': 0b10100000,
+            'QUIT': 0b10110000,
+            'DB': 0b11000000
+        }
+
     @classmethod
     def tearDownClass(cls):
         cls.connection.close()
         os.kill(cls.proc.pid, signal.SIGTERM)
 
-    def _send_put(self, key, value):
+    def _send_put(self, key, value, ttl=-1):
         keylen = len(key)
         vallen = len(value)
 
-        ttl = False
-        prefix = False
-
-        if not ttl:
-            put = struct.pack(
-                f'=BIBHI{keylen}s{vallen}sB',
-                0x01,
-                htonl(13 + keylen + vallen),
-                0x00,
-                htons(keylen),
-                htonl(vallen),
-                key.encode(),
-                value.encode(),
-                prefix
-            )
-        else:
-            put = struct.pack(
-                f'=BIBHI{keylen}s{vallen}sBH',
-                0x01,
-                htonl(15 + keylen + vallen),
-                0x00,
-                htons(keylen),
-                htonl(vallen),
-                key.encode(),
-                value.encode(),
-                prefix,
-                htons(ttl)
-            )
+        put_opcode = self.opcodes['PUT']
+        put = struct.pack(
+            f'!BBiH{keylen}s{vallen}s',
+            put_opcode,
+            keylen + vallen + 6,  # 6 = sizeof(i) + sizeof(H)
+            ttl,
+            htons(keylen),
+            key.encode(),
+            value.encode()
+        )
 
         self.connection.send(put)
-        header = self.connection.recv(6)
-        code, total_len, *_ = struct.unpack('=BIB', header)
-        total_len = ntohl(total_len)
-        _ = struct.unpack('=B', self.connection.recv(1))
-
-        return code
+        header = self.connection.recv(2)
+        byte, rc = struct.unpack('!BB', header)
+        return byte, rc
 
     def _send_get(self, key):
         keylen = len(key)
         get = struct.pack(
-        f'=BIBH{keylen}s',
-            0x02,
-            htonl(8 + keylen),
-            0x00,
+            f'!BBH{keylen}s',
+            self.opcodes['GET'],
+            htons(2 + keylen),  # 2 = sizeof(H)
             htons(keylen),
             key.encode()
         )
@@ -435,47 +428,3 @@ class TrieDBTest(unittest.TestCase):
 
         self.assertEqual(code, 0x02)
         self.assertEqual(payload, defaultdb.encode())
-
-
-class TrieDBTestHT(TrieDBTest):
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-
-        dbname = "test-database"
-
-        use = struct.pack(
-            f'=BIBH{len(dbname)}sB',
-            0x09,
-            htonl(9 + len(dbname)),
-            0x00,
-            htons(len(dbname)),
-            dbname.encode(),
-            0x01
-        )
-
-        cls.connection.send(use)
-
-        header = cls.connection.recv(6)
-        _, total_len, *_ = struct.unpack('=BIB', header)
-        total_len = ntohl(total_len)
-        _ = struct.unpack('=B', cls.connection.recv(1))
-
-    def test_keys(self):
-        pass
-
-    def test_inc(self):
-        pass
-
-    def test_put(self):
-        pass
-
-    def test_put_bulk(self):
-        pass
-
-    def test_ttl(self):
-        pass
-
-    def test_use(self):
-        pass

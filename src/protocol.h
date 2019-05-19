@@ -41,7 +41,31 @@
 #define HEADER_LEN 2
 #define ACK_LEN    2
 
-/* Message types */
+/*
+ * Command opcode, each TrieDB command is identified by the 7-4 bits of every
+ * header which can be summarized by the following table:
+ *
+ *
+ * OPCODE |    BIN    | HEX
+ * -------|-----------|------
+ *  PUT   | 00010000  | 0x10
+ *  GET   | 00100000  | 0x20
+ *  DEL   | 00110000  | 0x30
+ *  TTL   | 01000000  | 0x40
+ *  INC   | 01010000  | 0x50
+ *  DEC   | 01100000  | 0x60
+ *  CNT   | 01110000  | 0x70
+ *  USE   | 10000000  | 0x80
+ *  KEYS  | 10010000  | 0x90
+ *  PING  | 10100000  | 0xa0
+ *  QUIT  | 10110000  | 0xb0
+ *  DB    | 11000000  | 0xc0
+ *
+ *  Header byte can be manipulated at bit level to toggle bit flags:
+ *  e.g
+ *
+ *  PUT with PREFIX = 1  00010000 | (00010000 >> 1)  -> 00011000 -> 0x24
+ */
 enum opcode {
     ACK  = 0,
     PUT  = 1,

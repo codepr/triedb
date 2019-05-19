@@ -1,3 +1,11 @@
+0.6.0 - 2019/05/19
+==================
+
+- Massive refactoring
+- Redesigned and simplified communication protocol
+- Temporary removed distribution part to adapt new protocol communication
+- Added multithread support and database abstraction
+
 0.5.1 - 2019/02/03
 ==================
 

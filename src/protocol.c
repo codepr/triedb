@@ -75,6 +75,8 @@ static void pack_response_ack(unsigned char *, const union triedb_response *);
 
 static void pack_response_cnt(unsigned char *, const union triedb_response *);
 
+static void pack_response_get(unsigned char *, const union triedb_response *);
+
 /*
  * Conversion table for response, maps OPCODE -> COMMAND_TYPE, it's still a
  * shitty abstraction, further improvements planned on future refactoring
@@ -83,7 +85,7 @@ static void pack_response_cnt(unsigned char *, const union triedb_response *);
 static pack_handler *pack_handlers[8] = {
     NULL,
     pack_response_ack,
-    NULL,
+    pack_response_get,
     pack_response_ack,
     pack_response_ack,
     pack_response_ack,
@@ -281,6 +283,32 @@ static void pack_response_cnt(unsigned char *raw,
     pack_u8(&raw, res->cnt_res.header.byte);
     encode_length(raw, 1);
     pack_u64(&raw, res->cnt_res.val);
+}
+
+
+static void pack_response_get(unsigned char *raw,
+                              const union triedb_response *res) {
+    /* Pack header byte */
+    pack_u8(&raw, res->get_res.header.byte);
+
+    /* Init length with the size of the tuples_len field (u16) */
+    size_t length = sizeof(unsigned);
+
+    /* Pre-compute the total length of the entire packet and encode it */
+    for (int i = 0; i < res->get_res.tuples_len; ++i)
+        length += res->get_res.tuples[i].keylen
+            + strlen((const char *) res->get_res.tuples[i].val)
+            + sizeof(unsigned);
+    encode_length(raw, length);
+
+    /* Start encoding the tuples */
+    pack_u16(&raw, res->get_res.tuples_len);
+    for (int i = 0; i < res->get_res.tuples_len; ++i) {
+        pack_u16(&raw, res->get_res.tuples[i].ttl);
+        pack_u16(&raw, res->get_res.tuples[i].keylen);
+        pack_bytes(&raw, res->get_res.tuples[i].key);
+        pack_bytes(&raw, res->get_res.tuples[i].val);
+    }
 }
 
 
