@@ -115,15 +115,6 @@ static struct informations info;
 static struct triedb triedb;
 
 /*
- * Number of I/O workers to start, in other words the size of the IO thread
- * pool
- */
-#define IO_WORKERS 1
-
-/* Number of Worker threads, or the size of the worker pool */
-#define WORKERS 2
-
-/*
  * Shared epoll object, contains the IO epoll and Worker epoll descriptors,
  * as well as the server descriptor and the timer fd for repeated routines
  */
@@ -209,7 +200,7 @@ static int put_handler(struct io_event *event) {
     union triedb_request *packet = event->payload;
     struct client *c = event->client;
 
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
     pthread_spin_lock(&spinlock);
 #endif
 
@@ -223,7 +214,7 @@ static int put_handler(struct io_event *event) {
         triedb.keyspace_size++;
     }
 
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
     pthread_spin_unlock(&spinlock);
 #endif
     event->reply = ack_replies[OK];
@@ -239,12 +230,12 @@ static int get_handler(struct io_event *event) {
 
     void *val = NULL;
 
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
     pthread_spin_lock(&spinlock);
 #endif
     // Test for the presence of the key in the trie structure
     bool found = database_search(c->db, (const char *) packet->get.key, &val);
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
     pthread_spin_unlock(&spinlock);
 #endif
 
@@ -281,7 +272,7 @@ static int del_handler(struct io_event *event) {
 
         currsize = database_size(c->db);
 
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
         pthread_spin_lock(&spinlock);
 #endif
         /*
@@ -289,7 +280,7 @@ static int del_handler(struct io_event *event) {
          * to all keys below the wildcard
          */
         /* database_prefix_remove(c->db, (const char *) packet->get.key); */
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
         pthread_spin_unlock(&spinlock);
 #endif
 
@@ -299,11 +290,11 @@ static int del_handler(struct io_event *event) {
         event->reply = ack_replies[OK];
 
     } else {
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
         pthread_spin_lock(&spinlock);
 #endif
         bool found = database_remove(c->db, (const char *) packet->get.key);
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
         pthread_spin_unlock(&spinlock);
 #endif
         if (found == false)
@@ -527,7 +518,7 @@ static int quit_handler(struct io_event *event) {
     return -1;
 }
 
-
+/* Utility macro to handle base case on each EPOLL loop */
 #define EPOLL_ERR(ev) if ((ev.events & EPOLLERR) || (ev.events & EPOLLHUP) || \
                           (!(ev.events & EPOLLIN) && !(ev.events & EPOLLOUT)))
 
@@ -545,7 +536,16 @@ static void accept_loop(struct epoll *epoll) {
 
     int epollfd = epoll_create1(0);
 
-    epoll_add(epollfd, epoll->serverfd, EPOLLIN, NULL);
+    /*
+     * We want to watch for events incoming on the server descriptor (e.g. new
+     * connections)
+     */
+    epoll_add(epollfd, epoll->serverfd, EPOLLIN | EPOLLONESHOT, NULL);
+
+    /*
+     * And also to the global event fd, this one is useful to gracefully
+     * interrupt polling and thread execution
+     */
     epoll_add(epollfd, conf->run, EPOLLIN, NULL);
 
     while (1) {
@@ -562,7 +562,7 @@ static void accept_loop(struct epoll *epoll) {
             break;
         }
 
-        for (int i = 0; i < events; i++) {
+        for (int i = 0; i < events; ++i) {
 
             /* Check for errors */
             EPOLL_ERR(e_events[i]) {
@@ -582,6 +582,7 @@ static void accept_loop(struct epoll *epoll) {
                        (void *) pthread_self());
 
                 goto exit;
+
             } else if (e_events[i].data.fd == epoll->serverfd) {
 
                 while (1) {
@@ -619,7 +620,8 @@ static void accept_loop(struct epoll *epoll) {
                     hashtable_put(triedb.clients, client->uuid, client);
 
                     /* Add it to the epoll loop */
-                    epoll_add(epoll->io_epollfd, fd, EPOLLIN, client);
+                    epoll_add(epoll->io_epollfd, fd,
+                              EPOLLIN | EPOLLONESHOT, client);
 
                     /* Rearm server fd to accept new connections */
                     epoll_mod(epollfd, epoll->serverfd, EPOLLIN, NULL);
@@ -723,7 +725,7 @@ static void *io_worker(void *arg) {
             break;
         }
 
-        for (int i = 0; i < events; i++) {
+        for (int i = 0; i < events; ++i) {
 
             /* Check for errors */
             EPOLL_ERR(e_events[i]) {
@@ -749,8 +751,18 @@ static void *io_worker(void *arg) {
                 event->epollfd = epoll->io_epollfd;
                 event->payload = tmalloc(sizeof(*event->payload));
                 event->client = e_events[i].data.ptr;
+                /*
+                 * Received a bunch of data from a client, after the creation
+                 * of an IO event we need to read the bytes and encoding the
+                 * content according to the protocol
+                 */
                 int rc = read_data(event->client->fd, buffer, event->payload);
                 if (rc == 0) {
+                    /*
+                     * All is ok, raise an event to the worker poll EPOLL and
+                     * link it with the IO event containing the decode payload
+                     * ready to be processed
+                     */
                     eventfd_t ev = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
                     event->io_event = ev;
                     epoll_add(epoll->w_epollfd, ev, EPOLLIN, event);
@@ -772,7 +784,14 @@ static void *io_worker(void *arg) {
                 }
                 // Update information stats
                 info.bytes_sent += sent;
-                epoll_mod(epoll->io_epollfd, event->client->fd, EPOLLIN, event->client);
+
+                /*
+                 * Rearm descriptor, we're using EPOLLONESHOT feature to avoid
+                 * race condition and thundering herd issues on multithreaded
+                 * EPOLL
+                 */
+                epoll_mod(epoll->io_epollfd,
+                          event->client->fd, EPOLLIN, event->client);
                 bstring_destroy(event->reply);
             }
         }
@@ -791,7 +810,6 @@ static void *worker(void *arg) {
 
     struct epoll *epoll = arg;
     int events = 0;
-    eventfd_t val;
     long int timers = 0;
 
     struct epoll_event *e_events =
@@ -812,7 +830,7 @@ static void *worker(void *arg) {
             break;
         }
 
-        for (int i = 0; i < events; i++) {
+        for (int i = 0; i < events; ++i) {
 
             /* Check for errors */
             EPOLL_ERR(e_events[i]) {
@@ -824,6 +842,7 @@ static void *worker(void *arg) {
 
             } else if (e_events[i].data.fd == conf->run) {
 
+                eventfd_t val;
                 /* And quit event after that */
                 eventfd_read(conf->run, &val);
 
@@ -831,6 +850,7 @@ static void *worker(void *arg) {
                        (void *) pthread_self());
 
                 goto exit;
+
             } else if (e_events[i].data.fd == epoll->expirefd) {
                 (void) read(e_events[i].data.fd, &timers, sizeof(timers));
                 // Check for keys about to expire out
@@ -937,7 +957,7 @@ static void expire_keys(void) {
     time_t delta = 0LL;
     struct expiring_key *ek = NULL;
 
-    for (int i = 0; i < vector_size(triedb.expiring_keys); i++) {
+    for (int i = 0; i < vector_size(triedb.expiring_keys); ++i) {
 
         ek = vector_get(triedb.expiring_keys, i);
         delta = (ek->item->ctime + ek->item->ttl) - now;
@@ -979,7 +999,7 @@ static inline int client_destructor(struct hashtable_entry *entry) {
 
 /*
  * Hashtable destructor function for struct database objects. It's the function
- * that will be called on hashtable_del call as well as hashtable_release too.
+ * that will be called on hashtable_del call as well as hashtable_destroy too.
  */
 static inline int database_destructor(struct hashtable_entry *entry) {
 
@@ -998,7 +1018,10 @@ static inline int database_destructor(struct hashtable_entry *entry) {
     return HASHTABLE_OK;
 }
 
-
+/*
+ * Vector destructor function for struct expiring_key objects. It's the
+ * function that will be called on Vector remove or vector_destroy
+ */
 static inline void expiring_keys_destructor(void *item) {
 
     if (!item)
@@ -1023,10 +1046,10 @@ static inline void expiring_keys_destructor(void *item) {
 int start_server(const char *addr, const char *port) {
 
     /* Populate the static ACK replies */
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; ++i)
         ack_replies[i] = pack_ack(ACK, i);
 
-#if WORKERS > 1
+#if WORKERPOOLSIZE > 1
     pthread_spin_init(&spinlock, PTHREAD_PROCESS_SHARED);
 #endif
 
@@ -1051,7 +1074,6 @@ int start_server(const char *addr, const char *port) {
         .serverfd = sfd
     };
 
-
     /* Start the expiration keys check routine */
     struct itimerspec timervalue;
 
@@ -1067,20 +1089,24 @@ int start_server(const char *addr, const char *port) {
 
     epoll.expirefd = exptimerfd;
 
+    /*
+     * We need to watch for global eventfd in order to gracefully shutdown IO
+     * thread pool and worker pool
+     */
     epoll_add(epoll.io_epollfd, conf->run, EPOLLIN, NULL);
     epoll_add(epoll.w_epollfd, conf->run, EPOLLIN, NULL);
 
-    pthread_t iothreads[IO_WORKERS];
-    pthread_t workers[WORKERS];
+    pthread_t iothreads[IOPOOLSIZE];
+    pthread_t workers[WORKERPOOLSIZE];
 
     /* Start I/O thread pool */
 
-    for (int i = 0; i < IO_WORKERS; i++)
+    for (int i = 0; i < IOPOOLSIZE; ++i)
         pthread_create(&iothreads[i], NULL, &io_worker, &epoll);
 
     /* Start Worker thread pool */
 
-    for (int i = 0; i < WORKERS; i++)
+    for (int i = 0; i < WORKERPOOLSIZE; ++i)
         pthread_create(&workers[i], NULL, &worker, &epoll);
 
     tinfo("Server start");
@@ -1089,12 +1115,22 @@ int start_server(const char *addr, const char *port) {
     // Main thread for accept new connections
     accept_loop(&epoll);
 
+    // Stop expire keys check routine
+    epoll_del(epoll.w_epollfd, epoll.expirefd);
+
+    /* Join started thread pools */
+    for (int i = 0; i < IOPOOLSIZE; ++i)
+        pthread_join(iothreads[i], NULL);
+
+    for (int i = 0; i < WORKERPOOLSIZE; ++i)
+        pthread_join(workers[i], NULL);
+
     /* Free all allocated resources */
     hashtable_destroy(triedb.dbs);
     hashtable_destroy(triedb.clients);
     vector_destroy(triedb.expiring_keys);
 
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 3; ++i)
         bstring_destroy(ack_replies[i]);
 
     tinfo("triedb v%s exiting", VERSION);

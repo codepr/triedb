@@ -184,7 +184,7 @@ static void add_config_value(const char *key, const char *value) {
     size_t vlen = strlen(value);
 
     if (STREQ("log_level", key, klen) == true) {
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 3; ++i) {
             if (STREQ(lmap[i].lname, value, vlen) == true)
                 config.loglevel = lmap[i].loglevel;
         }
@@ -313,7 +313,7 @@ void config_print(void) {
     if (config.loglevel < WARNING) {
         const char *sfamily = config.socket_family == UNIX ? "Unix" : "Tcp";
         const char *llevel = NULL;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; ++i) {
             if (lmap[i].loglevel == config.loglevel)
                 llevel = lmap[i].lname;
         }

@@ -39,7 +39,7 @@
 // Stops epoll_wait loops by sending an event
 void sigint_handler(int signum) {
     printf("\n");
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < IOPOOLSIZE + WORKERPOOLSIZE + 1; ++i) {
         eventfd_write(conf->run, 1);
         usleep(1500);
     }

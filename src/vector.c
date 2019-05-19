@@ -39,7 +39,7 @@ Vector *vector_new(void(*destructor)(void *)) {
     v->items = tmalloc(v->maxsize * sizeof(void *));
     v->destructor = destructor;
 
-    for (int i = 0; i < v->maxsize; i++)
+    for (int i = 0; i < v->maxsize; ++i)
         v->items[i] = NULL;
 
     return v;
@@ -48,10 +48,10 @@ Vector *vector_new(void(*destructor)(void *)) {
 
 void vector_destroy(Vector *v) {
     if (v->destructor)
-        for (int i = 0; i < v->size; i++)
+        for (int i = 0; i < v->size; ++i)
             v->destructor(v->items[i]);
     else
-        for (int i = 0; i < v->size; i++)
+        for (int i = 0; i < v->size; ++i)
             tfree(v->items[i]);
     tfree(v->items);
     tfree(v);
@@ -99,7 +99,7 @@ void vector_delete(Vector *v, int index) {
 
     v->items[index] = NULL;
 
-    for (int i = index; i < v->size - 1; i++) {
+    for (int i = index; i < v->size - 1; ++i) {
         v->items[i] = v->items[i + 1];
         v->items[i + 1] = NULL;
     }
@@ -133,7 +133,7 @@ static void quicksort(Vector *v, int left, int right,
 
     int count = left;
 
-    for (int i = left; i <= right; i++) {
+    for (int i = left; i <= right; ++i) {
 
         if (cmp_func(vector_get(v, i), pivot) == true) {
 

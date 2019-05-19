@@ -66,6 +66,15 @@
 #define STATS_PRINT_INTERVAL    15
 
 /*
+ * Number of I/O workers to start, in other words the size of the IO thread
+ * pool
+ */
+#define IOPOOLSIZE 1
+
+/* Number of Worker threads, or the size of the worker pool */
+#define WORKERPOOLSIZE 2
+
+/*
  * Global db instance, containing some connection data, clients, expiring keys
  * and databases
  */

@@ -276,7 +276,7 @@ int epoll_add(int efd, int fd, int evs, void *data) {
     if (data)
         ev.data.ptr = data;
 
-    ev.events = evs | EPOLLET | EPOLLONESHOT;
+    ev.events = evs | EPOLLET;
 
     return epoll_ctl(efd, EPOLL_CTL_ADD, fd, &ev);
 }
@@ -304,7 +304,7 @@ int epoll_del(int efd, int fd) {
 
 int add_cron_task(int epollfd, const struct itimerspec *timervalue) {
 
-    int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    int timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 
     if (timerfd_settime(timerfd, 0, timervalue, NULL) < 0)
         goto err;

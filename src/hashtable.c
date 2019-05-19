@@ -83,7 +83,7 @@ static int hashtable_hash(HashTable *table, const uint8_t *key) {
     char *k, *currk;
 
     /* Linear probing */
-    for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {
+    for (int i = 0; i < MAX_CHAIN_LENGTH; ++i) {
 
         if (table->entries[curr].taken == false)
             return curr;
@@ -130,7 +130,7 @@ static int hashtable_rehash(HashTable *table) {
     int status;
 
     /* Rehash the elements */
-    for (size_t i = 0; i < old_size; i++) {
+    for (size_t i = 0; i < old_size; ++i) {
 
         if (curr[i].taken == false)
             continue;
@@ -234,7 +234,7 @@ void *hashtable_get(HashTable *table, const char *key) {
     uint64_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
-    for (int i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for (int i = 0; i < MAX_CHAIN_LENGTH; ++i){
         if (table->entries[curr].taken == true) {
             if (STREQ(table->entries[curr].key, key, strlen(key)) == true)
                 return table->entries[curr].val;
@@ -259,7 +259,7 @@ struct hashtable_entry *hashtable_get_entry(HashTable *table,
     uint64_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
-    for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {
+    for (int i = 0; i < MAX_CHAIN_LENGTH; ++i) {
         if (table->entries[curr].taken == true) {
             if (STREQ(table->entries[curr].key, key, strlen(key)) == true)
                 return &table->entries[curr];
@@ -284,7 +284,7 @@ int hashtable_del(HashTable *table, const char *key) {
     uint64_t curr = hashtable_hash_int(table, (const uint8_t *) key);
 
     /* Linear probing, if necessary */
-    for (int i = 0; i < MAX_CHAIN_LENGTH; i++) {
+    for (int i = 0; i < MAX_CHAIN_LENGTH; ++i) {
 
         // check wether the position in array is in use
         if (table->entries[curr].taken == true) {
@@ -324,7 +324,7 @@ int hashtable_map(HashTable *table, int (*func)(struct hashtable_entry *)) {
         return -HASHTABLE_ERR;
 
     /* Linear probing */
-    for (size_t i = 0; i < table->table_size; i++) {
+    for (size_t i = 0; i < table->table_size; ++i) {
 
         if (table->entries[i].taken == true) {
 
@@ -356,7 +356,7 @@ int hashtable_map2(HashTable *table,
         return -HASHTABLE_ERR;
 
     /* Linear probing */
-    for (size_t i = 0; i < table->table_size; i++) {
+    for (size_t i = 0; i < table->table_size; ++i) {
 
         if (table->entries[i].taken == true) {
 
@@ -496,7 +496,7 @@ unsigned long crc32(const uint8_t *s, unsigned int len) {
     uint64_t crc32val;
 
     crc32val = 0LL;
-    for (i = 0;  i < len;  i ++) {
+    for (i = 0;  i < len;  ++i) {
         crc32val = crc32_tab[(crc32val ^ s[i]) & 0xff] ^ (crc32val >> 8);
     }
     return crc32val;

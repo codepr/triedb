@@ -255,7 +255,7 @@ struct get_response *get_response(unsigned char byte, Vector *tuples) {
      * Create the tuples array containing required informations from the
      * vector returned from the range query on the Trie
      */
-    for (int i = 0; i < vector_size(tuples); i++) {
+    for (int i = 0; i < vector_size(tuples); ++i) {
         struct kv_obj *kv = vector_get(tuples, i);
         const struct db_item *item = kv->data;
         response->tuples[i].key = (unsigned char *) kv->key;
