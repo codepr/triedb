@@ -331,11 +331,16 @@ static void trie_node_prefix_find(const struct trie_node *node,
         str = trealloc(str, level * 2);
     str[level] = node->chr;
 
-    // If node is leaf node, it indicates end of string, so a null charcter is
-    // added and string is added to the keys list
+    /*
+     * If node is leaf node, it indicates end of string, so a null charcter is
+     * added and string is added to the keys list
+     */
     if (node->data) {
         str[level + 1] = '\0';
-        vector_append(keys, tstrdup(str));
+        struct kv_obj *kv = tmalloc(sizeof(*kv));
+        kv->key = tstrdup(str);
+        kv->data = node->data;
+        vector_append(keys, kv);
     }
 
     if (node->children)

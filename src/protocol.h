@@ -29,10 +29,8 @@
 #define PROTOCOL_H
 
 #include <stdio.h>
-// #include <stdint.h>
-// #include "list.h"
-// #include "util.h"
 #include "pack.h"
+#include "vector.h"
 
 /* Error codes */
 #define OK                      0x00
@@ -240,7 +238,7 @@ void triedb_request_destroy(union triedb_request *);
 
 struct ack_response *ack_response(unsigned char , unsigned char);
 
-struct get_response *get_response(unsigned char, unsigned short, struct tuple *);
+struct get_response *get_response(unsigned char, Vector *);
 
 struct cnt_response *cnt_response(unsigned char, unsigned long long);
 

@@ -31,9 +31,11 @@
 #include <string.h>
 #include <assert.h>
 #include <arpa/inet.h>
+#include "db.h"
 #include "util.h"
 #include "protocol.h"
 #include "pack.h"
+#include "trie.h"
 
 
 /* Unpack prototypes */
@@ -238,6 +240,30 @@ struct cnt_response *cnt_response(unsigned char byte, unsigned long long val) {
     struct cnt_response *response = tmalloc(sizeof(*response));
     response->header.byte = byte;
     response->val = val;
+    return response;
+}
+
+
+struct get_response *get_response(unsigned char byte, Vector *tuples) {
+
+    struct get_response *response = tmalloc(sizeof(*response));
+    response->header.byte = byte;
+    response->tuples_len = tuples->size;
+    response->tuples = tmalloc(tuples->size * sizeof(struct tuple));
+
+    /*
+     * Create the tuples array containing required informations from the
+     * vector returned from the range query on the Trie
+     */
+    for (int i = 0; i < vector_size(tuples); i++) {
+        struct kv_obj *kv = vector_get(tuples, i);
+        const struct db_item *item = kv->data;
+        response->tuples[i].key = (unsigned char *) kv->key;
+        response->tuples[i].val = item->data;
+        response->tuples[i].keylen = strlen(kv->key);
+        response->tuples[i].ttl = item->ttl;
+    }
+
     return response;
 }
 

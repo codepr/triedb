@@ -57,6 +57,12 @@ struct Trie {
     size_t size;
 };
 
+/* Key val abstraction, useful for range queries like GET with prefix */
+struct kv_obj {
+    const char *key;
+    const void *data;
+};
+
 // Returns new trie node (initialized to NULLs)
 struct trie_node *trie_create_node(char);
 
