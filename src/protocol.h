@@ -276,7 +276,7 @@ struct cnt_response *cnt_response(unsigned char, unsigned long long);
  * Pack a response transforming all fields into their binary representation,
  * ready to be sent out in network byteorder
  */
-void pack_response(unsigned char *, const union triedb_response *, unsigned);
+unsigned char *pack_response(const union triedb_response *, unsigned);
 
 /* Helper function to create a bytearray with a ACK code */
 bstring pack_ack(unsigned char, unsigned);

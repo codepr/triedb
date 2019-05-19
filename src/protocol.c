@@ -69,13 +69,13 @@ static unpack_handler *unpack_handlers[4] = {
 
 /* Pack prototypes */
 
-typedef void pack_handler(unsigned char *, const union triedb_response *);
+typedef unsigned char *pack_handler(const union triedb_response *);
 
-static void pack_response_ack(unsigned char *, const union triedb_response *);
+static unsigned char *pack_response_ack(const union triedb_response *);
 
-static void pack_response_cnt(unsigned char *, const union triedb_response *);
+static unsigned char *pack_response_cnt(const union triedb_response *);
 
-static void pack_response_get(unsigned char *, const union triedb_response *);
+static unsigned char *pack_response_get(const union triedb_response *);
 
 /*
  * Conversion table for response, maps OPCODE -> COMMAND_TYPE, it's still a
@@ -285,26 +285,28 @@ struct get_response *get_response(unsigned char byte, const void *arg) {
 }
 
 
-static void pack_response_ack(unsigned char *raw,
-                              const union triedb_response *res) {
+static unsigned char *pack_response_ack(const union triedb_response *res) {
+    unsigned char *raw = tmalloc(3);
     pack_u8(&raw, res->ack_res.header.byte);
     encode_length(raw, 1);
     pack_u8(&raw, res->ack_res.rc);
+    return raw;
 }
 
 
-static void pack_response_cnt(unsigned char *raw,
-                              const union triedb_response *res) {
+static unsigned char *pack_response_cnt(const union triedb_response *res) {
+    unsigned char *raw = tmalloc(10);
     pack_u8(&raw, res->cnt_res.header.byte);
     encode_length(raw, 1);
     pack_u64(&raw, res->cnt_res.val);
+    return raw;
 }
 
 
-static void pack_response_get(unsigned char *raw,
-                              const union triedb_response *res) {
-    /* Pack header byte */
-    pack_u8(&raw, res->get_res.header.byte);
+static unsigned char *pack_response_get(const union triedb_response *res) {
+
+    unsigned char *raw = NULL;
+
     size_t length = 0;
 
     if (res->get_res.header.bits.prefix == 1) {
@@ -317,6 +319,12 @@ static void pack_response_get(unsigned char *raw,
             length += res->get_res.tuples[i].keylen
                 + strlen((const char *) res->get_res.tuples[i].val)
                 + sizeof(unsigned);
+
+        raw = tmalloc(length + 2);
+
+        /* Pack header byte */
+        pack_u8(&raw, res->get_res.header.byte);
+
         encode_length(raw, length);
 
         /* Start encoding the tuples */
@@ -331,12 +339,17 @@ static void pack_response_get(unsigned char *raw,
         length = res->get_res.val.keylen
             + strlen((const char *) res->get_res.val.val)
             + sizeof(unsigned);
+        raw = tmalloc(length + 2);
+        /* Pack header byte */
+        pack_u8(&raw, res->get_res.header.byte);
         encode_length(raw, length);
         pack_u16(&raw, res->get_res.val.ttl);
         pack_u16(&raw, res->get_res.val.keylen);
         pack_bytes(&raw, res->get_res.val.key);
         pack_bytes(&raw, res->get_res.val.val);
     }
+
+    return raw;
 }
 
 
@@ -360,7 +373,6 @@ bstring pack_cnt(unsigned char byte, unsigned long long val) {
 }
 
 
-void pack_response(unsigned char *raw,
-                   const union triedb_response *res, unsigned type) {
-    pack_handlers[type](raw, res);
+unsigned char *pack_response(const union triedb_response *res, unsigned type) {
+    return pack_handlers[type](res);
 }

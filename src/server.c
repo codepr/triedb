@@ -229,28 +229,47 @@ static int get_handler(struct io_event *event) {
 
     union triedb_request *packet = event->payload;
     struct client *c = event->client;
-    Vector *v;
+    struct get_response *response = NULL;
 
     void *val = NULL;
 
     if (packet->get.header.bits.prefix == 0) {
 
 #if WORKERPOOLSIZE > 1
-    pthread_spin_lock(&spinlock);
+        pthread_spin_lock(&spinlock);
 #endif
-    // Test for the presence of the key in the trie structure
-    bool found = database_search(c->db, (const char *) packet->get.key, &val);
+        // Test for the presence of the key in the trie structure
+        bool found = database_search(c->db, (const char *) packet->get.key, &val);
 #if WORKERPOOLSIZE > 1
-    pthread_spin_unlock(&spinlock);
+        pthread_spin_unlock(&spinlock);
 #endif
 
-    if (found == false || val == NULL)
-        goto nok;
+        if (found == false || val == NULL)
+            goto nok;
+
+        struct db_item *item = val;
+
+        struct tuple t = {
+            .ttl = item->ttl,
+            .keylen = strlen((const char *) packet->get.key),
+            .key = packet->get.key,
+            .val = item->data
+        };
+
+        response = get_response(packet->get.header.byte, &t);
+    } else {
+#if WORKERPOOLSIZE > 1
+        pthread_spin_lock(&spinlock);
+#endif
+
+        Vector *v = database_prefix_search(c->db,
+                                           (const char *) packet->get.key);
+        response = get_response(packet->get.header.byte, v);
     }
 
-    // TODO forge GET response
-    /* event->reply = bstring_new(((struct db_item *) val)->data); */
-    struct get_response *response = get_response(0x20, `
+    union triedb_response r = { .get_res = *response };
+
+    event->reply = pack_response(&r, packet->get.header.bits.opcode);
 
     return 0;
 

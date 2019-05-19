@@ -1,3 +1,9 @@
+0.6.1 - 2019/05/19
+==================
+
+- Refactored pack functions
+- Add initial GET response to the server handler
+
 0.6.0 - 2019/05/19
 ==================
 
