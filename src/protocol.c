@@ -326,21 +326,31 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
         raw = tmalloc(length + 2);
 
         /* Encode the byte, the length and the tuples len */
-        pack(raw, "BBH", res->get_res.header.byte, length, res->get_res.tuples_len);
+        pack(raw, "B", res->get_res.header.byte);
+        int steps = encode_length(raw + 1, length);
+        pack(raw + steps + 1, "H", res->get_res.tuples_len);
 
         /*
-         * Move forward pointer of 4 -> byte + byte + unsigned short, the
-         * portion of the packet already written and packed
+         * Move forward pointer of 3 + steps -> byte + unsigned short + steps
+         * (bytes required to store packet length, max 4), the portion of the
+         * packet already written and packed
          */
-        unsigned char *p = raw + 4;
+        unsigned char *p = raw + 3 + steps;
 
         /* Start encoding the tuples */
-        for (int i = 0; i < res->get_res.tuples_len; ++i)
-            pack(p, "iHsHs", res->get_res.tuples[i].ttl,
+        int pos = 0;
+        for (int i = 0; i < res->get_res.tuples_len; ++i) {
+            pack(p + pos, "iHsHs", res->get_res.tuples[i].ttl,
                  res->get_res.tuples[i].keylen,
                  res->get_res.tuples[i].key,
                  strlen((const char *) res->get_res.tuples[i].val),
                  res->get_res.tuples[i].val);
+            /* Update position index */
+            pos += res->get_res.tuples[i].keylen
+                + strlen((const char *) res->get_res.tuples[i].val)
+                + sizeof(int)
+                + sizeof(unsigned short) * 2;
+        }
 
     } else {
 
@@ -351,9 +361,12 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
 
         raw = tmalloc(length + 2);
 
-        pack(raw, "BBiHss", res->get_res.header.byte, length,
-             res->get_res.val.ttl, res->get_res.val.keylen,
-             res->get_res.val.key, res->get_res.val.val);
+        pack(raw, "B", res->get_res.header.byte);
+        int steps = encode_length(raw + 1, length);
+        pack(raw + steps + 1, "iHss", res->get_res.val.ttl,
+             res->get_res.val.keylen,
+             res->get_res.val.key,
+             res->get_res.val.val);
     }
 
     return raw;

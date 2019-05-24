@@ -364,11 +364,14 @@ Vector *trie_prefix_find(const Trie *trie, const char *prefix) {
     // Check all possible sub-paths and add the resulting key to the result
     char *str = tmalloc(32);
     size_t plen = strlen(prefix);
-    memcpy(str, prefix, plen - 1);
+    memcpy(str, prefix, plen);
     str[plen] = '\0';
 
-    // Recursive function call
-    trie_node_prefix_find(node, str, plen, keys);
+    /*
+     * Recursive function call, starting from index - 1, starting saving nodes
+     * from the last character explored
+     */
+    trie_node_prefix_find(node, str, plen - 1, keys);
 
     tfree(str);
 

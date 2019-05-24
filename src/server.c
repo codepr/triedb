@@ -962,7 +962,7 @@ ssize_t recv_packet(int clientfd, unsigned char **buf, unsigned char *header) {
     *header = *tmpbuf;
     tmpbuf++;
 
-    if (DEL < *header >> 4 || PUT > *header >> 4)
+    if (DEL < (*header >> 4) || PUT > (*header >> 4))
         return -ERRPACKETERR;
 
     /*
