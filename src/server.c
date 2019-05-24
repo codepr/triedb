@@ -286,6 +286,7 @@ static int get_handler(struct io_event *event) {
     event->reply = pack_response(&r, packet->get.header.bits.opcode);
 
     // TODO destroy response
+    get_response_destroy(response);
 
     return 0;
 
@@ -825,6 +826,7 @@ static void *io_worker(void *arg) {
                 }
                 else if (rc == -ERRCLIENTDC)
                     close(event->client->fd);
+
             } else if (e_events[i].events & EPOLLOUT) {
 
                 struct io_event *event = e_events[i].data.ptr;
@@ -855,7 +857,7 @@ static void *io_worker(void *arg) {
                 if ((*event->reply >> 4) != ACK)
                     bstring_destroy(event->reply);
 
-                /* tfree(event); */
+                tfree(event);
             }
         }
     }
@@ -874,6 +876,7 @@ static void *worker(void *arg) {
     struct epoll *epoll = arg;
     int events = 0;
     long int timers = 0;
+    unsigned long long int v;
 
     struct epoll_event *e_events =
         tmalloc(sizeof(struct epoll_event) * EPOLL_MAX_EVENTS);
@@ -920,6 +923,7 @@ static void *worker(void *arg) {
                 expire_keys();
             } else if (e_events[i].events & EPOLLIN) {
                 struct io_event *event = e_events[i].data.ptr;
+                read(event->io_event, &v, sizeof(v));
                 // TODO free client and remove it from the global map in case
                 // of QUIT command (check return code)
                 handlers[event->payload->header.bits.opcode](event);

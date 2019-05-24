@@ -291,6 +291,13 @@ struct get_response *get_response(unsigned char byte, const void *arg) {
 }
 
 
+void get_response_destroy(struct get_response *response) {
+    if (response->header.bits.prefix == 1)
+        tfree(response->tuples);
+    tfree(response);
+}
+
+
 static unsigned char *pack_response_ack(const union triedb_response *res) {
     unsigned char *raw = tmalloc(3);
     pack(raw, "BBB", res->ack_res.header.byte, 1, res->ack_res.rc);

@@ -272,6 +272,8 @@ struct get_response *get_response(unsigned char, const void *);
 
 struct cnt_response *cnt_response(unsigned char, unsigned long long);
 
+void get_response_destroy(struct get_response *);
+
 /*
  * Pack a response transforming all fields into their binary representation,
  * ready to be sent out in network byteorder
