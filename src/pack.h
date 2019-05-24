@@ -66,47 +66,67 @@ void htonll(uint8_t *, uint_least64_t );
 uint_least64_t ntohll(const uint8_t *);
 
 /* Reading data on const uint8_t pointer */
-// bytes -> uint8_t
-uint8_t unpack_u8(const uint8_t **);
+
+// bytes -> int16_t
+int unpacki16(unsigned char *);
 
 // bytes -> uint16_t
-uint16_t unpack_u16(const uint8_t **);
+unsigned int unpacku16(unsigned char *);
 
 // bytes -> int32_t
-int32_t unpack_i32(const uint8_t **);
+long int unpacki32(unsigned char *);
 
 // bytes -> uint32_t
-uint32_t unpack_u32(const uint8_t **);
+unsigned long int unpacku32(unsigned char *);
+
+// bytes -> int64_t
+long long int unpacki64(unsigned char *);
 
 // bytes -> uint64_t
-uint64_t unpack_u64(const uint8_t **);
-
-// read a defined len of bytes
-uint8_t *unpack_bytes(const uint8_t **, size_t, uint8_t *);
+unsigned long long int unpacku64(unsigned char *);
 
 /* Write data on const uint8_t pointer */
 // append a uint8_t -> bytes into the bytestring
 void pack_u8(uint8_t **, uint8_t);
 
 // append a uint16_t -> bytes into the bytestring
-void pack_u16(uint8_t **, uint16_t);
+void packi16(unsigned char *, unsigned short);
 
 // append a int32_t -> bytes into the bytestring
-void pack_i32(uint8_t **, int32_t);
-
-// append a uint32_t -> bytes into the bytestring
-void pack_u32(uint8_t **, uint32_t);
+void packi32(unsigned char *, unsigned int);
 
 // append a uint64_t -> bytes into the bytestring
-void pack_u64(uint8_t **, uint64_t);
+void packi64(unsigned char *, unsigned long long int);
 
-// append len bytes into the bytestring
-void pack_bytes(uint8_t **, uint8_t *);
-
-
+/*
+ * pack() -- store data dictated by the format string in the buffer
+ *
+ *   bits |signed   unsigned   float   string
+ *   -----+----------------------------------
+ *      8 |   b        B
+ *     16 |   h        H         f
+ *     32 |   i        I         d
+ *     64 |   q        Q         g
+ *      - |                               s
+ *
+ *  (16-bit unsigned length is automatically prepended to strings)
+ */
 unsigned int pack(unsigned char *, char *, ...);
 
-
+/*
+ * unpack() -- unpack data dictated by the format string into the buffer
+ *
+ *   bits |signed   unsigned   float   string
+ *   -----+----------------------------------
+ *      8 |   b        B
+ *     16 |   h        H         f
+ *     32 |   i        I         d
+ *     64 |   q        Q         g
+ *      - |                               s
+ *
+ *  (string is extracted based on its stored length, but 's' can be
+ *  prepended with a max length)
+ */
 void unpack(unsigned char *, char *, ...);
 
 

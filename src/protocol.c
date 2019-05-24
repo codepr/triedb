@@ -159,24 +159,28 @@ static size_t unpack_triedb_put(const unsigned char *raw,
     struct put put = { .header = *hdr };
     pkt->put = put;
 
-    // TTL check
-    pkt->put.ttl = unpack_i32((const uint8_t **) &raw);
-
-    /* Read topic length and topic of the soon-to-be-published message */
-    uint16_t keylen = unpack_u16((const uint8_t **) &raw);
-    pkt->put.keylen = keylen;
-    pkt->put.key = tmalloc(keylen + 1);
-    unpack_bytes((const uint8_t **) &raw, keylen, pkt->put.key);
+    /* Read TTL and key len */
+    unpack((unsigned char *) raw, "iH", &pkt->put.ttl, &pkt->put.keylen);
 
     size_t pkt_len = len;
 
     /*
-     * Message len is calculated subtracting the length of the variable header
+     * Value len is calculated subtracting the length of the variable header
      * from the Remaining Length field that is in the Fixed Header
      */
-    pkt_len -= (sizeof(int32_t) + sizeof(uint16_t) + keylen);
+    pkt_len -= (sizeof(int32_t) + sizeof(uint16_t) + pkt->put.keylen);
+
+    char fmt[100];
+    sprintf(fmt, "%ds%lds", pkt->put.keylen, pkt_len);
+
+    pkt->put.key = tmalloc(pkt->put.keylen + 1);
     pkt->put.val = tmalloc(pkt_len + 1);
-    unpack_bytes((const uint8_t **) &raw, pkt_len, pkt->put.val);
+
+    /*
+     * Move pointer forward of sizeof int + sizeof unsigned short, which
+     * is the already read and unpacked bytes
+     */
+    unpack((unsigned char *) raw + 6, fmt, pkt->put.key, pkt->put.val);
 
     return len;
 }
@@ -192,7 +196,9 @@ static size_t unpack_triedb_get(const unsigned char *raw,
 
     /* Read topic length and topic of the soon-to-be-published message */
     pkt->get.key = tmalloc(len + 1);
-    unpack_bytes((const uint8_t **) &raw, len, pkt->get.key);
+    char fmt[10];
+    sprintf(fmt, "%lds", len);
+    unpack((unsigned char *) raw, fmt, pkt->get.key);
 
     return len;
 }
@@ -287,20 +293,14 @@ struct get_response *get_response(unsigned char byte, const void *arg) {
 
 static unsigned char *pack_response_ack(const union triedb_response *res) {
     unsigned char *raw = tmalloc(3);
-    unsigned char *p = raw;
-    pack_u8(&p, res->ack_res.header.byte);
-    encode_length(p++, 1);
-    pack_u8(&p, res->ack_res.rc);
+    pack(raw, "BBB", res->ack_res.header.byte, 1, res->ack_res.rc);
     return raw;
 }
 
 
 static unsigned char *pack_response_cnt(const union triedb_response *res) {
     unsigned char *raw = tmalloc(10);
-    unsigned char *p = raw;
-    pack_u8(&p, res->cnt_res.header.byte);
-    encode_length(p++, 1);
-    pack_u64(&p, res->cnt_res.val);
+    pack(raw, "BBQ", res->cnt_res.header.byte, 8, res->cnt_res.val);
     return raw;
 }
 
@@ -324,45 +324,36 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
                 + sizeof(unsigned short) * 2;
 
         raw = tmalloc(length + 2);
-        unsigned char *p = raw;
 
-        /* Pack header byte */
-        pack_u8(&p, res->get_res.header.byte);
+        /* Encode the byte, the length and the tuples len */
+        pack(raw, "BBH", res->get_res.header.byte, length, res->get_res.tuples_len);
 
-        int step = encode_length(p, length);
-        p += step;
+        /*
+         * Move forward pointer of 4 -> byte + byte + unsigned short, the
+         * portion of the packet already written and packed
+         */
+        unsigned char *p = raw + 4;
 
         /* Start encoding the tuples */
-        pack_u16(&p, res->get_res.tuples_len);
-        for (int i = 0; i < res->get_res.tuples_len; ++i) {
-            pack_i32(&p, res->get_res.tuples[i].ttl);
-            pack_u16(&p, res->get_res.tuples[i].keylen);
-            pack_bytes(&p, res->get_res.tuples[i].key);
-            pack_u16(&p, strlen((const char *) res->get_res.tuples[i].val));
-            pack_bytes(&p, res->get_res.tuples[i].val);
-        }
+        for (int i = 0; i < res->get_res.tuples_len; ++i)
+            pack(p, "iHsHs", res->get_res.tuples[i].ttl,
+                 res->get_res.tuples[i].keylen,
+                 res->get_res.tuples[i].key,
+                 strlen((const char *) res->get_res.tuples[i].val),
+                 res->get_res.tuples[i].val);
+
     } else {
+
         length = res->get_res.val.keylen
             + strlen((const char *) res->get_res.val.val)
             + sizeof(int)
             + sizeof(unsigned short);
-        raw = tmalloc(length + 2);
-        /* unsigned char *p = raw; */
 
-        char fmt[100];
-        sprintf(fmt, "BBiH%ds%lds", res->get_res.val.keylen,
-                strlen((const char *) res->get_res.val.val));
-        pack(raw, fmt, res->get_res.header.byte, (unsigned char) length,
-             (int) res->get_res.val.ttl, (unsigned short) res->get_res.val.keylen,
+        raw = tmalloc(length + 2);
+
+        pack(raw, "BBiHss", res->get_res.header.byte, length,
+             res->get_res.val.ttl, res->get_res.val.keylen,
              res->get_res.val.key, res->get_res.val.val);
-        /* Pack header byte */
-        /* pack_u8(&p, res->get_res.header.byte); */
-        /* int step = encode_length(p, length); */
-        /* p += step; */
-        /* pack_i32(&p, res->get_res.val.ttl); */
-        /* pack_u16(&p, res->get_res.val.keylen); */
-        /* pack_bytes(&p, res->get_res.val.key); */
-        /* pack_bytes(&p, res->get_res.val.val); */
     }
 
     return raw;
@@ -371,20 +362,14 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
 
 bstring pack_ack(unsigned char byte, unsigned char rc) {
     unsigned char raw[3];
-    unsigned char *praw = &raw[0];
-    pack_u8(&praw, byte);
-    encode_length(praw++, 1);
-    pack_u8(&praw, rc);
+    pack(raw, "BBB", byte, 1, rc);
     return bstring_copy((const char *) raw, 3);
 }
 
 
 bstring pack_cnt(unsigned char byte, unsigned long long val) {
     unsigned char raw[10];
-    unsigned char *praw = &raw[0];
-    pack_u8(&praw, byte);
-    encode_length(praw++, 1);
-    pack_u64(&praw, val);
+    pack(raw, "BBQ", byte, 8, val);
     return bstring_copy((const char *) raw, 10);
 }
 
