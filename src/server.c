@@ -129,7 +129,7 @@ struct epoll {
 
 
 static void expire_keys(void);
-static inline void trie_node_destructor(struct trie_node *, bool);
+static inline bool trie_node_destructor(struct trie_node *, bool);
 
 /* Prototype for a command handler */
 typedef int handler(struct io_event *);
@@ -1104,12 +1104,17 @@ static inline int database_destructor(struct hashtable_entry *entry) {
  * that will be called on trie_del call as well as trie_destroy too.
  * In our case each node will contain a db_item structure so we free resources
  * according to this structure.
+ * Accepts a `dataonly` boolean, beside the poor name, it is used by trie
+ * datastructure to delete nodes singularly or "in batch", a call of
+ * trie_delete will this way preserve integrity on the structure without
+ * de-allocating memory on non-leaf nodes.
  */
-static inline void trie_node_destructor(struct trie_node *node,
+static inline bool trie_node_destructor(struct trie_node *node,
                                         bool dataonly) {
+    bool ret = false;
 
     if (!node)
-        return;
+        return ret;
 
     struct db_item *item = node->data;
 
@@ -1124,10 +1129,14 @@ static inline void trie_node_destructor(struct trie_node *node,
     tfree(node->data);
     node->data = NULL;
 
+    ret = true;
+
 exit:
 
     if (dataonly == false)
         tfree(node);
+
+    return ret;
 }
 
 /*

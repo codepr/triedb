@@ -48,7 +48,7 @@ struct trie_node {
 };
 
 
-typedef void trie_destructor(struct trie_node *, bool);
+typedef bool trie_destructor(struct trie_node *, bool);
 
 /*
  * Trie ADT, it is formed by a root struct trie_node, and the total size of the

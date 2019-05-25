@@ -237,12 +237,16 @@ bool trie_delete(Trie *trie, const char *key) {
             retnode = child->data;
 
         }
-        if (trie->destructor)
-            trie->destructor(retnode, true);
-        else {
+        if (trie->destructor) {
+            bool ret = false;
+            if ((ret = trie->destructor(retnode, true)) == true)
+                trie->size--;
+            return ret;
+        } else {
             if (retnode->data) {
                 tfree(retnode->data);
                 retnode->data = NULL;
+                trie->size--;
             }
         }
         return true;
