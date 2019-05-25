@@ -255,6 +255,42 @@ static int get_handler(struct io_event *event) {
 
         struct db_item *item = val;
 
+        /*
+         * Check for TTL, in case of no ttl (-1) go on, otherwise the key is
+         * flagged as expired and we delete it from the database, in a lazy
+         * check behaviour
+         */
+        if (item->ttl != -1) {
+
+            time_t now = time(NULL);
+            time_t delta = (item->ctime + item->ttl) - now;
+
+            if (delta <= 0) {
+                // we're in the expired state
+                database_remove(c->db, (const char *) packet->get.key);
+
+                /*
+                 * Linearly search for index of the key in the expiring_keys
+                 * vector, binary search would be better here
+                 */
+                for (size_t i = 0; i < vector_size(triedb.expiring_keys); ++i) {
+                    struct expiring_key *ek =
+                        vector_get(triedb.expiring_keys, i);
+                    if (ek->item == item) {
+                        vector_delete(triedb.expiring_keys, i);
+                        tfree((char *) ek->key);
+                        tfree(ek);
+                        break;
+                    }
+                }
+
+                // Finally return a NOK
+                event->reply = ack_replies[NOK];
+
+                return 0;
+            }
+        }
+
         struct tuple t = {
             .ttl = item->ttl,
             .keylen = strlen((const char *) packet->get.key),
