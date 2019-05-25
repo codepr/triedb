@@ -176,7 +176,7 @@ typedef struct ack quit;
 
 typedef struct ack db;
 
-typedef struct ack info;
+typedef struct ack infos;
 
 
 /*
@@ -196,7 +196,7 @@ union triedb_request {
     cnt count;
     use usec;
     db  get_db;
-    info infos;
+    infos info;
 
 };
 

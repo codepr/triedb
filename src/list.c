@@ -28,7 +28,6 @@
 #include <stdlib.h>
 #include "list.h"
 #include "util.h"
-#include "server.h"
 
 
 static struct list_node *list_node_remove(struct list_node *,
@@ -331,58 +330,4 @@ struct list_node *list_merge_sort(struct list_node *head, cmp cmp_func) {
 
     return merge_list(list_merge_sort(list1, cmp_func),
                       list_merge_sort(list2, cmp_func), cmp_func);
-}
-
-/* Search for a given node based on a comparison of char stored in structure
- * and a value, O(n) at worst
- */
-struct list_node *linear_search(const List *list, int value) {
-
-    if (!list || list->len == 0)
-        return NULL;
-
-    for (struct list_node *cur = list->head; cur != NULL; cur = cur->next) {
-        if (((struct trie_node *) cur->data)->chr == value)
-            return cur;
-        else if (((struct trie_node *) cur->data)->chr > value)
-            break;
-    }
-
-    return NULL;
-}
-
-
-static struct list_node *merge_tnode_list(struct list_node *list1,
-                                          struct list_node *list2) {
-
-    struct list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
-
-    while (list1 && list2) {
-
-        /* cast to cluster_node */
-        char chr1 = ((struct trie_node *) list1->data)->chr;
-        char chr2 = ((struct trie_node *) list2->data)->chr;
-
-        struct list_node **min = chr1 <= chr2 ? &list1 : &list2;
-        struct list_node *next = (*min)->next;
-        tail = tail->next = *min;
-        *min = next;
-    }
-
-    tail->next = list1 ? list1 : list2;
-    return dummy_head.next;
-}
-
-
-struct list_node *merge_sort_tnode(struct list_node *head) {
-
-    struct list_node *list1 = head;
-
-    if (!list1 || !list1->next)
-        return list1;
-
-    /* find the middle */
-    struct list_node *list2 = bisect_list(list1);
-
-    return merge_tnode_list(merge_sort_tnode(list1), merge_sort_tnode(list2));
 }

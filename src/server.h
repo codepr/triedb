@@ -34,7 +34,6 @@
 #include "list.h"
 #include "vector.h"
 #include "cluster.h"
-#include "protocol.h"
 #include "hashtable.h"
 
 /*

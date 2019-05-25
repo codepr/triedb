@@ -163,8 +163,10 @@ static int ping_handler(struct io_event *);
 
 static int quit_handler(struct io_event *);
 
+static int info_handler(struct io_event *);
+
 /* Command handler mapped usign their position paired with their type */
-static handler *handlers[13] = {
+static handler *handlers[14] = {
     NULL,
     put_handler,
     get_handler,
@@ -177,7 +179,8 @@ static handler *handlers[13] = {
     keys_handler,
     ping_handler,
     quit_handler,
-    db_handler
+    db_handler,
+    info_handler
 };
 
 /* OK, NOK and RESERVED return codes, pre-packed ACK responses */
@@ -685,6 +688,16 @@ static int quit_handler(struct io_event *event) {
     hashtable_del(triedb.clients, event->client->uuid);
 
     return -1;
+}
+
+
+static int info_handler(struct io_event *event) {
+
+    // XXX placeholder
+    // TODO
+    event->reply = ack_replies[OK];
+
+    return 0;
 }
 
 /* Utility macro to handle base case on each EPOLL loop */
