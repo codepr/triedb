@@ -19,7 +19,7 @@ $ cmake .
 $ make
 ```
 
-Inside `/bin` directory will be placed `triedb` and `triedb_tests` executables.
+Inside `bin/` directory will be placed `triedb` and `triedb_tests` executables.
 
 
 ## Changelog

@@ -1112,12 +1112,18 @@ static inline void trie_node_destructor(struct trie_node *node) {
 
     struct db_item *item = node->data;
 
+    if (node->children)
+        tfree(node->children);
+
+    tfree(node);
+
+    if (!item)
+        return;
+
     if (item->data)
         tfree(item->data);
 
     tfree(item);
-
-    tfree(node);
 }
 
 /*
