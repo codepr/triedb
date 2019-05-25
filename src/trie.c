@@ -30,7 +30,6 @@
 #include <string.h>
 #include "trie.h"
 #include "util.h"
-#include "db.h"
 
 
 static void children_destroy(struct bst_node *, size_t *, trie_destructor *);

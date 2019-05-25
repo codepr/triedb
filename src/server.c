@@ -284,6 +284,8 @@ static int get_handler(struct io_event *event) {
                     }
                 }
 
+                triedb.keyspace_size--;
+
                 // Finally return a NOK
                 event->reply = ack_replies[NOK];
 
