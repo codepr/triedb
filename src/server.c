@@ -232,6 +232,7 @@ static int get_handler(struct io_event *event) {
     struct get_response *response = NULL;
 
     void *val = NULL;
+    Vector *v = NULL;
 
     if (packet->get.header.bits.prefix == 0) {
 
@@ -270,8 +271,7 @@ static int get_handler(struct io_event *event) {
         pthread_spin_lock(&spinlock);
 #endif
 
-        Vector *v = database_prefix_search(c->db,
-                                           (const char *) packet->get.key);
+        v = database_prefix_search(c->db, (const char *) packet->get.key);
 
 #if WORKERPOOLSIZE > 1
         pthread_spin_unlock(&spinlock);
@@ -286,7 +286,20 @@ static int get_handler(struct io_event *event) {
     event->reply = pack_response(&r, packet->get.header.bits.opcode);
 
     // TODO destroy response
-    get_response_destroy(response);
+    if (v) {
+        struct kv_obj *current = NULL;
+        for (int i = 0; i < vector_size(v); ++i) {
+            current = vector_get(v, i);
+            tfree((void *) current->key);
+            tfree(current);
+        }
+        tfree(v->items);
+        tfree(v);
+    }
+
+    if (r.get_res.header.bits.prefix == 1)
+        tfree(response->tuples);
+    tfree(response);
 
     return 0;
 
@@ -821,7 +834,8 @@ static void *io_worker(void *arg) {
                      */
                     eventfd_t ev = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
                     event->io_event = ev;
-                    epoll_add(epoll->w_epollfd, ev, EPOLLIN, event);
+                    epoll_add(epoll->w_epollfd, ev,
+                              EPOLLIN | EPOLLONESHOT, event);
                     eventfd_write(ev, 1);
                 }
                 else if (rc == -ERRCLIENTDC)
@@ -876,7 +890,7 @@ static void *worker(void *arg) {
     struct epoll *epoll = arg;
     int events = 0;
     long int timers = 0;
-    unsigned long long int v;
+    eventfd_t val;
 
     struct epoll_event *e_events =
         tmalloc(sizeof(struct epoll_event) * EPOLL_MAX_EVENTS);
@@ -908,7 +922,6 @@ static void *worker(void *arg) {
 
             } else if (e_events[i].data.fd == conf->run) {
 
-                eventfd_t val;
                 /* And quit event after that */
                 eventfd_read(conf->run, &val);
 
@@ -923,7 +936,7 @@ static void *worker(void *arg) {
                 expire_keys();
             } else if (e_events[i].events & EPOLLIN) {
                 struct io_event *event = e_events[i].data.ptr;
-                read(event->io_event, &v, sizeof(v));
+                eventfd_read(event->io_event, &val);
                 // TODO free client and remove it from the global map in case
                 // of QUIT command (check return code)
                 handlers[event->payload->header.bits.opcode](event);

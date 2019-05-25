@@ -170,7 +170,7 @@ static size_t unpack_triedb_put(const unsigned char *raw,
      */
     pkt_len -= (sizeof(int32_t) + sizeof(uint16_t) + pkt->put.keylen);
 
-    char fmt[100];
+    char fmt[32];
     sprintf(fmt, "%ds%lds", pkt->put.keylen, pkt_len);
 
     pkt->put.key = tmalloc(pkt->put.keylen + 1);
@@ -225,7 +225,6 @@ void triedb_request_destroy(union triedb_request *pkt) {
     switch (pkt->header.bits.opcode) {
         case PUT:
             tfree(pkt->put.key);
-            tfree(pkt->put.val);
             break;
         case GET:
             tfree(pkt->get.key);

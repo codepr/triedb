@@ -53,7 +53,7 @@ void database_insert(struct database *db, const char *key,
     struct db_item *item = tmalloc(sizeof(*item));
     item->ttl = ttl;
     item->lstime = item->ctime = time(NULL);
-    item->data = tstrdup(data);
+    item->data = (void *) data;
     trie_insert(db->data, key, item);
 }
 
