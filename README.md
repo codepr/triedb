@@ -30,16 +30,6 @@ TrieDB uses a custom binary protocol to communicate, the structure of a packet
 is pretty simple, it is formed by a 1 byte header, the size of the payload and
 the payload itself.
 
-```
-    |  HEADER  |
-    |----------|
-    |    LEN   |
-    |----------|
-    |          |
-    |  PAYLOAD |
-    |          |
-```
-
 The header, as shown below, is formed by 4 MSB to define the `OPCODE` of the
 command, 1 bit as a `PREFIX` flag for commands which supports `PREFIX` operations
 (e.g. range queries) and the remaining are reserved for future uses (perhaps
@@ -64,26 +54,67 @@ As written before, each TrieDB command is identified by the 7-4 bits of every
 header which can be summarized by the following table:
 
 ```
-     OPCODE |    BIN    | HEX
-     -------|-----------|------
-      PUT   | 00010000  | 0x10
-      GET   | 00100000  | 0x20
-      DEL   | 00110000  | 0x30
-      TTL   | 01000000  | 0x40
-      INC   | 01010000  | 0x50
-      DEC   | 01100000  | 0x60
-      CNT   | 01110000  | 0x70
-      USE   | 10000000  | 0x80
-      KEYS  | 10010000  | 0x90
-      PING  | 10100000  | 0xa0
-      QUIT  | 10110000  | 0xb0
-      DB    | 11000000  | 0xc0
+     OPCODE |    BIN    | HEX  | OPCODE  |
+     -------|-----------|----------------|
+      PUT   | 00010000  | 0x10 |    1    |
+      GET   | 00100000  | 0x20 |    2    |
+      DEL   | 00110000  | 0x30 |    3    |
+      TTL   | 01000000  | 0x40 |    4    |
+      INC   | 01010000  | 0x50 |    5    |
+      DEC   | 01100000  | 0x60 |    6    |
+      CNT   | 01110000  | 0x70 |    7    |
+      USE   | 10000000  | 0x80 |    8    |
+      KEYS  | 10010000  | 0x90 |    9    |
+      PING  | 10100000  | 0xa0 |    10   |
+      QUIT  | 10110000  | 0xb0 |    11   |
+      DB    | 11000000  | 0xc0 |    12   |
 ```
 
 Header byte can be manipulated at bit level to toggle bit flags:
 e.g
 
 `PUT` with `PREFIX = 1 is 00010000 | (00010000 >> 1)  -> 00011000 -> 0x24`
+
+### The server
+
+TrieDB server module define a classic TCP server, based on I/O multiplexing but
+sharing I/O and work loads between thread pools. The main thread have the
+exclusive responsibility of accepting connections and pass them to IO threads.
+From now on read and write operations for the connection will be handled by a
+dedicated thread pool, which after every read will decode the bytearray
+according to the protocol definition of each packet and finally pass the
+resulting packet to the worker thread pool, where, according to the OPCODE of
+the packet, the operation will be executed and the result will be returned back
+to the IO thread that will write back to the client the response packed into a
+bytestream.
+
+```
+       MAIN              1...N              1...N
+
+      [EPOLL]         [IO EPOLL]         [WORK EPOLL]
+   ACCEPT THREAD    IO THREAD POOL    WORKER THREAD POOL
+   -------------    --------------    ------------------
+         |                 |                  |
+       ACCEPT              |                  |
+         | --------------> |                  |
+         |          READ AND DECODE           |
+         |                 | ---------------> |
+         |                 |                WORK
+         |                 | <--------------- |
+         |               WRITE                |
+         |                 |                  |
+       ACCEPT              |                  |
+         | --------------> |                  |
+```
+By tuning the number of IO threads and worker threads based on the number of
+core of the host machine, it is possible to increase the number of served
+concurrent requests per seconds.
+
+The underlying Trie data strucure accessed on the worker thread, in case of
+multiple worker threads it' s guarded by a spinlock, and being generally fast
+operations it shouldn't suffer high contentions by the threads and thus being
+really fast. It's a poor model of concurrency for the computation part but as
+of now it should be more than enough.
 
 ## Changelog
 
