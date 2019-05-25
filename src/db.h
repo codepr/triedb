@@ -49,8 +49,7 @@ struct database {
 };
 
 
-void database_init(struct database *, const char *,
-                   int (*destructor)(struct trie_node *));
+void database_init(struct database *, const char *, trie_destructor *);
 
 size_t database_size(const struct database *);
 

@@ -33,7 +33,7 @@
 
 
 void database_init(struct database *db, const char *name,
-                   int (*destructor)(struct trie_node *)) {
+                   trie_destructor *destructor) {
     db->name = name;
     db->data = trie_new(destructor);
 }

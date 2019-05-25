@@ -47,12 +47,15 @@ struct trie_node {
     void *data;
 };
 
+
+typedef void trie_destructor(struct trie_node *);
+
 /*
  * Trie ADT, it is formed by a root struct trie_node, and the total size of the
  * Trie
  */
 struct Trie {
-    int (*destructor)(struct trie_node *);
+    trie_destructor *destructor;
     struct trie_node *root;
     size_t size;
 };
@@ -67,9 +70,9 @@ struct kv_obj {
 struct trie_node *trie_create_node(char);
 
 // Returns a new Trie, which is formed by a root node and a size
-struct Trie *trie_new(int (*destructor)(struct trie_node *));
+struct Trie *trie_new(trie_destructor *);
 
-void trie_init(Trie *, int (*destructor)(struct trie_node *));
+void trie_init(Trie *, trie_destructor *);
 
 // Return the size of the trie
 size_t trie_size(const Trie *);
@@ -98,7 +101,7 @@ bool trie_delete(Trie *, const char *);
    present */
 bool trie_find(const Trie *, const char *, void **);
 
-void trie_node_destroy(struct trie_node *, size_t *);
+void trie_node_destroy(struct trie_node *, size_t *, trie_destructor *);
 
 void trie_destroy(Trie *);
 

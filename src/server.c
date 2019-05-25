@@ -129,6 +129,7 @@ struct epoll {
 
 
 static void expire_keys(void);
+static inline void trie_node_destructor(struct trie_node *);
 
 /* Prototype for a command handler */
 typedef int handler(struct io_event *);
@@ -547,7 +548,7 @@ static int use_handler(struct io_event *event) {
     if (!database) {
         // TODO check for OOM
         database = tmalloc(sizeof(*database));
-        database_init(database, tstrdup((const char *) packet->usec.key), NULL);
+        database_init(database, tstrdup((const char *) packet->usec.key), trie_node_destructor);
 
         // Add it to the databases table
         hashtable_put(triedb.dbs, tstrdup(database->name), database);
@@ -1099,6 +1100,27 @@ static inline int database_destructor(struct hashtable_entry *entry) {
 }
 
 /*
+ * Trie destructor function for struct trie_node obejcts. It's the function
+ * that will be called on trie_del call as well as trie_destroy too.
+ * In our case each node will contain a db_item structure so we free resources
+ * according to this structure.
+ */
+static inline void trie_node_destructor(struct trie_node *node) {
+
+    if (!node)
+        return;
+
+    struct db_item *item = node->data;
+
+    if (item->data)
+        tfree(item->data);
+
+    tfree(item);
+
+    tfree(node);
+}
+
+/*
  * Vector destructor function for struct expiring_key objects. It's the
  * function that will be called on Vector remove or vector_destroy
  */
@@ -1135,7 +1157,7 @@ int start_server(const char *addr, const char *port) {
 
     /* Create default database */
     struct database *default_db = tmalloc(sizeof(struct database));
-    database_init(default_db, tstrdup("db0"), NULL);
+    database_init(default_db, tstrdup("db0"), trie_node_destructor);
 
     /* Initialize global triedb instance */
     triedb.dbs = hashtable_new(database_destructor);

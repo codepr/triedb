@@ -32,7 +32,7 @@
 #include "util.h"
 
 
-static void children_destroy(struct bst_node *, size_t *);
+static void children_destroy(struct bst_node *, size_t *, trie_destructor *);
 
 /*
  * Check for children in a struct trie_node, if a node has no children is
@@ -108,14 +108,14 @@ struct trie_node *trie_create_node(char c) {
 }
 
 // Returns new Trie, with a NULL root and 0 size
-Trie *trie_new(int (*destructor)(struct trie_node *)) {
+Trie *trie_new(trie_destructor *destructor) {
     Trie *trie = tmalloc(sizeof(*trie));
     trie_init(trie, destructor);
     return trie;
 }
 
 
-void trie_init(Trie *trie, int (*destructor)(struct trie_node *)) {
+void trie_init(Trie *trie, trie_destructor *destructor) {
     trie->root = trie_create_node('\0');
     trie->size = 0;
     trie->destructor = destructor;
@@ -275,7 +275,7 @@ void trie_prefix_delete(Trie *trie, const char *prefix) {
         return;
     }
 
-    children_destroy(cursor->children, &trie->size);
+    children_destroy(cursor->children, &trie->size, trie->destructor);
     cursor->children = NULL;
 
     trie_delete(trie, prefix);
@@ -379,38 +379,45 @@ Vector *trie_prefix_find(const Trie *trie, const char *prefix) {
 }
 
 
-static void children_destroy(struct bst_node *node, size_t *len) {
+static void children_destroy(struct bst_node *node,
+                             size_t *len, trie_destructor *destructor) {
     if (!node)
         return;
-    trie_node_destroy(node->data, len);
+    trie_node_destroy(node->data, len, destructor);
     if (node->left)
-        children_destroy(node->left,len);
+        children_destroy(node->left, len, destructor);
     if (node->right)
-        children_destroy(node->right, len);
+        children_destroy(node->right, len, destructor);
     tfree(node);
 }
 
 /* Release memory of a node while updating size of the trie */
-void trie_node_destroy(struct trie_node *node, size_t *size) {
+void trie_node_destroy(struct trie_node *node,
+                       size_t *size, trie_destructor *destructor) {
 
     // Base case
     if (!node)
         return;
 
     // Recursive call to all children of the node
-    children_destroy(node->children, size);
+    children_destroy(node->children, size, destructor);
     node->children = NULL;
 
-    // Release memory on data stored on the node
-    if (node->data) {
-        tfree(node->data);
-        node->data = NULL;
-        if (*size > 0)
-            (*size)--;
-    }
+    if (destructor)
+        destructor(node);
+    else {
 
-    // Release the node itself
-    tfree(node);
+        // Release memory on data stored on the node
+        if (node->data) {
+            tfree(node->data);
+            node->data = NULL;
+            if (*size > 0)
+                (*size)--;
+        }
+
+        // Release the node itself
+        tfree(node);
+    }
 }
 
 
@@ -419,7 +426,7 @@ void trie_destroy(Trie *trie) {
     if (!trie)
         return;
 
-    trie_node_destroy(trie->root, &(trie->size));
+    trie_node_destroy(trie->root, &(trie->size), trie->destructor);
 
     tfree(trie);
 }
