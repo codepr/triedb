@@ -420,14 +420,14 @@ static int del_handler(struct io_event *event) {
 /*
  * Utility function, compare TTL of two database items and return a bool value
  * based on the order of them, true if the first item has a lower delta (e.g.
- * difference between current time and the time of creation) the the second one.
- * Meant to be passed in to a sort function below
+ * difference between current time and the time of creation) the the second
+ * one. Meant to be passed in to a sort function below
  */
 static bool compare_ttl(void *arg1, void *arg2) {
 
     time_t now = time(NULL);
 
-    /* cast to cluster_node */
+    /* cast to db_item */
     const struct db_item *n1 = ((struct expiring_key *) arg1)->item;
     const struct db_item *n2 = ((struct expiring_key *) arg2)->item;
 
@@ -597,7 +597,8 @@ static int use_handler(struct io_event *event) {
     if (!database) {
         // TODO check for OOM
         database = tmalloc(sizeof(*database));
-        database_init(database, tstrdup((const char *) packet->usec.key), trie_node_destructor);
+        database_init(database, tstrdup((const char *) packet->usec.key),
+                      trie_node_destructor);
 
         // Add it to the databases table
         hashtable_put(triedb.dbs, tstrdup(database->name), database);
@@ -613,7 +614,56 @@ static int use_handler(struct io_event *event) {
 
 
 static int keys_handler(struct io_event *event) {
-    return 0;
+
+    union triedb_request *packet = event->payload;
+    struct client *c = event->client;
+    struct get_response *response = NULL;
+
+#if WORKERPOOLSIZE > 1
+        pthread_spin_lock(&spinlock);
+#endif
+
+        Vector *v = database_prefix_search(c->db,
+                                           (const char *) packet->get.key);
+
+#if WORKERPOOLSIZE > 1
+        pthread_spin_unlock(&spinlock);
+#endif
+
+        /*
+         * Prefix request can return either a populated vector with at least
+         * one match, or a NULL pointer, in this case we'd change our response
+         * to a simple NOK
+         */
+        if (v)
+            response = get_response(packet->get.header.byte, v);
+        else {
+            event->reply = ack_replies[NOK];
+            return 0;
+        }
+
+        // XXX Lot of boilerplate, to be refactored
+
+        union triedb_response r = { .get_res = *response };
+
+        event->reply = pack_response(&r, packet->get.header.bits.opcode);
+
+        // TODO destroy response
+        if (v) {
+            struct kv_obj *current = NULL;
+            for (int i = 0; i < vector_size(v); ++i) {
+                current = vector_get(v, i);
+                tfree((void *) current->key);
+                tfree(current);
+            }
+            tfree(v->items);
+            tfree(v);
+        }
+
+        tfree(response->tuples);
+        tfree(response);
+
+        return 0;
 }
 
 

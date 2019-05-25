@@ -51,8 +51,8 @@ struct trie_node {
 typedef bool trie_destructor(struct trie_node *, bool);
 
 /*
- * Trie ADT, it is formed by a root struct trie_node, and the total size of the
- * Trie
+ * Trie ADT, it is formed by a root struct trie_node, and the total size of
+ * the Trie
  */
 struct Trie {
     trie_destructor *destructor;
@@ -96,21 +96,27 @@ struct node_data *trie_insert(Trie *, const char *, const void *);
 
 bool trie_delete(Trie *, const char *);
 
-/* Returns true if key presents in trie, else false, the last pointer to
-   pointer is used to store the value associated with the searched key, if
-   present */
+/*
+ * Returns true if key presents in trie, else false, the last pointer to
+ * pointer is used to store the value associated with the searched key, if
+ * present
+ */
 bool trie_find(const Trie *, const char *, void **);
 
 void trie_node_destroy(struct trie_node *, size_t *, trie_destructor *);
 
 void trie_destroy(Trie *);
 
-/* Remove all keys matching a given prefix in a less than linear time
-   complexity */
+/*
+ * Remove all keys matching a given prefix in a less than linear time
+ * complexity
+ */
 void trie_prefix_delete(Trie *, const char *);
 
-/* Count all keys matching a given prefix in a less than linear time
-   complexity */
+/*
+ * Count all keys matching a given prefix in a less than linear time
+ * complexity
+ */
 int trie_prefix_count(const Trie *, const char *);
 
 /* Search for all keys matching a given prefix */

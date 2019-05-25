@@ -78,9 +78,18 @@ bool database_remove(struct database *, const char *);
  */
 void database_prefix_remove(struct database *, const char *);
 
-/* Count all keys matching a given prefix in a less than linear time
-   complexity */
+/*
+ * Count all keys matching a given prefix in a less than linear time
+ * complexity
+ */
 int database_prefix_count(const struct database *, const char *);
+
+/*
+ * Search recursively for all keys matching a given prefix, just a placeholder
+ * semantically correct, under the hood it calls for database_prefix_search
+ * as well
+ */
+Vector *database_prefix_keys(const struct database *, const char *);
 
 /* Search for all keys matching a given prefix */
 Vector *database_prefix_search(const struct database *, const char *);

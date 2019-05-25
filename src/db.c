@@ -101,6 +101,15 @@ int database_prefix_count(const struct database *db, const char *prefix) {
     return trie_prefix_count(db->data, prefix);
 }
 
+/*
+ * Search recursively for all keys matching a given prefix, just a placeholder
+ * semantically correct, under the hood it calls for database_prefix_search
+ * as well
+ */
+Vector *database_prefix_keys(const struct database *db, const char *prefix) {
+    return trie_prefix_find(db->data, prefix);
+}
+
 /* Search for all keys matching a given prefix */
 Vector *database_prefix_search(const struct database *db, const char *prefix) {
     return trie_prefix_find(db->data, prefix);
