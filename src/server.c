@@ -688,8 +688,8 @@ static int quit_handler(struct io_event *event) {
 }
 
 /* Utility macro to handle base case on each EPOLL loop */
-#define EPOLL_ERR(ev) if ((ev.events & EPOLLERR) || (ev.events & EPOLLHUP) || \
-                          (!(ev.events & EPOLLIN) && !(ev.events & EPOLLOUT)))
+#define EPOLL_ERR(e) if ((e.events & EPOLLERR) || (e.events & EPOLLHUP) || \
+                         (!(e.events & EPOLLIN) && !(e.events & EPOLLOUT)))
 
 /*
  * Handle incoming connections, create a a fresh new struct client structure
@@ -1079,6 +1079,7 @@ ssize_t recv_packet(int clientfd, unsigned char **buf, unsigned char *header) {
     *header = *tmpbuf;
     tmpbuf++;
 
+    /* Check for OPCODE, if an unknown OPCODE is received return an error */
     if (DEL < (*header >> 4) || PUT > (*header >> 4))
         return -ERRPACKETERR;
 

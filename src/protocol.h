@@ -30,6 +30,8 @@
 
 #include <stdio.h>
 #include "pack.h"
+#include "config.h"
+#include "server.h"
 #include "vector.h"
 
 /* Error codes */
@@ -60,6 +62,7 @@
  *  PING  | 10100000  | 0xa0
  *  QUIT  | 10110000  | 0xb0
  *  DB    | 11000000  | 0xc0
+ *  INFO  | 11010000  | 0xd0
  *
  *  Header byte can be manipulated at bit level to toggle bit flags:
  *  e.g
@@ -79,7 +82,8 @@ enum opcode {
     KEYS = 9,
     PING = 10,
     QUIT = 11,
-    DB   = 12
+    DB   = 12,
+    INFO = 13
 };
 
 /*
@@ -172,6 +176,8 @@ typedef struct ack quit;
 
 typedef struct ack db;
 
+typedef struct ack info;
+
 
 /*
  * Definition of a request, a union which encloses all possible command
@@ -190,6 +196,7 @@ union triedb_request {
     cnt count;
     use usec;
     db  get_db;
+    info infos;
 
 };
 
@@ -286,5 +293,7 @@ bstring pack_ack(unsigned char, unsigned char);
 /* Helper function to create a bytearray with a CNT value */
 bstring pack_cnt(unsigned char, unsigned long long);
 
+/* Helper function to create a bytearray with all informations stored in */
+bstring pack_info(const struct config *, const struct informations *);
 
 #endif

@@ -395,6 +395,62 @@ bstring pack_cnt(unsigned char byte, unsigned long long val) {
     return bstring_copy((const char *) raw, 10);
 }
 
+/* Helper function to create a bytearray with all informations stored in */
+bstring pack_info(const struct config *conf,
+                  const struct informations *infos) {
+    size_t vlen = strlen(conf->version);
+    size_t llen = strlen(conf->logpath);
+    size_t hlen = strlen(conf->hostname);
+    size_t plen = strlen(conf->port);
+
+    /*
+     * Add + 1 to each string length to store the length in a byte just before
+     * the bytestring
+     */
+    size_t size = vlen + 1
+        + llen + 1
+        + hlen + 1
+        + plen + 1
+        + sizeof(conf->mode)
+        + sizeof(conf->loglevel)
+        + sizeof(conf->socket_family)
+        + sizeof(conf->max_memory)
+        + sizeof(conf->max_request_size)
+        + sizeof(conf->mem_reclaim_time)
+        + sizeof(conf->tcp_backlog)
+        + 52;  // Length of the fields required for fields gathered from
+               // infos structure
+
+    bstring raw = bstring_empty(size);
+
+    pack(raw, "iiQQiQQQBBBQQQiBsBsBsBs",
+         infos->nclients,
+         infos->nconnections,
+         infos->start_time,
+         infos->uptime,
+         infos->nrequests,
+         infos->bytes_recv,
+         infos->bytes_sent,
+         infos->nkeys,
+         conf->mode,
+         conf->loglevel,
+         conf->socket_family,
+         conf->max_memory,
+         conf->mem_reclaim_time,
+         conf->max_request_size,
+         conf->tcp_backlog,
+         vlen,
+         conf->version,
+         llen,
+         conf->logpath,
+         hlen,
+         conf->hostname,
+         plen,
+         conf->port);
+
+    return raw;
+}
+
 
 unsigned char *pack_response(const union triedb_response *res, unsigned type) {
     return pack_handlers[type](res);
