@@ -277,7 +277,18 @@ static int get_handler(struct io_event *event) {
 #if WORKERPOOLSIZE > 1
         pthread_spin_unlock(&spinlock);
 #endif
-        response = get_response(packet->get.header.byte, v);
+
+        /*
+         * Prefix request can return either a populated vector with at least
+         * one match, or a NULL pointer, in this case we'd change our response
+         * to a simple NOK
+         */
+        if (v)
+            response = get_response(packet->get.header.byte, v);
+        else {
+            event->reply = ack_replies[NOK];
+            return 0;
+        }
     }
 
     // XXX Lot of boilerplate, to be refactored
