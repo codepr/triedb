@@ -129,7 +129,7 @@ struct epoll {
 
 
 static void expire_keys(void);
-static inline void trie_node_destructor(struct trie_node *);
+static inline void trie_node_destructor(struct trie_node *, bool);
 
 /* Prototype for a command handler */
 typedef int handler(struct io_event *);
@@ -1105,25 +1105,29 @@ static inline int database_destructor(struct hashtable_entry *entry) {
  * In our case each node will contain a db_item structure so we free resources
  * according to this structure.
  */
-static inline void trie_node_destructor(struct trie_node *node) {
+static inline void trie_node_destructor(struct trie_node *node,
+                                        bool dataonly) {
 
     if (!node)
         return;
 
     struct db_item *item = node->data;
 
-    if (node->children)
-        tfree(node->children);
-
-    tfree(node);
-
     if (!item)
-        return;
+        goto exit;
 
-    if (item->data)
+    if (item->data) {
         tfree(item->data);
+        item->data = NULL;
+    }
 
-    tfree(item);
+    tfree(node->data);
+    node->data = NULL;
+
+exit:
+
+    if (dataonly == false)
+        tfree(node);
 }
 
 /*

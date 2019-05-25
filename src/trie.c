@@ -30,6 +30,7 @@
 #include <string.h>
 #include "trie.h"
 #include "util.h"
+#include "db.h"
 
 
 static void children_destroy(struct bst_node *, size_t *, trie_destructor *);
@@ -219,12 +220,14 @@ bool trie_delete(Trie *trie, const char *key) {
 
     assert(trie && key);
 
+    struct trie_node *retnode = trie->root;
+
     if (strlen(key) > 0) {
-        struct trie_node *retnode = (struct trie_node *) trie->root;
+
         // Move to the end of the prefix first
         for (; *key; ++key) {
 
-            // O(n), the best we can have
+            // O(logN), the best we can have
             struct bst_node *child = bst_search(retnode->children, *key);
 
             // No key with the full prefix in the trie
@@ -234,9 +237,13 @@ bool trie_delete(Trie *trie, const char *key) {
             retnode = child->data;
 
         }
-        if (retnode->data) {
-            tfree(retnode->data);
-            retnode->data = NULL;
+        if (trie->destructor)
+            trie->destructor(retnode, true);
+        else {
+            if (retnode->data) {
+                tfree(retnode->data);
+                retnode->data = NULL;
+            }
         }
         return true;
     }
@@ -404,7 +411,7 @@ void trie_node_destroy(struct trie_node *node,
     node->children = NULL;
 
     if (destructor)
-        destructor(node);
+        destructor(node, false);
     else {
 
         // Release memory on data stored on the node

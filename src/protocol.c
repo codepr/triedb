@@ -229,6 +229,9 @@ void triedb_request_destroy(union triedb_request *pkt) {
         case GET:
             tfree(pkt->get.key);
             break;
+        case DEL:
+            tfree(pkt->get.key);
+            break;
     }
 
     tfree(pkt);
