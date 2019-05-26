@@ -128,6 +128,7 @@ struct epoll {
 };
 
 
+static void init_info(void);
 static void expire_keys(void);
 static inline bool trie_node_destructor(struct trie_node *, bool);
 
@@ -695,7 +696,7 @@ static int info_handler(struct io_event *event) {
 
     // XXX placeholder
     // TODO
-    event->reply = ack_replies[OK];
+    event->reply = pack_info(conf, &info);
 
     return 0;
 }
@@ -970,7 +971,7 @@ static void *io_worker(void *arg) {
                 }
 
                 // Update information stats
-                info.bytes_sent += sent;
+                info.bytes_sent += sent < 0 ? 0 : sent;
 
                 /*
                  * Rearm descriptor, we're using EPOLLONESHOT feature to avoid
@@ -1093,7 +1094,7 @@ ssize_t recv_packet(int clientfd, unsigned char **buf, unsigned char *header) {
     tmpbuf++;
 
     /* Check for OPCODE, if an unknown OPCODE is received return an error */
-    if (DEL < (*header >> 4) || PUT > (*header >> 4))
+    if (INFO < (*header >> 4) || PUT > (*header >> 4))
         return -ERRPACKETERR;
 
     /*
@@ -1270,6 +1271,17 @@ static inline void expiring_keys_destructor(void *item) {
 
 }
 
+/* Init informations structure, to be run before starting the server */
+static void init_info(void) {
+    info.nclients = 0;
+    info.bytes_recv = 0;
+    info.bytes_sent = 0;
+    info.nconnections = 0;
+    info.nkeys = 0;
+    info.nrequests = 0;
+    info.uptime = 0;
+}
+
 /*
  * Main entry point for start listening on a socket and running an epoll event
  * loop to accept new connections.
@@ -1278,6 +1290,8 @@ static inline void expiring_keys_destructor(void *item) {
  * located, port will be ignored.
  */
 int start_server(const char *addr, const char *port) {
+
+    init_info();
 
     /* Populate the static ACK replies */
     for (int i = 0; i < 3; ++i)

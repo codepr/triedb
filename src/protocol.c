@@ -55,16 +55,31 @@ static size_t unpack_triedb_get(const unsigned char *,
                                  union triedb_request *,
                                  size_t);
 
+static size_t unpack_triedb_ack(const unsigned char *,
+                                union header *,
+                                union triedb_request *,
+                                size_t);
+
 
 /*
  * Unpack functions mapping unpacking_handlers positioned in the array based
  * on message type
  */
-static unpack_handler *unpack_handlers[4] = {
+static unpack_handler *unpack_handlers[14] = {
     NULL,
     unpack_triedb_put,
     unpack_triedb_get,
-    unpack_triedb_get
+    unpack_triedb_get,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    unpack_triedb_ack
 };
 
 /* Pack prototypes */
@@ -194,11 +209,25 @@ static size_t unpack_triedb_get(const unsigned char *raw,
     struct get get = { .header = *hdr };
     pkt->get = get;
 
-    /* Read topic length and topic of the soon-to-be-published message */
+    /* Read key length and key of the soon-to-be-read value */
     pkt->get.key = tmalloc(len + 1);
     char fmt[10];
     sprintf(fmt, "%lds", len);
     unpack((unsigned char *) raw, fmt, pkt->get.key);
+
+    return len;
+}
+
+
+static size_t unpack_triedb_ack(const unsigned char *raw,
+                                union header *hdr,
+                                union triedb_request *pkt,
+                                size_t len) {
+
+    struct ack info = { .header = *hdr };
+    pkt->info = info;
+
+    unpack((unsigned char *) raw, "BB", &(unsigned char){0}, &pkt->info.rc);
 
     return len;
 }
@@ -411,19 +440,28 @@ bstring pack_info(const struct config *conf,
         + llen + 1
         + hlen + 1
         + plen + 1
-        + sizeof(conf->mode)
+        + sizeof(unsigned char)   // override of conf->mode type
         + sizeof(conf->loglevel)
-        + sizeof(conf->socket_family)
+        + sizeof(unsigned char)   // override of conf->socket_family
         + sizeof(conf->max_memory)
         + sizeof(conf->max_request_size)
         + sizeof(conf->mem_reclaim_time)
         + sizeof(conf->tcp_backlog)
-        + 52;  // Length of the fields required for fields gathered from
-               // infos structure
+        + sizeof(infos->nclients)
+        + sizeof(infos->nconnections)
+        + sizeof(infos->start_time)
+        + sizeof(infos->uptime)
+        + sizeof(infos->nrequests)
+        + sizeof(infos->bytes_recv)
+        + sizeof(infos->bytes_sent)
+        + sizeof(infos->nkeys);
 
-    bstring raw = bstring_empty(size);
+    /* Add +1 to store the code INFO on the header */
+    bstring raw = bstring_empty(size + 1);
 
-    pack(raw, "iiQQiQQQBBBQQQiBsBsBsBs",
+    /* 0xd0 == dec(208) == 11010000 == INFO opcode */
+    pack(raw, "BIIQQIQQQBBBQQQiBsBsBsBs",
+         0xd0,
          infos->nclients,
          infos->nconnections,
          infos->start_time,
