@@ -137,12 +137,15 @@ static void bst_node_integer_mod(struct bst_node *node, int value, bool inc) {
 static void trie_node_integer_mod(struct trie_node *node,
                                   int value, bool inc) {
 
+    if (!node)
+        return;
+
     if (trie_is_free_node(node) && !node->data)
         return;
 
     struct db_item *item = node->data;
 
-    if (item && is_integer(item->data)) {
+    if (item && item->data && is_integer(item->data)) {
         int n = parse_int(item->data);
         n = inc == true ? n + 1 : n - 1;
         // Check for realloc if the new value is "larger" then previous

@@ -29,6 +29,7 @@
 #include <string.h>
 #include "unit.h"
 #include "structures_test.h"
+#include "../src/db.h"
 #include "../src/util.h"
 #include "../src/trie.h"
 #include "../src/list.h"
@@ -272,81 +273,129 @@ static char *test_trie_prefix_count(void) {
     return 0;
 }
 
+
+static inline bool trie_node_destructor(struct trie_node *node,
+                                        bool dataonly) {
+    bool ret = false;
+
+    if (!node)
+        return ret;
+
+    struct db_item *item = node->data;
+
+    if (!item)
+        goto exit;
+
+    if (item->data) {
+        tfree(item->data);
+        item->data = NULL;
+    }
+
+    tfree(node->data);
+    node->data = NULL;
+
+    ret = true;
+
+exit:
+
+    if (dataonly == false)
+        tfree(node);
+
+    return ret;
+}
+
 /*
  * Tests the prefix inc on the trie
  */
-/* static char *test_trie_prefix_inc(void) { */
-/*     struct Trie *root = trie_new(); */
-/*     const char *key1 = "key1"; */
-/*     const char *key2 = "key2"; */
-/*     const char *key3 = "key3"; */
-/*     const char *key4 = "key4"; */
-/*  */
-/*     void *retval1 = NULL, *retval2 = NULL, *retval3 = NULL, *retval4 = NULL; */
-/*  */
-/*     char *val1 = "0"; */
-/*     char *val2 = "1"; */
-/*     char *val3 = "2"; */
-/*     char *val4 = "9"; */
-/*  */
-/*     trie_insert(root, key1, val1); */
-/*     trie_insert(root, key2, val2); */
-/*     trie_insert(root, key3, val3); */
-/*     trie_insert(root, key4, val4); */
-/*  */
-/*     // Inc prefix call */
-/*     trie_prefix_inc(root, "key"); */
-/*  */
-/*     // read data */
-/*     trie_find(root, key1, &retval1); */
-/*     trie_find(root, key2, &retval2); */
-/*     trie_find(root, key3, &retval3); */
-/*     trie_find(root, key4, &retval4); */
-/*  */
-/*     ASSERT("[! trie_prefix_inc]: Trie prefix inc on prefix \"key\" failed", */
-/*             strcmp(retval1, "1") == 0 && strcmp(retval2, "2") == 0 && */
-/*             strcmp(retval3, "3") == 0 && strcmp(retval4, "10") == 0); */
-/*  */
-/*     trie_destroy(root); */
-/*     printf(" [trie::trie_prefix_inc]: OK\n"); */
-/*     return 0; */
-/* } */
+static char *test_database_prefix_inc(void) {
+    struct database db;
+    database_init(&db, "test", trie_node_destructor);
+    struct Trie *root = db.data;
+    const char *key1 = "key1";
+    const char *key2 = "key2";
+    const char *key3 = "key3";
+    const char *key4 = "key4";
+
+    void *retval1 = NULL, *retval2 = NULL, *retval3 = NULL, *retval4 = NULL;
+
+    char *val1 = "0";
+    char *val2 = "1";
+    char *val3 = "2";
+    char *val4 = "9";
+
+    database_insert(&db, key1, tstrdup(val1), -1);
+    database_insert(&db, key2, tstrdup(val2), -1);
+    database_insert(&db, key3, tstrdup(val3), -1);
+    database_insert(&db, key4, tstrdup(val4), -1);
+
+    // Inc prefix call
+    database_prefix_inc(&db, "key");
+
+    // read data
+    database_search(&db, key1, &retval1);
+    database_search(&db, key2, &retval2);
+    database_search(&db, key3, &retval3);
+    database_search(&db, key4, &retval4);
+
+    struct db_item *item1 = (struct db_item *) retval1;
+    struct db_item *item2 = (struct db_item *) retval2;
+    struct db_item *item3 = (struct db_item *) retval3;
+    struct db_item *item4 = (struct db_item *) retval4;
+
+    ASSERT("[! trie_prefix_inc]: Trie prefix inc on prefix \"key\" failed",
+            strcmp(item1->data, "1") == 0 && strcmp(item2->data, "2") == 0 &&
+            strcmp(item3->data, "3") == 0 && strcmp(item4->data, "10") == 0);
+
+    trie_destroy(root);
+    printf(" [trie::trie_prefix_inc]: OK\n");
+    return 0;
+}
 
 /*
  * Tests the prefix dec on the trie
  */
-/* static char *test_trie_prefix_dec(void) { */
-/*     struct Trie *root = trie_new(); */
-/*     const char *key1 = "key1"; */
-/*     const char *key2 = "key2"; */
-/*     const char *key3 = "key3"; */
-/*     const char *key4 = "key4"; */
-/*     void *retval1 = NULL, *retval2 = NULL, *retval3 = NULL, *retval4 = NULL; */
-/*     char *val1 = "0"; */
-/*     char *val2 = "1"; */
-/*     char *val3 = "2"; */
-/*     char *val4 = "10"; */
-/*     trie_insert(root, key1, val1); */
-/*     trie_insert(root, key2, val2); */
-/*     trie_insert(root, key3, val3); */
-/*     trie_insert(root, key4, val4); */
-/*  */
-/*     trie_prefix_dec(root, "key"); */
-/*  */
-/*     // read data */
-/*     trie_find(root, key1, &retval1); */
-/*     trie_find(root, key2, &retval2); */
-/*     trie_find(root, key3, &retval3); */
-/*     trie_find(root, key4, &retval4); */
-/*  */
-/*     ASSERT("[! trie_prefix_dec]: Trie prefix dec on prefix \"key\" failed", */
-/*             strcmp(retval1, "-1") == 0 && strcmp(retval2, "0") == 0 && */
-/*             strcmp(retval3, "1") == 0 && strcmp(retval4, "9") == 0); */
-/*  */
-/*     trie_destroy(root); */
-/*     printf(" [trie::trie_prefix_dec]: OK\n"); */
-/*     return 0; */
-/* } */
+static char *test_trie_prefix_dec(void) {
+    struct database db;
+    database_init(&db, "test", trie_node_destructor);
+    struct Trie *root = db.data;
+    const char *key1 = "key1";
+    const char *key2 = "key2";
+    const char *key3 = "key3";
+    const char *key4 = "key4";
+
+    void *retval1 = NULL, *retval2 = NULL, *retval3 = NULL, *retval4 = NULL;
+
+    char *val1 = "0";
+    char *val2 = "1";
+    char *val3 = "2";
+    char *val4 = "10";
+
+    database_insert(&db, key1, tstrdup(val1), -1);
+    database_insert(&db, key2, tstrdup(val2), -1);
+    database_insert(&db, key3, tstrdup(val3), -1);
+    database_insert(&db, key4, tstrdup(val4), -1);
+
+    database_prefix_dec(&db, "key");
+
+    // read data
+    database_search(&db, key1, &retval1);
+    database_search(&db, key2, &retval2);
+    database_search(&db, key3, &retval3);
+    database_search(&db, key4, &retval4);
+
+    struct db_item *item1 = (struct db_item *) retval1;
+    struct db_item *item2 = (struct db_item *) retval2;
+    struct db_item *item3 = (struct db_item *) retval3;
+    struct db_item *item4 = (struct db_item *) retval4;
+
+    ASSERT("[! trie_prefix_dec]: Trie prefix dec on prefix \"key\" failed",
+            strcmp(item1->data, "-1") == 0 && strcmp(item2->data, "0") == 0 &&
+            strcmp(item3->data, "1") == 0 && strcmp(item4->data, "9") == 0);
+
+    trie_destroy(root);
+    printf(" [trie::trie_prefix_dec]: OK\n");
+    return 0;
+}
 
 
 static bool compare(void *ptr1, void *ptr2) {
@@ -655,8 +704,8 @@ char *structures_test() {
     RUN_TEST(test_trie_delete);
     RUN_TEST(test_trie_prefix_delete);
     RUN_TEST(test_trie_prefix_count);
-    /* RUN_TEST(test_trie_prefix_inc); */
-    /* RUN_TEST(test_trie_prefix_dec); */
+    RUN_TEST(test_database_prefix_inc);
+    RUN_TEST(test_trie_prefix_dec);
     RUN_TEST(test_vector_append);
     RUN_TEST(test_vector_set);
     RUN_TEST(test_vector_get);
