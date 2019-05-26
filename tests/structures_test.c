@@ -32,173 +32,10 @@
 #include "../src/util.h"
 #include "../src/trie.h"
 #include "../src/list.h"
-#include "../src/queue.h"
 #include "../src/server.h"
 #include "../src/cluster.h"
-#include "../src/ringbuf.h"
 #include "../src/vector.h"
 #include "../src/hashtable.h"
-
-/*
- * Tests the creation of a ringbuffer
- */
-static char *test_ringbuf_new(void) {
-    uint8_t buf[10];
-    Ringbuffer *r = ringbuf_new(buf, 10);
-    ASSERT("[! ringbuf_create]: ringbuf not created", r != NULL);
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_create]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the release of a ringbuffer
- */
-static char *test_ringbuf_destroy(void) {
-    uint8_t buf[10];
-    Ringbuffer *r = ringbuf_new(buf, 10);
-    ringbuf_destroy(r);
-    ASSERT("[! ringbuf_release]: ringbuf not released", r != NULL);
-    printf(" [ringbuf::ringbuf_release]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the full check function of the ringbuffer
- */
-static char *test_ringbuf_full(void) {
-    uint8_t buf[2];
-    Ringbuffer *r = ringbuf_new(buf, 2);
-    ASSERT("[! ringbuf_full]: ringbuf_full doesn't work as expected, state ringbuffer is full while being empty", ringbuf_full(r) != 1);
-    ringbuf_push(r, 'a');
-    ringbuf_push(r, 'b');
-    ASSERT("[! ringbuf_full]: ringbuf size %d", ringbuf_size(r));
-    ASSERT("[! ringbuf_full]: ringbuf_full doesn't work as expected, state ringbuffer is not full while being full", ringbuf_full(r) == 1);
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_full]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the empty check function of the ringbuffer
- */
-static char *test_ringbuf_empty(void) {
-    uint8_t buf[2];
-    Ringbuffer *r = ringbuf_new(buf, 2);
-    ASSERT("[! ringbuf_empty]: ringbuf_empty doesn't work as expected, state ringbuffer is not empty while being empty", ringbuf_empty(r) == 1);
-    ringbuf_push(r, 'a');
-    ASSERT("[! ringbuf_empty]: ringbuf size %d", ringbuf_size(r));
-    ASSERT("[! ringbuf_empty]: ringbuf_empty doesn't work as expected, state ringbuffer is empty while having an item", ringbuf_empty(r) != 1);
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_empty]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the capacity check function of the ringbuffer
- */
-static char *test_ringbuf_capacity(void) {
-    uint8_t buf[2];
-    Ringbuffer *r = ringbuf_new(buf, 2);
-    ASSERT("[! ringbuf_capcacity]: ringbuf_capacity doesn't work as expected", ringbuf_capacity(r) == 2);
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_capacity]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the size check function of the ringbuffer
- */
-static char *test_ringbuf_size(void) {
-    uint8_t buf[2];
-    Ringbuffer *r = ringbuf_new(buf, 2);
-    ASSERT("[! ringbuf_size]: ringbuf_size doesn't work as expected", ringbuf_size(r) == 0);
-    ringbuf_push(r, 'a');
-    ASSERT("[! ringbuf_size]: ringbuf_size doesn't work as expected", ringbuf_size(r) == 1);
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_size]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the push feature of the ringbuffer
- */
-static char *test_ringbuf_push(void) {
-    uint8_t buf[2];
-    Ringbuffer *r = ringbuf_new(buf, 2);
-    ASSERT("[! ringbuf_push]: ringbuf_push doesn't work as expected", ringbuf_size(r) == 0);
-    ringbuf_push(r, 'a');
-    ASSERT("[! ringbuf_push]: ringbuf_push doesn't work as expected", ringbuf_size(r) == 1);
-    uint8_t x;
-    ringbuf_pop(r, &x);
-    ASSERT("[! ringbuf_push]: ringbuf_push doesn't work as expected", x == 'a');
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_push]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the pop feature of the ringbuffer
- */
-static char *test_ringbuf_pop(void) {
-    uint8_t buf[2];
-    Ringbuffer *r = ringbuf_new(buf, 2);
-    ASSERT("[! ringbuf_pop]: ringbuf_pop doesn't work as expected", ringbuf_size(r) == 0);
-    ringbuf_push(r, 'a');
-    ringbuf_push(r, 'b');
-    ASSERT("[! ringbuf_pop]: ringbuf_pop doesn't work as expected", ringbuf_size(r) == 2);
-    uint8_t x, y;
-    ringbuf_pop(r, &x);
-    ASSERT("[! ringbuf_pop]: ringbuf_pop doesn't work as expected", x == 'a');
-    ringbuf_pop(r, &y);
-    ASSERT("[! ringbuf_pop]: ringbuf_pop doesn't work as expected", y == 'b');
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_pop]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the bulk_push feature of the ringbuffer
- */
-static char *test_ringbuf_bulk_push(void) {
-    uint8_t buf[3];
-    Ringbuffer *r = ringbuf_new(buf, 3);
-    ASSERT("[! ringbuf_bulk_push]: ringbuf_bulk_push doesn't work as expected", ringbuf_size(r) == 0);
-    ringbuf_bulk_push(r, (uint8_t *) "abc", 3);
-    ASSERT("[! ringbuf_bulk_push]: ringbuf_bulk_push doesn't work as expected", ringbuf_size(r) == 3);
-    uint8_t x;
-    ringbuf_pop(r, &x);
-    ASSERT("[! ringbuf_bulk_push]: ringbuf_bulk_push doesn't work as expected", x == 'a');
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_bulk_push]: OK\n");
-    return 0;
-}
-
-
-/*
- * Tests the bulk_pop feature of the ringbuffer
- */
-static char *test_ringbuf_bulk_pop(void) {
-    uint8_t buf[4];
-    Ringbuffer *r = ringbuf_new(buf, 4);
-    ASSERT("[! ringbuf_bulk_pop]: ringbuf_bulk_pop doesn't work as expected", ringbuf_size(r) == 0);
-    ringbuf_bulk_push(r, (uint8_t *) "abc", 3);
-    ASSERT("[! ringbuf_bulk_pop]: ringbuf_bulk_pop doesn't work as expected", ringbuf_size(r) == 3);
-    uint8_t x[3];
-    ringbuf_bulk_pop(r, x, 3);
-    ASSERT("[! ringbuf_bulk_pop]: ringbuf_bulk_pop doesn't work as expected", strncmp((const char *) x, "abc", 3) == 0);
-    ringbuf_destroy(r);
-    printf(" [ringbuf::ringbuf_bulk_pop]: OK\n");
-    return 0;
-}
 
 
 /*
@@ -297,7 +134,7 @@ static char *test_trie_create_node(void) {
     struct trie_node *node = trie_create_node('a');
     size_t size = 0;
     ASSERT("[! trie_create_node]: struct trie_node not created", node != NULL);
-    trie_node_destroy(node, &size);
+    trie_node_destroy(node, &size, NULL);
     printf(" [trie::trie_create_node]: OK\n");
     return 0;
 }
@@ -313,7 +150,8 @@ static char *test_trie_insert(void) {
     trie_insert(root, key, tstrdup(val));
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);
-    ASSERT("[! trie_insert]: Trie insertion failed", (found == true && payload != NULL));
+    ASSERT("[! trie_insert]: Trie insertion failed",
+           (found == true && payload != NULL));
     trie_destroy(root);
     printf(" [trie::trie_insert]: OK\n");
     return 0;
@@ -330,7 +168,8 @@ static char *test_trie_find(void) {
     trie_insert(root, key, tstrdup(val));
     void *payload = NULL;
     bool found = trie_find(root, key, &payload);
-    ASSERT("[! trie_find]: Trie search failed", (found == true && payload != NULL));
+    ASSERT("[! trie_find]: Trie search failed",
+           (found == true && payload != NULL));
     trie_destroy(root);
     printf(" [trie::trie_find]: OK\n");
     return 0;
@@ -356,11 +195,14 @@ static char *test_trie_delete(void) {
     trie_delete(root, key3);
     void *payload = NULL;
     bool found = trie_find(root, key1, &payload);
-    ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
+    ASSERT("[! trie_delete]: Trie delete failed",
+           (found == false || payload == NULL));
     found = trie_find(root, key2, &payload);
-    ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
+    ASSERT("[! trie_delete]: Trie delete failed",
+           (found == false || payload == NULL));
     found = trie_find(root, key3, &payload);
-    ASSERT("[! trie_delete]: Trie delete failed", (found == false || payload == NULL));
+    ASSERT("[! trie_delete]: Trie delete failed",
+           (found == false || payload == NULL));
     trie_destroy(root);
     printf(" [trie::trie_delete]: OK\n");
     return 0;
@@ -520,7 +362,7 @@ static bool compare(void *ptr1, void *ptr2) {
 
 
 static char *test_vector_new(void) {
-    Vector *v = vector_new();
+    Vector *v = vector_new(NULL);
     ASSERT("[! vector_create]: Vector is not properly created", v != NULL);
     vector_destroy(v);
     printf(" [vector::vector_create]: OK\n");
@@ -530,7 +372,7 @@ static char *test_vector_new(void) {
 
 
 static char *test_vector_destroy(void) {
-    Vector *v = vector_new();
+    Vector *v = vector_new(NULL);
     ASSERT("[! vector_release]: Vector is not properly created", v != NULL);
     vector_destroy(v);
     // XXX Hack, useless way
@@ -543,9 +385,10 @@ static char *test_vector_destroy(void) {
 
 
 static char *test_vector_append(void) {
-    Vector *v = vector_new();
-    vector_append(v, "hello");
-    ASSERT("[! vector_append]: Vector has not appended new item correctly", v->size == 1);
+    Vector *v = vector_new(NULL);
+    vector_append(v, tstrdup("hello"));
+    ASSERT("[! vector_append]: Vector has not appended new item correctly",
+           v->size == 1);
     vector_destroy(v);
     printf(" [vector::vector_append]: OK\n");
 
@@ -554,11 +397,12 @@ static char *test_vector_append(void) {
 
 
 static char *test_vector_set(void) {
-    Vector *v = vector_new();
+    Vector *v = vector_new(NULL);
     vector_append(v, "hello");
-    vector_set(v, 0, "hellonew");
+    vector_set(v, 0, tstrdup("hellonew"));
     char *item = vector_get(v, 0);
-    ASSERT("[! vector_set]: Vector has not set new item correctly", STREQ(item, "hellonew", 8));
+    ASSERT("[! vector_set]: Vector has not set new item correctly",
+           STREQ(item, "hellonew", 8));
     vector_destroy(v);
     printf(" [vector::vector_set]: OK\n");
 
@@ -567,11 +411,12 @@ static char *test_vector_set(void) {
 
 
 static char *test_vector_get(void) {
-    Vector *v = vector_new();
+    Vector *v = vector_new(NULL);
     vector_append(v, "hello");
-    vector_set(v, 0, "hellonew");
+    vector_set(v, 0, tstrdup("hellonew"));
     char *item = vector_get(v, 0);
-    ASSERT("[! vector_get]: Vector has not get new item correctly", STREQ(item, "hellonew", 8));
+    ASSERT("[! vector_get]: Vector has not get new item correctly",
+           STREQ(item, "hellonew", 8));
     vector_destroy(v);
     printf(" [vector::vector_get]: OK\n");
 
@@ -580,13 +425,15 @@ static char *test_vector_get(void) {
 
 
 static char *test_vector_delete(void) {
-    Vector *v = vector_new();
+    Vector *v = vector_new(NULL);
     vector_append(v, "hello");
     vector_set(v, 0, "hellonew");
     char *item = vector_get(v, 0);
-    ASSERT("[! vector_delete]: Vector has not set new item correctly", STREQ(item, "hellonew", 8));
+    ASSERT("[! vector_delete]: Vector has not set new item correctly",
+           STREQ(item, "hellonew", 8));
     vector_delete(v, 0);
-    ASSERT("[! vector_delete]: Vector has not deleted item correctly", v->size == 0);
+    ASSERT("[! vector_delete]: Vector has not deleted item correctly",
+           v->size == 0);
     vector_destroy(v);
     printf(" [vector::vector_delete]: OK\n");
 
@@ -595,7 +442,7 @@ static char *test_vector_delete(void) {
 
 
 static char *test_vector_qsort(void) {
-    Vector *v = vector_new();
+    Vector *v = vector_new(NULL);
     int n1 = 0;
     vector_append(v, &n1);
     int n2 = n1 + 5;
@@ -610,7 +457,8 @@ static char *test_vector_qsort(void) {
     ASSERT("[! vector_qsort]: Vector is not correctly sorted",
             *((int *) v->items[0]) == 0 && *((int *) v->items[1]) == 3 && *((int *) v->items[2]) == 4);
 
-    vector_destroy(v);
+    tfree(v->items);
+    tfree(v);
     printf(" [vector::vector_qsort]: OK\n");
 
     return 0;
@@ -648,11 +496,13 @@ static char *test_hashtable_put(void) {
     char *val = "world";
     int status = hashtable_put(m, key, val);
     ASSERT("[! hashtable_put]: hashtable size = 0", m->size == 1);
-    ASSERT("[! hashtable_put]: hashtable_put didn't work as expected", status == HASHTABLE_OK);
+    ASSERT("[! hashtable_put]: hashtable_put didn't work as expected",
+           status == HASHTABLE_OK);
     char *val1 = "WORLD";
     hashtable_put(m, tstrdup(key), tstrdup(val1));
     void *ret = hashtable_get(m, key);
-    ASSERT("[! hashtable_put]: hashtable_put didn't update the value", strcmp(val1, ret) == 0);
+    ASSERT("[! hashtable_put]: hashtable_put didn't update the value",
+           strcmp(val1, ret) == 0);
     hashtable_destroy(m);
     printf(" [hashtable::hashtable_put]: OK\n");
     return 0;
@@ -668,7 +518,8 @@ static char *test_hashtable_get(void) {
     char *val = "world";
     hashtable_put(m, tstrdup(key), tstrdup(val));
     char *ret = (char *) hashtable_get(m, key);
-    ASSERT("[! hashtable_get]: hashtable_get didn't work as expected", strcmp(ret, val) == 0);
+    ASSERT("[! hashtable_get]: hashtable_get didn't work as expected",
+           strcmp(ret, val) == 0);
     hashtable_destroy(m);
     printf(" [hashtable::hashtable_get]: OK\n");
     return 0;
@@ -685,7 +536,8 @@ static char *test_hashtable_del(void) {
     hashtable_put(m, tstrdup(key), tstrdup(val));
     int status = hashtable_del(m, key);
     ASSERT("[! hashtbale_del]: hashtable size = 1", m->size == 0);
-    ASSERT("[! hashtbale_del]: hashtbale_del didn't work as expected", status == HASHTABLE_OK);
+    ASSERT("[! hashtbale_del]: hashtbale_del didn't work as expected",
+           status == HASHTABLE_OK);
     hashtable_destroy(m);
     printf(" [hashtable::hashtable_del]: OK\n");
     return 0;
@@ -704,13 +556,15 @@ static char *test_cluster_add_new_node(void) {
 
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8080", false);
 
-    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.size == 1);
+    ASSERT("[! cluster_add_new_node]: cluster node not correctly added",
+           cluster.size == 1);
 
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8081", false);
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8082", false);
     cluster_add_new_node(&cluster, &client, "127.0.0.1", "8083", false);
 
-    ASSERT("[! cluster_add_new_node]: cluster node not correctly added", cluster.size == 4);
+    ASSERT("[! cluster_add_new_node]: cluster node not correctly added",
+           cluster.size == 4);
 
     for (struct list_node *ln = cluster.nodes->head; ln; ln = ln->next)
         tfree(ln->data);
@@ -746,10 +600,18 @@ static char *test_cluster_get_node(void) {
         .db = NULL
     };
 
-    struct cluster_node node1 = { false, false, 1000, "127.0.0.1", "8080", &client};
-    struct cluster_node node2 = { false, false, 1500, "127.0.0.1", "8080", &client};
-    struct cluster_node node3 = { false, false, 2000, "127.0.0.1", "8080", &client};
-    struct cluster_node node4 = { false, false, 2500, "127.0.0.1", "8080", &client};
+    struct cluster_node node1 = {
+        false, false, 1000, "127.0.0.1", "8080", &client
+    };
+    struct cluster_node node2 = {
+        false, false, 1500, "127.0.0.1", "8080", &client
+    };
+    struct cluster_node node3 = {
+        false, false, 2000, "127.0.0.1", "8080", &client
+    };
+    struct cluster_node node4 = {
+        false, false, 2500, "127.0.0.1", "8080", &client
+    };
 
     list_push(cluster.nodes, &node1);
     list_push(cluster.nodes, &node2);
@@ -780,46 +642,13 @@ static char *test_cluster_get_node(void) {
 }
 
 
-static char *test_queue_get(void) {
-
-    Queue *q = queue_new(NULL);
-
-    queue_push(q, "test");
-
-    ASSERT("[! queue_push]: Queue push didn't push item in queue", queue_size(q) == 1);
-
-    char *ret = queue_get(q);
-
-    ASSERT("[! queue_get]: Queue get didn't returned the correct data", STREQ(ret, "test", 5));
-
-    queue_destroy(q);
-
-    printf(" [queue::queue_get]: OK\n");
-
-    return 0;
-}
-
-
 /*
  * All datastructure tests
  */
 char *structures_test() {
-    RUN_TEST(test_ringbuf_create);
-    RUN_TEST(test_ringbuf_release);
-    RUN_TEST(test_ringbuf_full);
-    RUN_TEST(test_ringbuf_empty);
-    RUN_TEST(test_ringbuf_capacity);
-    RUN_TEST(test_ringbuf_size);
-    RUN_TEST(test_ringbuf_push);
-    RUN_TEST(test_ringbuf_pop);
-    RUN_TEST(test_ringbuf_bulk_push);
-    RUN_TEST(test_ringbuf_bulk_pop);
-    RUN_TEST(test_list_create);
-    RUN_TEST(test_list_release);
     RUN_TEST(test_list_push);
     RUN_TEST(test_list_push_back);
     RUN_TEST(test_list_remove_node);
-    RUN_TEST(test_trie_create);
     RUN_TEST(test_trie_create_node);
     RUN_TEST(test_trie_insert);
     RUN_TEST(test_trie_find);
@@ -828,21 +657,16 @@ char *structures_test() {
     RUN_TEST(test_trie_prefix_count);
     /* RUN_TEST(test_trie_prefix_inc); */
     /* RUN_TEST(test_trie_prefix_dec); */
-    RUN_TEST(test_vector_create);
-    RUN_TEST(test_vector_release);
     RUN_TEST(test_vector_append);
     RUN_TEST(test_vector_set);
     RUN_TEST(test_vector_get);
     RUN_TEST(test_vector_delete);
     RUN_TEST(test_vector_qsort);
-    RUN_TEST(test_hashtable_create);
     RUN_TEST(test_hashtable_put);
     RUN_TEST(test_hashtable_get);
     RUN_TEST(test_hashtable_del);
-    RUN_TEST(test_hashtable_release);
     RUN_TEST(test_cluster_add_new_node);
     RUN_TEST(test_cluster_get_node);
-    RUN_TEST(test_queue_get);
 
     return 0;
 }

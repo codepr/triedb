@@ -955,6 +955,9 @@ static void *io_worker(void *arg) {
                 else if (rc == -ERRCLIENTDC)
                     close(event->client->fd);
 
+                /* Record last action as of now */
+                event->client->last_action_time = (uint64_t) time(NULL);
+
             } else if (e_events[i].events & EPOLLOUT) {
 
                 struct io_event *event = e_events[i].data.ptr;

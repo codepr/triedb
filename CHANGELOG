@@ -1,3 +1,10 @@
+0.6.7 - 2019/05/25
+=================
+
+- Add INFO command handler
+- Removed some dead code
+
+
 0.6.4 - 2019/05/25
 =================
 

@@ -16,7 +16,7 @@ set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 
 file(GLOB SOURCES src/*.c)
-# file(GLOB TEST src/pack.c src/queue.c src/hashtable.c src/vector.c src/config.c src/list.c src/trie.c src/bst.c src/util.c src/cluster.c src/db.c src/server.c src/network.c src/protocol.c src/ringbuf.c tests/*.c)
+file(GLOB TEST src/pack.c src/queue.c src/hashtable.c src/vector.c src/config.c src/list.c src/trie.c src/bst.c src/util.c src/cluster.c src/db.c src/server.c src/network.c src/protocol.c src/ringbuf.c tests/*.c)
 
 list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/triedbcli.c)
 
@@ -24,16 +24,13 @@ set(AUTHOR "Andrea Giacomo Baldan")
 set(LICENSE "BSD2 license")
 
 # Executable
-# add_executable(triedb_test ${TEST})
+add_executable(triedb_test ${TEST})
 add_executable(triedb ${SOURCES})
-# add_executable(triedbcli src/hashtable.c src/vector.c src/server.c src/ringbuf.c
-#     src/network.c src/trie.c src/list.c src/queue.c src/cluster.c src/pack.c
-#     src/protocol.c src/config.c src/util.c src/triedbcli.c src/db.c src/bst.c)
 
 add_custom_command(
     TARGET triedb
     POST_BUILD
-    # COMMAND ${CMAKE_BINARY_DIR}/triedb_test
+    COMMAND ${CMAKE_BINARY_DIR}/triedb_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "\n Running unit tests")
 
@@ -45,7 +42,7 @@ add_custom_command(
 #     COMMENT "\n Running integration tests\n")
 
 # Tests
-# add_test(triedb_test bin/triedb_test)
+add_test(triedb_test bin/triedb_test)
 # add_test(
 #     NAME integration_tests
 #     COMMAND ${PYTHON_EXECUTABLE} -m unittest -v ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration_tests.py
