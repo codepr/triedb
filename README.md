@@ -70,6 +70,7 @@ header which can be summarized by the following table:
       QUIT  | 10110000  | 0xb0 |    11   |
       DB    | 11000000  | 0xc0 |    12   |
       INFO  | 11010000  | 0xd0 |    13   |
+      FLUSH | 11100000  | 0xf0 |    14   |
 ```
 
 Header byte can be manipulated at bit level to toggle bit flags:

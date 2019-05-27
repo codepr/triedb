@@ -1041,8 +1041,28 @@ static void *io_worker(void *arg) {
                               EPOLLIN | EPOLLONESHOT, event);
                     eventfd_write(ev, 1);
                 }
-                else if (rc == -ERRCLIENTDC)
+                else if (rc == -ERRCLIENTDC) {
+
+                    /*
+                     * We got an unexpected error or a disconnection from the
+                     * client side, remove client from the global map and
+                     * free resources allocated such as io_event structure and
+                     * paired payload
+                     */
+
+#if WORKERPOOLSIZE > 1
+                    pthread_spin_lock(&spinlock);
+#endif
+
                     close(event->client->fd);
+                    hashtable_del(triedb.clients, event->client->uuid);
+                    tfree(event->payload);
+                    tfree(event);
+
+#if WORKERPOOLSIZE > 1
+                    pthread_spin_unlock(&spinlock);
+#endif
+                }
 
                 /* Record last action as of now */
                 event->client->last_action_time = (uint64_t) time(NULL);
