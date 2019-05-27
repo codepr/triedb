@@ -839,8 +839,10 @@ static void accept_loop(struct epoll *epoll) {
             /* Check for errors */
             EPOLL_ERR(e_events[i]) {
 
-                /* An error has occured on this fd, or the socket is not
-                   ready for reading, closing connection */
+                /*
+                 * An error has occured on this fd, or the socket is not
+                 * ready for reading, closing connection
+                 */
                 perror ("epoll_wait(2)");
                 close(e_events[i].data.fd);
 
@@ -869,7 +871,10 @@ static void accept_loop(struct epoll *epoll) {
                     if (fd < 0)
                         break;
 
-                    /* Create a client structure to handle his context connection */
+                    /*
+                     * Create a client structure to handle his context
+                     * connection
+                     */
                     struct client *client = tmalloc(sizeof(struct client));
                     if (!client)
                         oom("creating client during accept");
@@ -1141,8 +1146,10 @@ static void *worker(void *arg) {
             /* Check for errors */
             EPOLL_ERR(e_events[i]) {
 
-                /* An error has occured on this fd, or the socket is not
-                   ready for reading, closing connection */
+                /*
+                 * An error has occured on this fd, or the socket is not
+                 * ready for reading, closing connection
+                 */
                 perror ("epoll_wait(2)");
                 close(e_events[i].data.fd);
 

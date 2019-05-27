@@ -80,23 +80,61 @@ static struct bst_node *bst_min(const struct bst_node *node) {
     return (struct bst_node *) curr;
 }
 
+/*
+ * Insert a new node into the AVL tree, paying attention to maintain the tree
+ * balanced in order to freeze the time-complexity to O(logN) for search
+ */
 struct bst_node *bst_insert(struct bst_node *node,
                             unsigned char key, const void *data) {
+
+    // Base case, an empty tree, just add the key to the root
     if (!node)
         return bst_new(key, data);
+
+    /*
+     * Recusrive call: key, being it smaller than the root (current node) has
+     * to be inserted on the left subtree
+     */
     if (key < node->key)
         node->left = bst_insert(node->left,key,data);
+
+    /*
+     * Recursive call: Same reasoning as the step before, but now the key is
+     * greater than the root, so it has to be inserted to the right subtree
+     */
     else if (key > node->key)
         node->right = bst_insert(node->right, key, data);
+
+    // Corner case: the node is already in the tree, no need to do anything
     else
         return node;
 
+    /*
+     * Obtain the current height of the tree after the insertion of the new
+     * node: Being it unbalanced on the left or the right subtree, the height
+     * can be assumed to be the max between left subtree and right subtree + 1
+     * which is the root node itself
+     */
     node->height = 1 + MAX((HEIGHT(node->left)), (HEIGHT(node->right)));
 
+    /*
+     * Call for BALANCE macro, which return a positive or a negative value,
+     * based on the unbalanced part of the node that needs to be rotated to
+     * be re-balanecd with the rest of the tree.
+     *
+     * A positive value means that the tree is unbalanced on the left subtree
+     * a negative value means the opposite, the tree is unbalanced on the right
+     * subtree
+     */
     int balance = BALANCE(node);
 
+    /*
+     * Recursive calls done before assinged to nodes the result of the
+     * subsequent calls
+     */
     if (balance > 1 && key < node->left->key)
         return bst_rotate_right(node);
+
     if (balance < -1 && key > node->right->key)
         return bst_rotate_left(node);
 
@@ -113,14 +151,28 @@ struct bst_node *bst_insert(struct bst_node *node,
     return node;
 }
 
-
+/* Return a node from the tree if present, otherwise return NULL. O(logN). */
 struct bst_node *bst_search(const struct bst_node *node, unsigned char key) {
+
+    // Base: No nodes in the tree
     if (!node)
         return NULL;
+
+    // Base: We found the node, just return it
     if (key == node->key)
         return (struct bst_node *) node;
+
+    /*
+     * Recursive call: The key is smaller than the current node, we have to
+     * search on the left subtree
+     */
     if (key < node->key)
         return bst_search(node->left, key);
+
+    /*
+     * Recursive call: Opposite of the previous branch, the key is greater
+     * than the current node, we have to search on the right subtree
+     */
     else
         return bst_search(node->right, key);
 }
