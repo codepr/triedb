@@ -270,6 +270,10 @@ static int get_handler(struct io_event *event) {
             time_t delta = (item->ctime + item->ttl) - now;
 
             if (delta <= 0) {
+
+#if WORKERPOOLSIZE > 1
+                pthread_spin_lock(&spinlock);
+#endif
                 // we're in the expired state
                 database_remove(c->db, (const char *) packet->get.key);
 
@@ -289,6 +293,10 @@ static int get_handler(struct io_event *event) {
                 }
 
                 triedb.keyspace_size--;
+
+#if WORKERPOOLSIZE > 1
+                pthread_spin_unlock(&spinlock);
+#endif
 
                 // Finally return a NOK
                 event->reply = ack_replies[NOK];
@@ -319,6 +327,52 @@ static int get_handler(struct io_event *event) {
 #if WORKERPOOLSIZE > 1
         pthread_spin_unlock(&spinlock);
 #endif
+
+        time_t now = time(NULL);
+        time_t delta = 0;
+
+        struct kv_obj *cur = NULL;
+        struct db_item *item = NULL;
+        for (int i = 0; i < vector_size(v); ++i) {
+            cur = vector_get(v, i);
+            item = (struct db_item *) cur->data;
+
+            if (item->ttl != -1) {
+
+                delta = (item->ctime + item->ttl) - now;
+
+                if (delta <= 0) {
+
+#if WORKERPOOLSIZE > 1
+                    pthread_spin_lock(&spinlock);
+#endif
+                    // we're in the expired state
+                    database_remove(c->db, (const char *) packet->get.key);
+
+                    /*
+                     * Linearly search for index of the key in the expiring_keys
+                     * vector, binary search would be better here
+                     */
+                    for (size_t i = 0; i < vector_size(triedb.expiring_keys); ++i) {
+                        struct expiring_key *ek =
+                            vector_get(triedb.expiring_keys, i);
+                        if (ek->item == item) {
+                            vector_delete(triedb.expiring_keys, i);
+                            tfree((char *) ek->key);
+                            tfree(ek);
+                            break;
+                        }
+                    }
+
+                    triedb.keyspace_size--;
+
+#if WORKERPOOLSIZE > 1
+                    pthread_spin_unlock(&spinlock);
+#endif
+
+                }
+            }
+        }
 
         /*
          * Prefix request can return either a populated vector with at least
