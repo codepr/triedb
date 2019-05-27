@@ -63,6 +63,7 @@
  *  QUIT  | 10110000  | 0xb0
  *  DB    | 11000000  | 0xc0
  *  INFO  | 11010000  | 0xd0
+ *  FLUSH | 11100000  | 0xf0
  *
  *  Header byte can be manipulated at bit level to toggle bit flags:
  *  e.g
@@ -70,20 +71,21 @@
  *  PUT with PREFIX = 1  00010000 | (00010000 >> 1)  -> 00011000 -> 0x24
  */
 enum opcode {
-    ACK  = 0,
-    PUT  = 1,
-    GET  = 2,
-    DEL  = 3,
-    TTL  = 4,
-    INC  = 5,
-    DEC  = 6,
-    CNT  = 7,
-    USE  = 8,
-    KEYS = 9,
-    PING = 10,
-    QUIT = 11,
-    DB   = 12,
-    INFO = 13
+    ACK   = 0,
+    PUT   = 1,
+    GET   = 2,
+    DEL   = 3,
+    TTL   = 4,
+    INC   = 5,
+    DEC   = 6,
+    CNT   = 7,
+    USE   = 8,
+    KEYS  = 9,
+    PING  = 10,
+    QUIT  = 11,
+    DB    = 12,
+    INFO  = 13,
+    FLUSH = 14
 };
 
 /*
@@ -178,6 +180,8 @@ typedef struct ack db;
 
 typedef struct ack infos;
 
+typedef struct ack flush;
+
 
 /*
  * Definition of a request, a union which encloses all possible command
@@ -197,6 +201,7 @@ union triedb_request {
     use usec;
     db  get_db;
     infos info;
+    flush flushdb;
 
 };
 

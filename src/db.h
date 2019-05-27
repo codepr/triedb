@@ -119,4 +119,6 @@ void database_prefix_dec(struct database *, const char *);
 void database_prefix_ttl(struct database *, const char *, short);
 
 
+void database_flush(struct database *);
+
 #endif

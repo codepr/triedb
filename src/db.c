@@ -288,3 +288,9 @@ void database_prefix_ttl(struct database *db, const char *prefix, short ttl) {
     // Check all possible sub-paths and add to count where there is a leaf
     trie_node_prefix_ttl(node, ttl);
 }
+
+
+void database_flush(struct database *db) {
+    assert(db);
+    trie_node_destroy(db->data->root, &db->data->size, db->data->destructor);
+}

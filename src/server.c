@@ -166,8 +166,10 @@ static int quit_handler(struct io_event *);
 
 static int info_handler(struct io_event *);
 
+static int flush_handler(struct io_event *);
+
 /* Command handler mapped usign their position paired with their type */
-static handler *handlers[14] = {
+static handler *handlers[15] = {
     NULL,
     put_handler,
     get_handler,
@@ -181,7 +183,8 @@ static handler *handlers[14] = {
     ping_handler,
     quit_handler,
     db_handler,
-    info_handler
+    info_handler,
+    flush_handler
 };
 
 /* OK, NOK and RESERVED return codes, pre-packed ACK responses */
@@ -746,8 +749,16 @@ static int quit_handler(struct io_event *event) {
     close(event->client->fd);
     info.nclients--;
 
+#if WORKERPOOLSIZE > 1
+    pthread_spin_lock(&spinlock);
+#endif
+
     // Remove client from the clients map
     hashtable_del(triedb.clients, event->client->uuid);
+
+#if WORKERPOOLSIZE > 1
+    pthread_spin_unlock(&spinlock);
+#endif
 
     return -1;
 }
@@ -758,6 +769,23 @@ static int info_handler(struct io_event *event) {
     // XXX placeholder
     // TODO
     event->reply = pack_info(conf, &info);
+
+    return 0;
+}
+
+
+static int flush_handler(struct io_event *event) {
+
+#if WORKERPOOLSIZE > 1
+    pthread_spin_lock(&spinlock);
+#endif
+
+    // Flush the entire DB
+    database_flush(event->client->db);
+
+#if WORKERPOOLSIZE > 1
+    pthread_spin_unlock(&spinlock);
+#endif
 
     return 0;
 }
