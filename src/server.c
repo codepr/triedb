@@ -316,7 +316,13 @@ static int get_handler(struct io_event *event) {
 
     } else {
 
-        // Multiple values response
+        /*
+         * Multiple values response
+         * In this case we have to check for TTL of each returned item from
+         * the query and discard all those who have expired their time which
+         * are not already being removed by the system itself through timerfd
+         * routine on worker threads
+         */
 
 #if WORKERPOOLSIZE > 1
         pthread_spin_lock(&spinlock);
@@ -370,6 +376,7 @@ static int get_handler(struct io_event *event) {
                     pthread_spin_unlock(&spinlock);
 #endif
 
+                    vector_delete(v, i);
                 }
             }
         }
@@ -1209,11 +1216,19 @@ static void expire_keys(void) {
     time_t delta = 0LL;
     struct expiring_key *ek = NULL;
 
+#if WORKERPOOLSIZE > 1
+    pthread_spin_lock(&spinlock);
+#endif
+
     for (int i = 0; i < vector_size(triedb.expiring_keys); ++i) {
 
         ek = vector_get(triedb.expiring_keys, i);
         delta = (ek->item->ctime + ek->item->ttl) - now;
 
+        /*
+         * Vector *should be* sorted per time delta value, so it is futile to
+         * go on after the first positive timedelta encoutered
+         */
         if (delta > 0)
             break;
 
@@ -1234,6 +1249,11 @@ static void expire_keys(void) {
         tfree(ek);
         ek = NULL;
     }
+
+#if WORKERPOOLSIZE > 1
+    pthread_spin_unlock(&spinlock);
+#endif
+
 }
 
 /* Hashtable destructor function for struct client objects. */
