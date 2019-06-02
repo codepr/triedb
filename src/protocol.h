@@ -63,7 +63,8 @@
  *  QUIT  | 10110000  | 0xb0
  *  DB    | 11000000  | 0xc0
  *  INFO  | 11010000  | 0xd0
- *  FLUSH | 11100000  | 0xf0
+ *  FLUSH | 11100000  | 0xe0
+ *  JOIN  | 11110100  | 0xf0
  *
  *  Header byte can be manipulated at bit level to toggle bit flags:
  *  e.g
@@ -85,7 +86,8 @@ enum opcode {
     QUIT  = 11,
     DB    = 12,
     INFO  = 13,
-    FLUSH = 14
+    FLUSH = 14,
+    JOIN  = 15
 };
 
 /*
@@ -95,7 +97,7 @@ enum opcode {
  *
  * | Bit    | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
  * |--------|---------------|---------------|
- * | Byte 1 |     opcode    | p | reserved  |
+ * | Byte 1 |     opcode    | p | s | r.ved |
  * |--------|-------------------------------|
  * | Byte 2 |                               |
  * |  .     |      Remaning Length          |
@@ -111,7 +113,8 @@ union header {
     unsigned char byte;
 
     struct {
-        unsigned reserved : 3;
+        unsigned reserved : 2;
+        unsigned sync : 1;
         unsigned prefix : 1;
         unsigned opcode : 4;
     } bits;
@@ -182,6 +185,8 @@ typedef struct ack infos;
 
 typedef struct ack flush;
 
+typedef struct ack join;
+
 
 /*
  * Definition of a request, a union which encloses all possible command
@@ -202,6 +207,7 @@ union triedb_request {
     db  get_db;
     infos info;
     flush flushdb;
+    join join_cluter;
 
 };
 
@@ -251,6 +257,15 @@ struct cnt_response {
 };
 
 
+struct join_response {
+
+    union header header;
+
+    unsigned short tuples_len;
+
+    struct tuple *tuples;
+};
+
 /*
  * Definition of a response, a union which encloses all possible command
  * response.
@@ -260,6 +275,7 @@ union triedb_response {
     struct ack_response ack_res;
     struct get_response get_res;
     struct cnt_response cnt_res;
+    struct join_response join_res;
 };
 
 
@@ -284,7 +300,14 @@ struct get_response *get_response(unsigned char, const void *);
 
 struct cnt_response *cnt_response(unsigned char, unsigned long long);
 
+struct join_response *join_response(unsigned char, const Vector *);
+
 void get_response_destroy(struct get_response *);
+
+void join_response_destroy(struct join_response *);
+
+int unpack_join_response(unsigned char *, union triedb_response *,
+                         unsigned char, size_t);
 
 /*
  * Pack a response transforming all fields into their binary representation,

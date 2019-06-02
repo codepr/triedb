@@ -93,12 +93,14 @@ static unsigned char *pack_response_cnt(const union triedb_response *);
 
 static unsigned char *pack_response_get(const union triedb_response *);
 
+static unsigned char *pack_response_join(const union triedb_response *);
+
 /*
  * Conversion table for response, maps OPCODE -> COMMAND_TYPE, it's still a
  * shitty abstraction, further improvements planned on future refactoring
  */
 
-static pack_handler *pack_handlers[8] = {
+static pack_handler *pack_handlers[15] = {
     NULL,
     pack_response_ack,
     pack_response_get,
@@ -106,7 +108,14 @@ static pack_handler *pack_handlers[8] = {
     pack_response_ack,
     pack_response_ack,
     pack_response_ack,
-    pack_response_cnt
+    pack_response_cnt,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    pack_response_join
 };
 
 
@@ -323,9 +332,44 @@ struct get_response *get_response(unsigned char byte, const void *arg) {
 }
 
 
+struct join_response *join_response(unsigned char byte, const Vector *v) {
+
+    struct join_response *response = tmalloc(sizeof(*response));
+    response->header.byte = byte;
+
+    /*
+     * Join response returns a list of items instead of a single one, where
+     * each item corresponds to an existing key in the database
+     */
+    response->tuples_len = v->size;
+    response->tuples = tmalloc(v->size * sizeof(struct tuple));
+
+    /*
+     * Create the tuples array containing required informations from the
+     * vector returned from the range query on the Trie
+     */
+    for (int i = 0; i < vector_size(v); ++i) {
+        struct kv_obj *kv = vector_get(v, i);
+        const struct db_item *item = kv->data;
+        response->tuples[i].key = (unsigned char *) kv->key;
+        response->tuples[i].val = item->data;
+        response->tuples[i].keylen = strlen(kv->key);
+        response->tuples[i].ttl = item->ttl;
+    }
+
+    return response;
+}
+
+
 void get_response_destroy(struct get_response *response) {
     if (response->header.bits.prefix == 1)
         tfree(response->tuples);
+    tfree(response);
+}
+
+
+void join_response_destroy(struct join_response *response) {
+    tfree(response->tuples);
     tfree(response);
 }
 
@@ -406,6 +450,53 @@ static unsigned char *pack_response_get(const union triedb_response *res) {
              res->get_res.val.keylen,
              res->get_res.val.key,
              res->get_res.val.val);
+    }
+
+    return raw;
+}
+
+
+static unsigned char *pack_response_join(const union triedb_response *res) {
+
+    unsigned char *raw = NULL;
+
+    /* Init length with the size of the tuples_len field (u16) */
+    size_t length = sizeof(unsigned short);
+
+    /* Pre-compute the total length of the entire packet and encode it */
+    for (int i = 0; i < res->join_res.tuples_len; ++i)
+        length += res->join_res.tuples[i].keylen
+            + strlen((const char *) res->join_res.tuples[i].val)
+            + sizeof(int)
+            + sizeof(unsigned short) * 2;
+
+    raw = tmalloc(length + 2);
+
+    /* Encode the byte, the length and the tuples len */
+    pack(raw, "B", res->join_res.header.byte);
+    int steps = encode_length(raw + 1, length);
+    pack(raw + steps + 1, "H", res->join_res.tuples_len);
+
+    /*
+     * Move forward pointer of 3 + steps -> byte + unsigned short + steps
+     * (bytes required to store packet length, max 4), the portion of the
+     * packet already written and packed
+     */
+    unsigned char *p = raw + 3 + steps;
+
+    /* Start encoding the tuples */
+    int pos = 0;
+    for (int i = 0; i < res->join_res.tuples_len; ++i) {
+        pack(p + pos, "iHsHs", res->join_res.tuples[i].ttl,
+             res->join_res.tuples[i].keylen,
+             res->join_res.tuples[i].key,
+             strlen((const char *) res->join_res.tuples[i].val),
+             res->join_res.tuples[i].val);
+        /* Update position index */
+        pos += res->join_res.tuples[i].keylen
+            + strlen((const char *) res->join_res.tuples[i].val)
+            + sizeof(int)
+            + sizeof(unsigned short) * 2;
     }
 
     return raw;
