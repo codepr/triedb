@@ -40,6 +40,7 @@
 // Socket families
 #define UNIX    0
 #define INET    1
+#define UDP     2
 
 /* Set non-blocking socket */
 int set_nonblocking(int);

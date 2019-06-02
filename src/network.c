@@ -139,12 +139,57 @@ static int create_and_bind_tcp(const char *host, const char *port) {
 }
 
 
+static int create_and_bind_udp(const char *host, const char *port) {
+
+    struct addrinfo hints = {
+        .ai_family = AF_UNSPEC,
+        .ai_socktype = SOCK_DGRAM,
+        .ai_flags = AI_PASSIVE
+    };
+
+    struct addrinfo *result, *rp;
+    int sfd;
+
+    if (getaddrinfo(host, port, &hints, &result) != 0) {
+        perror("getaddrinfo error");
+        return -1;
+    }
+
+    for (rp = result; rp != NULL; rp = rp->ai_next) {
+        sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+
+        if (sfd == -1) continue;
+
+        /* set SO_REUSEADDR so the socket will be reusable after process kill */
+        if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR,
+                       &(int) { 1 }, sizeof(int)) < 0)
+            perror("SO_REUSEADDR");
+
+        if ((bind(sfd, rp->ai_addr, rp->ai_addrlen)) == 0) {
+            /* Succesful bind */
+            break;
+        }
+        close(sfd);
+    }
+
+    if (rp == NULL) {
+        perror("Could not bind");
+        return -1;
+    }
+
+    freeaddrinfo(result);
+    return sfd;
+}
+
+
 int create_and_bind(const char *host, const char *port, int socket_family) {
 
     int fd;
 
     if (socket_family == UNIX) {
         fd = create_and_bind_unix(host);
+    } else if (socket_family == UDP) {
+        fd = create_and_bind_udp(host, port);
     } else {
         fd = create_and_bind_tcp(host, port);
     }
