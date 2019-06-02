@@ -101,14 +101,31 @@ int main(int argc, char **argv) {
 
     strcpy(fulladdr, addr);
 
+    struct seednode seed;
+    seed.connect = false;
+
+    if (optind < argc) {
+        if (STREQ(argv[optind], "join", 4) == 0) {
+            // Target is the pair target_host:port+10000
+            char *target = argv[optind + 1];
+            int tport = atoi(argv[optind + 2]) + 10000;
+
+            strcpy((char *) seed.port, argv[optind + 2]);
+
+            strcpy((char *) seed.fulladdr,
+                   strcat(fulladdr, argv[optind + 2]));
+
+            seed.connect = true;
+        }
+    }
+
     // Initialize logging
     t_log_init(conf->logpath);
 
     config_print();
 
     // Start
-    /* start_server(conf->hostname, conf->port, &seednode); */
-    start_server(conf->hostname, conf->port);
+    start_server(conf->hostname, conf->port, &seed);
 
     // Close logger
     t_log_close();

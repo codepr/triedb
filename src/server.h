@@ -88,6 +88,8 @@ struct triedb {
     HashTable *dbs;
     /* Total count of the database keys */
     size_t keyspace_size;
+    /* Cluster reference, only in CLUSTER mode */
+    struct cluster *cluster;
 };
 
 
@@ -126,6 +128,16 @@ struct expiring_key {
     const char *key;
 };
 
+
+/* Auxiliary structure to pass in the seed node during cluster formation */
+struct seednode {
+    bool connect;
+    const char addr[17];
+    const char port[6];
+    const char fulladdr[22];  // Magic value, the max size of a ip address+port
+    const char target[22];
+};
+
 /* Global informations statistics structure */
 struct informations {
     /* Number of clients currently connected */
@@ -147,7 +159,7 @@ struct informations {
 };
 
 
-int start_server(const char *, const char *);
+int start_server(const char *, const char *, struct seednode *);
 
 ssize_t recv_packet(int, unsigned char **, unsigned char *);
 

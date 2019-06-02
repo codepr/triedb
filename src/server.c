@@ -125,6 +125,7 @@ struct epoll {
     int w_epollfd;
     int serverfd;
     int expirefd;
+    int busfd;
 };
 
 
@@ -975,6 +976,9 @@ errdc:
 }
 
 
+#define BUFSIZE 2048
+
+
 static void *io_worker(void *arg) {
 
     struct epoll *epoll = arg;
@@ -986,6 +990,10 @@ static void *io_worker(void *arg) {
 
     /* Raw bytes buffer to handle input from client */
     unsigned char *buffer = tmalloc(conf->max_request_size);
+
+    // UDP bus communication client handler
+    struct sockaddr_in node;
+    memset(&node, 0, sizeof(node)); ;
 
     while (1) {
 
@@ -1023,6 +1031,28 @@ static void *io_worker(void *arg) {
 
                 goto exit;
 
+            } else if (epoll->busfd > 0 && e_events[i].data.fd == epoll->busfd) {
+                // Bus communication from UDP chanel
+                int n;
+                socklen_t len;
+                n = recvfrom(e_events[i].data.fd, (char *)buffer, BUFSIZE,
+                             MSG_WAITALL, ( struct sockaddr *) &node, &len);
+                buffer[n] = '\0';
+
+                unsigned char header = 0;
+
+                union triedb_request *pkt = tmalloc(sizeof(*pkt));
+
+                const unsigned char *p = buffer;
+                p++;
+                unsigned pos = 0;
+                size_t bytes = decode_length(&p, &pos);
+                /*
+                 * Unpack received bytes into a triedb_request structure and execute the
+                 * correct handler based on the type of the operation.
+                 */
+                unpack_triedb_request(buffer, pkt, header, bytes);
+                tdebug("Received JOIN");
             } else if (e_events[i].events & EPOLLIN) {
                 struct io_event *event = tmalloc(sizeof(*event));
                 event->epollfd = epoll->io_epollfd;
@@ -1421,7 +1451,7 @@ static void init_info(void) {
  * domain socket, addr represents the path on the FS where the socket fd is
  * located, port will be ignored.
  */
-int start_server(const char *addr, const char *port) {
+int start_server(const char *addr, const char *port, struct seednode *seed) {
 
     init_info();
 
@@ -1441,6 +1471,7 @@ int start_server(const char *addr, const char *port) {
     triedb.dbs = hashtable_new(database_destructor);
     triedb.clients = hashtable_new(client_destructor);
     triedb.expiring_keys = vector_new(expiring_keys_destructor);
+    triedb.cluster = &(struct cluster) { 0, 4, list_new(NULL) };
 
     /* Add it to the global map */
     hashtable_put(triedb.dbs, tstrdup(default_db->name), default_db);
@@ -1451,7 +1482,8 @@ int start_server(const char *addr, const char *port) {
     struct epoll epoll = {
         .io_epollfd = epoll_create1(0),
         .w_epollfd = epoll_create1(0),
-        .serverfd = sfd
+        .serverfd = sfd,
+        .busfd = -1
     };
 
     /* Start the expiration keys check routine */
@@ -1489,6 +1521,72 @@ int start_server(const char *addr, const char *port) {
     for (int i = 0; i < WORKERPOOLSIZE; ++i)
         pthread_create(&workers[i], NULL, &worker, &epoll);
 
+    /*
+     * If it is run in CLUSTER mode add an additional descriptor and register
+     * it to the event loop, ready to accept incoming connections from other
+     * tritedb nodes and handle cluster commands.
+     */
+    if (conf->mode == CLUSTER) {
+
+        /* Add 10k to the listening server port */
+        int busport = atoi(port) + 10000;
+        char bport[6];
+        snprintf(bport, number_len(busport), "%d", busport);
+
+        /* The bus one for distribution */
+        int busfd = create_and_bind(addr, bport, UDP);
+
+        set_nonblocking(busfd);
+
+        epoll.busfd = busfd;
+
+        /* Set bus socket in EPOLLIN too */
+        epoll_add(epoll.io_epollfd, busfd, EPOLLIN, NULL);
+
+        cluster_add_new_node(triedb.cluster, busfd, addr, bport, true);
+
+        tdebug("Joined a cluster");
+    }
+
+    /*
+     * Add socket for bus communication if accepted by a seed node
+     * TODO make it in another thread or better, crate a usable client
+     * structure like if it was accepted as a new connection, cause actually
+     * it crashes the server by having NULL ptr
+     */
+    if (seed->connect) {
+
+        int sockfd;
+        struct sockaddr_in     servaddr;
+
+        // Creating socket file descriptor
+        if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
+            perror("socket creation failed");
+            exit(EXIT_FAILURE);
+        }
+
+        memset(&servaddr, 0, sizeof(servaddr));
+
+        // Filling server information
+        servaddr.sin_family = AF_INET;
+        servaddr.sin_port = htons(atoi(seed->port));
+        servaddr.sin_addr.s_addr = INADDR_ANY;
+
+        bstring payload = pack_ack(JOIN, 0);
+
+        sendto(sockfd, (const char *) payload, bstring_len(payload),
+               MSG_CONFIRM, (const struct sockaddr *) &servaddr,
+               sizeof(servaddr));
+
+        // Add target node as cluster node
+        cluster_add_new_node(triedb.cluster, sockfd,
+                             seed->addr, seed->port, false);
+
+        tdebug("New node on %s:%s joined", seed->addr, seed->port);
+
+        bstring_destroy(payload);
+    }
+
     tinfo("Server start");
     info.start_time = time(NULL);
 
@@ -1509,6 +1607,7 @@ int start_server(const char *addr, const char *port) {
     hashtable_destroy(triedb.dbs);
     hashtable_destroy(triedb.clients);
     vector_destroy(triedb.expiring_keys);
+    list_destroy(triedb.cluster->nodes, 1);
 
     for (int i = 0; i < 3; ++i)
         bstring_destroy(ack_replies[i]);

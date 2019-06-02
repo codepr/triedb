@@ -65,7 +65,7 @@ static size_t unpack_triedb_ack(const unsigned char *,
  * Unpack functions mapping unpacking_handlers positioned in the array based
  * on message type
  */
-static unpack_handler *unpack_handlers[15] = {
+static unpack_handler *unpack_handlers[16] = {
     NULL,
     unpack_triedb_put,
     unpack_triedb_get,
@@ -79,6 +79,7 @@ static unpack_handler *unpack_handlers[15] = {
     NULL,
     NULL,
     NULL,
+    unpack_triedb_ack,
     unpack_triedb_ack,
     unpack_triedb_ack
 };
