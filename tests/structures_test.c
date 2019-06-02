@@ -597,20 +597,14 @@ static char *test_cluster_add_new_node(void) {
 
     struct cluster cluster = { 0, 4, list_new(NULL) };
 
-    struct client client = {
-        .fd = -1,
-        .last_action_time = 0,
-        .db = NULL
-    };
-
-    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8080", false);
+    cluster_add_new_node(&cluster, -1, "127.0.0.1", "8080", false);
 
     ASSERT("[! cluster_add_new_node]: cluster node not correctly added",
            cluster.size == 1);
 
-    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8081", false);
-    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8082", false);
-    cluster_add_new_node(&cluster, &client, "127.0.0.1", "8083", false);
+    cluster_add_new_node(&cluster, -1, "127.0.0.1", "8081", false);
+    cluster_add_new_node(&cluster, -1, "127.0.0.1", "8082", false);
+    cluster_add_new_node(&cluster, -1, "127.0.0.1", "8083", false);
 
     ASSERT("[! cluster_add_new_node]: cluster node not correctly added",
            cluster.size == 4);
@@ -643,23 +637,17 @@ static char *test_cluster_get_node(void) {
 
     struct cluster cluster = { 0, 4, list_new(NULL) };
 
-    struct client client = {
-        .fd = -1,
-        .last_action_time = 0,
-        .db = NULL
-    };
-
     struct cluster_node node1 = {
-        false, false, 1000, "127.0.0.1", "8080", &client
+        false, false, -1, 1000, "127.0.0.1", "8080"
     };
     struct cluster_node node2 = {
-        false, false, 1500, "127.0.0.1", "8080", &client
+        false, false, -1, 1500, "127.0.0.1", "8080"
     };
     struct cluster_node node3 = {
-        false, false, 2000, "127.0.0.1", "8080", &client
+        false, false, -1, 2000, "127.0.0.1", "8080"
     };
     struct cluster_node node4 = {
-        false, false, 2500, "127.0.0.1", "8080", &client
+        false, false, -1, 2500, "127.0.0.1", "8080"
     };
 
     list_push(cluster.nodes, &node1);

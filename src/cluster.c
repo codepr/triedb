@@ -27,7 +27,6 @@
 
 #include "util.h"
 #include "list.h"
-#include "server.h"
 #include "cluster.h"
 #include "hashtable.h"
 #include <stdlib.h>
@@ -105,7 +104,7 @@ static void insert_node(struct cluster *cluster,
  * evenly around by using virtual nodes, in other words by replicating each
  * node multiple times around the circle.
  */
-int cluster_add_new_node(struct cluster *cluster, struct client *client,
+int cluster_add_new_node(struct cluster *cluster, int fd,
                          const char *addr, const char *port, bool self) {
 
     char fulladdr[30];
@@ -127,7 +126,7 @@ int cluster_add_new_node(struct cluster *cluster, struct client *client,
     strcpy((char *) cnode->host, addr);
     strcpy((char *) cnode->port, port);
     cnode->upper_bound = upper_bound;
-    cnode->link = client;
+    cnode->fd = fd;
 
     /* Set to false the vnode flag: The first is the real node */
     insert_node(cluster, cnode, false);
@@ -168,7 +167,7 @@ int cluster_add_new_node(struct cluster *cluster, struct client *client,
         strcpy((char *) vnode->host, addr);
         strcpy((char *) vnode->port, port);
         vnode->upper_bound = upper_bound;
-        vnode->link = client;
+        vnode->fd = fd;
 
         /*
          * Now we set to true the vnode flag indicating that this node is
@@ -233,9 +232,8 @@ void log_cluster_ring(struct cluster *cluster) {
 
         struct cluster_node *cnode = cur->data;
 
-        tdebug("%s %s -> %s %s",
+        tdebug("%s -> %s %s",
                cnode->vnode ? "vnode" : "node",
-               cnode->link->uuid,
                cnode->upper_bound,
                cnode->self ? "(self)" : "");
     }

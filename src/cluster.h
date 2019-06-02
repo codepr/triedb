@@ -28,6 +28,7 @@
 #ifndef CLUSTER_H
 #define CLUSTER_H
 
+#include "list.h"
 #include <arpa/inet.h>
 
 #define RING_SIZE 4096
@@ -41,10 +42,10 @@
 struct cluster_node {
     bool self;
     bool vnode;
+    int fd;
     uint16_t upper_bound;
     const char host[INET_ADDRSTRLEN + 1];
     const char port[5];
-    struct client *link;
 };
 
 /* Just a list of nodes for now */
@@ -61,8 +62,8 @@ uint16_t hash(const char *);
  * Add new node into the cluster, create a new node to be inserted into the
  * list at the right index
  */
-int cluster_add_new_node(struct cluster *,
-        struct client *, const char *, const char *, bool);
+int cluster_add_new_node(struct cluster *, int,
+                         const char *, const char *, bool);
 
 /*
  * Retrieve a cluster node based on the index, cluster node list is sorted by
