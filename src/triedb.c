@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
 
     struct seednode seed;
     seed.connect = false;
-
+    strcpy((char *) seed.addr, addr);
     if (optind < argc) {
         if (STREQ(argv[optind], "join", 4) == 0) {
             // Target is the pair target_host:port+10000

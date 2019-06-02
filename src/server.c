@@ -1047,9 +1047,11 @@ static void *io_worker(void *arg) {
                 p++;
                 unsigned pos = 0;
                 size_t bytes = decode_length(&p, &pos);
+
                 /*
-                 * Unpack received bytes into a triedb_request structure and execute the
-                 * correct handler based on the type of the operation.
+                 * Unpack received bytes into a triedb_request structure and
+                 * execute the correct handler based on the type of the
+                 * operation.
                  */
                 unpack_triedb_request(buffer, pkt, header, bytes);
                 tdebug("Received JOIN");
@@ -1557,19 +1559,20 @@ int start_server(const char *addr, const char *port, struct seednode *seed) {
     if (seed->connect) {
 
         int sockfd;
-        struct sockaddr_in     servaddr;
+        struct sockaddr_in servaddr;
 
         // Creating socket file descriptor
-        if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
+        if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
             perror("socket creation failed");
             exit(EXIT_FAILURE);
         }
 
         memset(&servaddr, 0, sizeof(servaddr));
+        int tport = atoi(seed->port) + 10000;
 
         // Filling server information
         servaddr.sin_family = AF_INET;
-        servaddr.sin_port = htons(atoi(seed->port));
+        servaddr.sin_port = htons(tport);
         servaddr.sin_addr.s_addr = INADDR_ANY;
 
         bstring payload = pack_ack(JOIN, 0);
