@@ -64,6 +64,12 @@ static size_t unpack_triedb_join(const unsigned char *,
                                  union header *,
                                  union triedb_request *,
                                  size_t);
+
+// FIXME hack
+static size_t unpack_triedb_join_res(const unsigned char *,
+                                     union header *,
+                                     union triedb_response *,
+                                     size_t);
 /*
  * Unpack functions mapping unpacking_handlers positioned in the array based
  * on message type
@@ -261,6 +267,20 @@ static size_t unpack_triedb_join(const unsigned char *raw,
     return len;
 }
 
+// FIXME hack
+static size_t unpack_triedb_join_res(const unsigned char *raw,
+                                     union header *hdr,
+                                     union triedb_response *pkt,
+                                     size_t len) {
+
+    struct join_response *response = tmalloc(sizeof(*response));
+    response->header = *hdr;
+
+    // TODO
+
+    return len;
+}
+
 
 int unpack_triedb_request(const unsigned char *raw,
                           union triedb_request *pkt,
@@ -272,6 +292,22 @@ int unpack_triedb_request(const unsigned char *raw,
 
     /* Call the appropriate unpack handler based on the message type */
     rc = unpack_handlers[header.bits.opcode](raw, &header, pkt, len);
+
+    return rc;
+}
+
+
+int unpack_triedb_response(const unsigned char *raw,
+                           union triedb_response *pkt,
+                           unsigned char opcode,
+                           size_t len) {
+    int rc = 0;
+
+    union header header = { .byte = opcode };
+
+    /* Call the appropriate unpack handler based on the message type */
+    // FIXME hack
+    rc = unpack_triedb_join_res(raw, &header, pkt, len);
 
     return rc;
 }

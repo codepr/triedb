@@ -98,7 +98,7 @@ enum opcode {
  *
  * | Bit    | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
  * |--------|---------------|---------------|
- * | Byte 1 |     opcode    | p | s | r.ved |
+ * | Byte 1 |     opcode    | p | s | r |rvd|
  * |--------|-------------------------------|
  * | Byte 2 |                               |
  * |  .     |      Remaning Length          |
@@ -114,7 +114,8 @@ union header {
     unsigned char byte;
 
     struct {
-        unsigned reserved : 2;
+        unsigned reserved : 1;
+        unsigned request : 1;
         unsigned sync : 1;
         unsigned prefix : 1;
         unsigned opcode : 4;
@@ -280,6 +281,16 @@ union triedb_response {
 };
 
 
+/*
+ * TrieDB generic packet, abstract from the request and response, represents
+ * the highest level packet
+ */
+union triedb_packet {
+    union triedb_request request;
+    union triedb_response response;
+};
+
+
 int encode_length(unsigned char *, size_t);
 
 size_t decode_length(const unsigned char **, unsigned *);
@@ -290,6 +301,9 @@ size_t decode_length(const unsigned char **, unsigned *);
  */
 int unpack_triedb_request(const unsigned char *,
                           union triedb_request *, unsigned char, size_t);
+
+int unpack_triedb_response(const unsigned char *,
+                           union triedb_response *, unsigned char, size_t);
 
 unsigned char *pack_triedb_request(const union triedb_request *, unsigned);
 

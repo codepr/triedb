@@ -317,7 +317,7 @@ void config_print(void) {
             if (lmap[i].loglevel == config.loglevel)
                 llevel = lmap[i].lname;
         }
-        tinfo("TrieDB is starting");
+        tinfo("TrieDB v%s is starting", config.version);
         tinfo("Mode: %s", config.mode == STANDALONE ? "standalone" : "cluster");
         tinfo("Network settings:");
         tinfo("\tSocket family: %s", sfamily);

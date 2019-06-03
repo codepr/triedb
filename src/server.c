@@ -975,6 +975,41 @@ errdc:
     return -ERRCLIENTDC;
 }
 
+/* Handle incoming packets from other nodes */
+static int read_packet(unsigned char *buffer, union triedb_packet *pkt) {
+
+    unsigned char header = 0;
+    const unsigned char *p = buffer;
+    header = *p;
+    p++;
+    unsigned pos = 0;
+    size_t bytes = decode_length(&p, &pos);
+
+    // Check for second LSB, where the type of packet is stored
+    if (((header >> 7) & 1) == 1) {
+
+        // we got a request
+        union triedb_request req;
+
+        /*
+         * Unpack received bytes into a triedb_request structure and
+         * execute the correct handler based on the type of the
+         * operation.
+         */
+        unpack_triedb_request(p, &req, header, bytes);
+
+        pkt->request = req;
+    } else {
+        // we got a response
+        union triedb_response res;
+
+        unpack_triedb_response(p, &res, header, bytes);
+        pkt->response = res;
+    }
+
+    return 0;
+}
+
 
 #define BUFSIZE 2048
 
