@@ -144,6 +144,8 @@ struct informations {
     uint32_t nclients;
     /* Total number of clients connected since the start */
     uint32_t nconnections;
+    /* Total number of cluster nodes since the start; CLUSTER mode only */
+    uint32_t nnodes;
     /* Timestamp of the start time */
     uint64_t start_time;
     /* Seconds passed since the start */

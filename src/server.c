@@ -1056,6 +1056,10 @@ static void *io_worker(void *arg) {
                  */
                 unpack_triedb_request(p, pkt, header, bytes);
 
+                info.nnodes++;
+
+                // TODO: Split reception and unpacking of node based on the
+                // packet type, to handle responses and requests as well
                 tdebug("Received JOIN");
 
             } else if (e_events[i].events & EPOLLIN) {
@@ -1549,6 +1553,8 @@ int start_server(const char *addr, const char *port, struct seednode *seed) {
         epoll_add(epoll.io_epollfd, busfd, EPOLLIN, NULL);
 
         cluster_add_new_node(triedb.cluster, busfd, addr, bport, true);
+
+        info.nnodes++;
 
         tdebug("Joined a cluster");
     }
