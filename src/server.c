@@ -1044,6 +1044,7 @@ static void *io_worker(void *arg) {
                 union triedb_request *pkt = tmalloc(sizeof(*pkt));
 
                 const unsigned char *p = buffer;
+                header = *p;
                 p++;
                 unsigned pos = 0;
                 size_t bytes = decode_length(&p, &pos);
@@ -1053,8 +1054,10 @@ static void *io_worker(void *arg) {
                  * execute the correct handler based on the type of the
                  * operation.
                  */
-                unpack_triedb_request(buffer, pkt, header, bytes);
+                unpack_triedb_request(p, pkt, header, bytes);
+
                 tdebug("Received JOIN");
+
             } else if (e_events[i].events & EPOLLIN) {
                 struct io_event *event = tmalloc(sizeof(*event));
                 event->epollfd = epoll->io_epollfd;
@@ -1575,7 +1578,9 @@ int start_server(const char *addr, const char *port, struct seednode *seed) {
         servaddr.sin_port = htons(tport);
         servaddr.sin_addr.s_addr = INADDR_ANY;
 
-        bstring payload = pack_ack(JOIN, 0);
+        union header header = {.byte = 0};
+        header.bits.opcode = JOIN;
+        bstring payload = pack_ack(header.byte, 0);
 
         sendto(sockfd, (const char *) payload, bstring_len(payload),
                MSG_CONFIRM, (const struct sockaddr *) &servaddr,

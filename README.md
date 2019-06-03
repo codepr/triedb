@@ -57,6 +57,7 @@ header which can be summarized by the following table:
 ```
      OPCODE |    BIN    | HEX  | OPCODE  |
      -------|-----------|----------------|
+      ACK   | 00000000  | 0x00 |    0    |
       PUT   | 00010000  | 0x10 |    1    |
       GET   | 00100000  | 0x20 |    2    |
       DEL   | 00110000  | 0x30 |    3    |
@@ -70,7 +71,8 @@ header which can be summarized by the following table:
       QUIT  | 10110000  | 0xb0 |    11   |
       DB    | 11000000  | 0xc0 |    12   |
       INFO  | 11010000  | 0xd0 |    13   |
-      FLUSH | 11100000  | 0xf0 |    14   |
+      FLUSH | 11100000  | 0xe0 |    14   |
+      JOIN  | 11110000  | 0xf0 |    15   |
 ```
 
 Header byte can be manipulated at bit level to toggle bit flags:

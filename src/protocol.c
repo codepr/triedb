@@ -60,7 +60,10 @@ static size_t unpack_triedb_ack(const unsigned char *,
                                 union triedb_request *,
                                 size_t);
 
-
+static size_t unpack_triedb_join(const unsigned char *,
+                                 union header *,
+                                 union triedb_request *,
+                                 size_t);
 /*
  * Unpack functions mapping unpacking_handlers positioned in the array based
  * on message type
@@ -81,7 +84,7 @@ static unpack_handler *unpack_handlers[16] = {
     NULL,
     unpack_triedb_ack,
     unpack_triedb_ack,
-    unpack_triedb_ack
+    unpack_triedb_join
 };
 
 /* Pack prototypes */
@@ -244,11 +247,25 @@ static size_t unpack_triedb_ack(const unsigned char *raw,
 }
 
 
+static size_t unpack_triedb_join(const unsigned char *raw,
+                                 union header *hdr,
+                                 union triedb_request *pkt,
+                                 size_t len) {
+
+    struct ack join = { .header = *hdr };
+    pkt->join_cluster = join;
+
+    unpack((unsigned char *) raw, "BB",
+           &(unsigned char){0}, &pkt->join_cluster.rc);
+
+    return len;
+}
+
+
 int unpack_triedb_request(const unsigned char *raw,
                           union triedb_request *pkt,
                           unsigned char opcode,
                           size_t len) {
-
     int rc = 0;
 
     union header header = { .byte = opcode };

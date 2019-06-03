@@ -39,7 +39,7 @@
 
 // Default parameters
 
-#define VERSION                     "0.6.10"
+#define VERSION                     "0.6.11"
 #define DEFAULT_MODE                STANDALONE
 #define DEFAULT_SOCKET_FAMILY       INET
 #define DEFAULT_LOG_LEVEL           INFORMATION

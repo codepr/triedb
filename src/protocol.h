@@ -50,6 +50,7 @@
  *
  * OPCODE |    BIN    | HEX
  * -------|-----------|------
+ *  ACK   | 00000000  | 0x00
  *  PUT   | 00010000  | 0x10
  *  GET   | 00100000  | 0x20
  *  DEL   | 00110000  | 0x30
@@ -207,7 +208,7 @@ union triedb_request {
     db  get_db;
     infos info;
     flush flushdb;
-    join join_cluter;
+    join join_cluster;
 
 };
 
