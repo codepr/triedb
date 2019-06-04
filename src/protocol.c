@@ -276,7 +276,20 @@ static size_t unpack_triedb_join_res(const unsigned char *raw,
     struct join_response *response = tmalloc(sizeof(*response));
     response->header = *hdr;
 
-    // TODO
+    unpack((unsigned char *) raw, "H", &response->tuples_len);
+
+    response->tuples = tmalloc(sizeof(struct tuple) * response->tuples_len);
+    int keylen, vallen;
+    char fmt[5];
+
+    for (int i = 0; i < response->tuples_len; ++i) {
+        unpack((unsigned char *) raw, "H", &keylen);
+        sprintf(fmt, "%ds", keylen);
+        unpack((unsigned char *) raw, fmt, &response->tuples[i].key);
+        unpack((unsigned char *) raw, "H", &vallen);
+        sprintf(fmt, "%ds", vallen);
+        unpack((unsigned char *) raw, fmt, &response->tuples[i].val);
+    }
 
     return len;
 }
